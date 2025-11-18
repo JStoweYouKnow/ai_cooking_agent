@@ -6,8 +6,8 @@ import { sdk } from "@server/_core/sdk";
 
 export const runtime = "nodejs";
 
-function createContext() {
-	const hdrs = headers();
+async function createContext() {
+	const hdrs = await headers();
 	const cookieHeader = hdrs.get("cookie") ?? undefined;
 	// Create a minimal Express-like req/res for compatibility
 	const req = { headers: { cookie: cookieHeader } } as any;

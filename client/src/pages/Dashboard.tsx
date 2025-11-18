@@ -1,7 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Apple, BookOpen, ShoppingCart, Star, TrendingUp, Plus } from 'lucide-react';
-import { Link } from 'wouter';
+"use client";
+import { PCCard, PCButton } from '@/components/project-comfort-ui';
+import { KitchenStatsCard, RecipeCard, CookingProgress } from '@/components/cooking-theme';
+import { Apple, BookOpen, ShoppingCart, Star, TrendingUp, Plus, ChefHat, UtensilsCrossed, Flame } from 'lucide-react';
+import Link from 'next/link';
 import { trpc } from '@/lib/trpc';
 
 export default function Dashboard() {
@@ -48,144 +49,195 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-12">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-2 text-gray-600">
-          Welcome back! Manage your ingredients, discover recipes, and plan your meals.
+      <div className="mb-10">
+        <h1 className="text-5xl font-bold text-pc-navy mb-4 tracking-tight">Welcome to Sous</h1>
+        <p className="text-xl text-pc-text-light leading-relaxed max-w-2xl">
+          Your kitchen companion for managing ingredients, discovering recipes, and planning meals.
         </p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Link key={stat.name} href={stat.href}>
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">{stat.name}</p>
-                      <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
-                    </div>
-                    <div className={`${stat.bgColor} p-3 rounded-lg`}>
-                      <Icon className={`h-6 w-6 ${stat.color}`} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
+      {/* Stats Grid - Cooking Themed */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Link href="/ingredients">
+          <KitchenStatsCard
+            icon={Apple}
+            label="My Pantry"
+            value={ingredients?.length || 0}
+            subtitle="Ingredients ready"
+            color="pc-olive"
+          />
+        </Link>
+        <Link href="/recipes">
+          <KitchenStatsCard
+            icon={BookOpen}
+            label="Recipe Collection"
+            value={recipes?.length || 0}
+            subtitle="Saved recipes"
+            color="pc-navy"
+          />
+        </Link>
+        <Link href="/shopping-lists">
+          <KitchenStatsCard
+            icon={ShoppingCart}
+            label="Shopping Lists"
+            value={shoppingLists?.length || 0}
+            subtitle="Active lists"
+            color="pc-tan"
+          />
+        </Link>
+        <Link href="/recipes">
+          <KitchenStatsCard
+            icon={Star}
+            label="Favorites"
+            value={favoriteRecipes.length}
+            subtitle="Starred recipes"
+            color="pc-olive"
+          />
+        </Link>
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks to get you started</CardDescription>
-        </CardHeader>
-        <CardContent>
+      {/* Quick Actions - Cooking Themed */}
+      <PCCard className="bg-gradient-to-br from-pc-tan/10 via-white to-pc-olive/5 border-pc-olive/20 shadow-lg overflow-hidden relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-pc-olive/5 to-transparent opacity-50"></div>
+        <div className="relative">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-4 rounded-xl bg-gradient-to-br from-pc-olive/20 to-pc-olive/10 shadow-sm">
+              <ChefHat className="h-7 w-7 text-pc-olive" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-pc-navy tracking-tight">Kitchen Quick Actions</h2>
+              <p className="text-sm text-pc-text-light mt-1.5">Get cooking in seconds</p>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Link href="/ingredients">
-              <Button className="w-full gap-2" variant="outline" size="lg">
+              <PCButton className="w-full gap-2 bg-gradient-to-r from-pc-olive to-pc-olive/80 hover:from-pc-olive/90 hover:to-pc-olive shadow-lg">
                 <Plus className="h-4 w-4" />
-                Add Ingredients
-              </Button>
+                Stock Pantry
+              </PCButton>
             </Link>
             <Link href="/recipes">
-              <Button className="w-full gap-2" variant="outline" size="lg">
+              <PCButton className="w-full gap-2 bg-gradient-to-r from-pc-navy to-pc-navy/80 hover:from-pc-navy/90 hover:to-pc-navy shadow-lg">
                 <BookOpen className="h-4 w-4" />
-                Find Recipes
-              </Button>
+                Discover Recipes
+              </PCButton>
             </Link>
             <Link href="/shopping-lists">
-              <Button className="w-full gap-2" variant="outline" size="lg">
+              <PCButton className="w-full gap-2 bg-gradient-to-r from-pc-tan to-pc-tan/80 hover:from-pc-tan/90 hover:to-pc-tan shadow-lg text-pc-navy">
                 <ShoppingCart className="h-4 w-4" />
-                Create Shopping List
-              </Button>
+                Plan Shopping
+              </PCButton>
             </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </PCCard>
 
       {/* Recent Recipes */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Recent Recipes</CardTitle>
-              <CardDescription>Your recently added recipes</CardDescription>
-            </div>
+      <PCCard>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-pc-navy tracking-tight">Recent Recipes</h2>
+            <p className="text-sm text-pc-text-light mt-2">Your recently added recipes</p>
+          </div>
+          <Link href="/recipes">
+            <button className="text-sm text-pc-olive hover:text-pc-navy font-medium">View All</button>
+          </Link>
+        </div>
+        {recipesLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pc-olive mx-auto mb-4"></div>
+            <p className="text-pc-text-light">Loading recipes...</p>
+          </div>
+        ) : recentRecipes.length === 0 ? (
+          <div className="text-center py-12 bg-pc-tan/5 rounded-lg border border-pc-tan/20">
+            <BookOpen className="h-16 w-16 text-pc-tan mx-auto mb-4" />
+            <p className="text-lg font-medium text-pc-navy mb-2">No recipes yet</p>
+            <p className="text-pc-text-light mb-6">Start by finding amazing recipes to cook!</p>
             <Link href="/recipes">
-              <Button variant="ghost" size="sm">View All</Button>
+              <PCButton className="gap-2 bg-pc-olive hover:bg-pc-olive/90 text-white">
+                <BookOpen className="h-4 w-4" />
+                Find Recipes
+              </PCButton>
             </Link>
           </div>
-        </CardHeader>
-        <CardContent>
-          {recipesLoading ? (
-            <div className="text-center py-8 text-gray-500">Loading recipes...</div>
-          ) : recentRecipes.length === 0 ? (
-            <div className="text-center py-8">
-              <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No recipes yet. Start by finding recipes!</p>
-              <Link href="/recipes">
-                <Button className="mt-4">Find Recipes</Button>
-              </Link>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {recentRecipes.map((recipe) => (
-                <Card key={recipe.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    {recipe.imageUrl && (
-                      <img
-                        src={recipe.imageUrl}
-                        alt={recipe.name}
-                        className="w-full h-32 object-cover rounded-md mb-3"
-                      />
-                    )}
-                    <h3 className="font-semibold text-gray-900 mb-1">{recipe.name}</h3>
-                    {recipe.cuisine && (
-                      <p className="text-sm text-gray-600">{recipe.cuisine}</p>
-                    )}
-                    {recipe.isFavorite && (
-                      <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 mt-2" />
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {recentRecipes.map((recipe) => (
+              <RecipeCard
+                key={recipe.id}
+                recipe={{
+                  id: recipe.id,
+                  name: recipe.name,
+                  imageUrl: recipe.imageUrl,
+                  cuisine: recipe.cuisine,
+                  category: recipe.category,
+                  cookingTime: recipe.cookingTime,
+                  servings: recipe.servings,
+                  isFavorite: recipe.isFavorite,
+                }}
+                onClick={() => {
+                  // Navigate to recipe detail if needed
+                  window.location.href = `/recipes`;
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </PCCard>
 
-      {/* Getting Started */}
+      {/* Getting Started - Cooking Themed */}
       {(!recipes || recipes.length === 0) && (
-        <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-orange-600" />
-              Getting Started
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="list-decimal list-inside space-y-2 text-gray-700">
-              <li>Add ingredients you have on hand to your pantry</li>
-              <li>Search for recipes based on your ingredients</li>
-              <li>Save your favorite recipes for quick access</li>
-              <li>Create shopping lists for missing ingredients</li>
-              <li>Export your shopping lists in various formats</li>
-            </ol>
-            <div className="mt-4 flex gap-2">
+        <PCCard className="bg-gradient-to-br from-pc-tan/20 via-pc-olive/5 to-pc-tan/20 border-pc-olive/30 relative overflow-hidden">
+          {/* Decorative cooking elements */}
+          <div className="absolute top-0 right-0 opacity-10">
+            <UtensilsCrossed className="h-32 w-32 text-pc-olive" />
+          </div>
+          <div className="absolute bottom-0 left-0 opacity-10">
+            <Flame className="h-24 w-24 text-pc-olive" />
+          </div>
+          
+          <div className="relative">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-pc-olive/10">
+                <ChefHat className="h-6 w-6 text-pc-olive" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-pc-navy">Welcome to Sous!</h2>
+                <p className="text-sm text-pc-text-light">Let's get you cooking</p>
+              </div>
+            </div>
+            
+            <div className="space-y-3 mb-6">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pc-olive/20 flex items-center justify-center text-pc-olive font-semibold text-sm">1</div>
+                <p className="text-pc-text-light pt-0.5">Stock your pantry with ingredients you have on hand</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pc-olive/20 flex items-center justify-center text-pc-olive font-semibold text-sm">2</div>
+                <p className="text-pc-text-light pt-0.5">Discover amazing recipes based on your ingredients</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pc-olive/20 flex items-center justify-center text-pc-olive font-semibold text-sm">3</div>
+                <p className="text-pc-text-light pt-0.5">Save your favorite recipes for quick access</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pc-olive/20 flex items-center justify-center text-pc-olive font-semibold text-sm">4</div>
+                <p className="text-pc-text-light pt-0.5">Create smart shopping lists for missing ingredients</p>
+              </div>
+            </div>
+            
+            <div className="mt-6">
               <Link href="/ingredients">
-                <Button>Start Adding Ingredients</Button>
+                <PCButton className="gap-2 bg-gradient-to-r from-pc-olive to-pc-olive/80 hover:from-pc-olive/90 hover:to-pc-olive shadow-lg">
+                  <ChefHat className="h-4 w-4" />
+                  Start Your Culinary Journey
+                </PCButton>
               </Link>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </PCCard>
       )}
     </div>
   );

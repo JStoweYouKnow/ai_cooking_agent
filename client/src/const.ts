@@ -16,7 +16,7 @@ const readEnv = (key: string, fallback?: string) => {
 	return fallback;
 };
 
-export const APP_TITLE = readEnv("NEXT_PUBLIC_APP_TITLE", readEnv("VITE_APP_TITLE", "App")) || "App";
+export const APP_TITLE = readEnv("NEXT_PUBLIC_APP_TITLE", readEnv("VITE_APP_TITLE", "Sous")) || "Sous";
 
 export const APP_LOGO =
 	readEnv(

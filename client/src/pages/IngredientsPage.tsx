@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { PCCard, PCButton } from '@/components/project-comfort-ui';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Apple, Camera, Plus, Search, Trash2, Upload, ChefHat } from 'lucide-react';
+import { Camera, Plus, Search, Trash2, Upload, ChefHat } from 'lucide-react';
+import { getIngredientIcon } from '@/lib/ingredientIcons';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { IngredientCardSkeleton } from '@/components/IngredientCardSkeleton';
@@ -17,8 +17,8 @@ export default function IngredientsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const utils = trpc.useUtils();
-  const { data: userIngredients, isLoading } = trpc.ingredients.getUserIngredients.useQuery();
-  const { data: allIngredients } = trpc.ingredients.list.useQuery();
+  const { data: userIngredients, isLoading, error: userIngredientsError } = trpc.ingredients.getUserIngredients.useQuery();
+  const { data: allIngredients, error: allIngredientsError } = trpc.ingredients.list.useQuery();
 
   const addToUserListMutation = trpc.ingredients.addToUserList.useMutation({
     onSuccess: () => {
@@ -53,9 +53,12 @@ export default function IngredientsPage() {
   const recognizeFromImageMutation = trpc.ingredients.recognizeFromImage.useMutation({
     onSuccess: async (ingredientNames: string[]) => {
       toast.success(`Found ${ingredientNames.length} ingredients in the image`);
-      // Add each ingredient
+      // Add each ingredient with the image URL
       for (const name of ingredientNames) {
-        const ingredient = await getOrCreateMutation.mutateAsync({ name });
+        const ingredient = await getOrCreateMutation.mutateAsync({ 
+          name,
+          imageUrl: imageUrl || undefined 
+        });
         await addToUserListMutation.mutateAsync({ ingredientId: ingredient.id });
       }
     },
@@ -89,17 +92,17 @@ export default function IngredientsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">My Ingredients</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-3xl font-bold text-pc-navy">My Ingredients</h1>
+          <p className="mt-2 text-pc-text-light">
             Manage your pantry and discover what you can cook
           </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <PCButton className="gap-2">
               <Plus className="h-4 w-4" />
               Add Ingredient
-            </Button>
+            </PCButton>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -150,13 +153,13 @@ export default function IngredientsPage() {
                     />
                   </div>
                 </div>
-                <Button
+                <PCButton
                   className="w-full"
                   onClick={handleAddIngredient}
                   disabled={addToUserListMutation.isPending || getOrCreateMutation.isPending}
                 >
                   Add to Pantry
-                </Button>
+                </PCButton>
               </TabsContent>
 
               <TabsContent value="image" className="space-y-4">
@@ -211,10 +214,10 @@ export default function IngredientsPage() {
                     />
                     <label
                       htmlFor="imageFile"
-                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-pc-tan/40 rounded-pc cursor-pointer hover:bg-pc-tan/20 transition-colors"
                     >
-                      <Camera className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-600">Tap to take photo or choose file</span>
+                      <Camera className="h-8 w-8 text-pc-olive mb-2" />
+                      <span className="text-sm text-pc-text-light">Tap to take photo or choose file</span>
                     </label>
                   </div>
                 </div>
@@ -223,7 +226,7 @@ export default function IngredientsPage() {
                     <span className="w-full border-t" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white px-2 text-gray-500">Or</span>
+                    <span className="bg-pc-white px-2 text-pc-text-light">Or</span>
                   </div>
                 </div>
                 <div>
@@ -235,15 +238,15 @@ export default function IngredientsPage() {
                     onChange={(e) => setImageUrl(e.target.value)}
                   />
                 </div>
-                <Button
+                <PCButton
                   className="w-full gap-2"
                   onClick={handleRecognizeFromImage}
                   disabled={recognizeFromImageMutation.isPending || !imageUrl.trim()}
                 >
                   <Upload className="h-4 w-4" />
                   {recognizeFromImageMutation.isPending ? 'Analyzing...' : 'Analyze Image'}
-                </Button>
-                <p className="text-xs text-gray-500 text-center">
+                </PCButton>
+                <p className="text-xs text-pc-text-light text-center">
                   Our AI will analyze the image and detect ingredients automatically
                 </p>
               </TabsContent>
@@ -253,27 +256,37 @@ export default function IngredientsPage() {
       </div>
 
       {/* Search */}
-      <Card>
-        <CardContent className="pt-6">
+      <PCCard>
+        <div className="pt-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-pc-text-light" />
             <Input
               placeholder="Search your ingredients..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 border-pc-tan/20"
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </PCCard>
 
       {/* Ingredients List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Pantry ({userIngredients?.length || 0} items)</CardTitle>
-          <CardDescription>Ingredients you have on hand</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <PCCard>
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-pc-navy">Your Pantry ({userIngredients?.length || 0} items)</h2>
+          <p className="text-sm text-pc-text-light">Ingredients you have on hand</p>
+        </div>
+        <div>
+          {userIngredientsError && (
+            <div className="text-center py-8 text-red-600">
+              <p>Error loading ingredients: {userIngredientsError.message}</p>
+            </div>
+          )}
+          {allIngredientsError && (
+            <div className="text-center py-8 text-red-600">
+              <p>Error loading ingredient list: {allIngredientsError.message}</p>
+            </div>
+          )}
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map((i) => (
@@ -291,67 +304,96 @@ export default function IngredientsPage() {
                   .join(' ');
 
                 return (
-                  <Card key={userIngredient.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className="bg-green-50 p-2 rounded-lg">
-                            <Apple className="h-5 w-5 text-green-600" />
+                  <PCCard key={userIngredient.id} className="hover:shadow-pc-lg transition-shadow p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3 flex-1">
+                        {ingredient.imageUrl ? (
+                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-pc-tan/20 flex-shrink-0 relative">
+                            <img 
+                              src={ingredient.imageUrl} 
+                              alt={ingredient.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // Hide image and show icon on error
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  const fallback = parent.querySelector('.ingredient-icon-fallback') as HTMLElement;
+                                  if (fallback) fallback.style.display = 'flex';
+                                }
+                              }}
+                            />
+                            {(() => {
+                              const Icon = getIngredientIcon(ingredient);
+                              return (
+                                <div className="absolute inset-0 bg-pc-tan/40 flex items-center justify-center ingredient-icon-fallback" style={{ display: 'none' }}>
+                                  <Icon className="h-5 w-5 text-pc-olive" />
+                                </div>
+                              );
+                            })()}
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{ingredient.name}</h3>
-                            {quantityDisplay && (
-                              <p className="text-sm text-gray-600 mt-1">{quantityDisplay}</p>
-                            )}
-                            {ingredient.category && (
-                              <p className="text-xs text-gray-500 mt-1">{ingredient.category}</p>
-                            )}
-                          </div>
+                        ) : (
+                          (() => {
+                            const Icon = getIngredientIcon(ingredient);
+                            return (
+                              <div className="bg-pc-tan/40 p-2 rounded-lg flex-shrink-0">
+                                <Icon className="h-5 w-5 text-pc-olive" />
+                              </div>
+                            );
+                          })()
+                        )}
+                        <div>
+                          <h3 className="font-semibold text-pc-navy">{ingredient.name}</h3>
+                          {quantityDisplay && (
+                            <p className="text-sm text-pc-text-light mt-1">{quantityDisplay}</p>
+                          )}
+                          {ingredient.category && (
+                            <p className="text-xs text-pc-text-light mt-1">{ingredient.category}</p>
+                          )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFromUserListMutation.mutate({ id: userIngredient.id })}
-                          disabled={removeFromUserListMutation.isPending}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
                       </div>
-                    </CardContent>
-                  </Card>
+                      <button
+                        onClick={() => removeFromUserListMutation.mutate({ id: userIngredient.id })}
+                        disabled={removeFromUserListMutation.isPending}
+                        className="p-2 rounded-lg hover:bg-pc-tan/30 transition text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </PCCard>
                 );
               })}
             </div>
           ) : (
             <div className="text-center py-16">
               <div className="relative inline-block mb-6">
-                <div className="absolute inset-0 bg-orange-100 rounded-full blur-2xl opacity-50" />
-                <div className="relative bg-gradient-to-br from-orange-100 to-orange-50 p-8 rounded-full">
-                  <ChefHat className="h-20 w-20 text-orange-600 mx-auto" />
+                <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-2xl opacity-50" />
+                <div className="relative bg-pc-tan/20 p-8 rounded-full">
+                  <ChefHat className="h-20 w-20 text-pc-olive mx-auto" />
                 </div>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">
+              <h3 className="text-2xl font-bold text-pc-navy mb-2">
                 {searchQuery ? 'No matches found' : 'Your pantry is empty'}
               </h3>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              <p className="text-pc-text-light mb-6 max-w-md mx-auto">
                 {searchQuery 
                   ? 'Try different search terms or add new ingredients to your pantry'
                   : 'Start building your ingredient collection to discover amazing recipes!'}
               </p>
               {!searchQuery && (
-                <Button 
+                <PCButton 
                   onClick={() => setIsAddDialogOpen(true)} 
-                  className="gap-2 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 shadow-lg"
-                  size="lg"
+                  className="gap-2 bg-pc-olive hover:bg-pc-olive/90"
                 >
                   <Plus className="h-5 w-5" />
                   Add Your First Ingredient
-                </Button>
+                </PCButton>
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </PCCard>
     </div>
   );
 }

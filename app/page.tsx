@@ -1,9 +1,8 @@
- "use client";
-// Reuse the existing Home page content inside Next.js
-import Home from "@/pages/Home";
+"use client";
+import Dashboard from "@/pages/Dashboard";
 
-export default function Page() {
-	return <Home />;
+export default function Home() {
+  return <Dashboard />;
 }
 
 

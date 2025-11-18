@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { PCCard, PCButton } from '@/components/project-comfort-ui';
+import { RecipeCard, CookingBadge } from '@/components/cooking-theme';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, Search, Star, ChefHat, Clock, Users, ExternalLink, Link2 } from 'lucide-react';
+import { BookOpen, Search, Star, ChefHat, Clock, Users, ExternalLink, Link2, UtensilsCrossed } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -23,8 +22,6 @@ export default function RecipeSearchPage() {
   const { data: allIngredients } = trpc.ingredients.list.useQuery();
   const { data: savedRecipes } = trpc.recipes.list.useQuery();
 
-  const searchRecipesMutation = trpc.recipes.searchByIngredients.useMutation();
-  const getMealDetailsMutation = trpc.recipes.getTheMealDBDetails.useMutation();
   const importFromTheMealDBMutation = trpc.recipes.importFromTheMealDB.useMutation({
     onSuccess: () => {
       utils.recipes.list.invalidate();
@@ -63,18 +60,29 @@ export default function RecipeSearchPage() {
     setSearchIngredients(searchIngredients.filter((_, i) => i !== index));
   };
 
-  const handleSearch = () => {
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const handleSearch = async () => {
     if (searchIngredients.length === 0) {
       toast.error('Add at least one ingredient to search');
       return;
     }
-    searchRecipesMutation.mutate({ 
-      ingredients: searchIngredients,
-      sources: selectedSources.length > 0 ? selectedSources : undefined
-    });
+    setIsSearching(true);
+    try {
+      const result = await utils.client.recipes.searchByIngredients.query({ 
+        ingredients: searchIngredients,
+        sources: selectedSources.length > 0 ? selectedSources : undefined
+      });
+      setSearchResults(result);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to search recipes');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  const handleUseMyIngredients = () => {
+  const handleUseMyIngredients = async () => {
     const myIngredientNames = userIngredients
       ?.map(ui => allIngredients?.find(i => i.id === ui.ingredientId)?.name)
       .filter(Boolean)
@@ -86,7 +94,15 @@ export default function RecipeSearchPage() {
     }
 
     setSearchIngredients(myIngredientNames);
-    searchRecipesMutation.mutate({ ingredients: myIngredientNames });
+    setIsSearching(true);
+    try {
+      const result = await utils.client.recipes.searchByIngredients.query({ ingredients: myIngredientNames });
+      setSearchResults(result);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to search recipes');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleImportRecipe = (mealId: string) => {
@@ -109,21 +125,21 @@ export default function RecipeSearchPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Find Recipes</h1>
-        <p className="mt-2 text-gray-600">
+        <h1 className="text-3xl font-bold text-pc-navy">Find Recipes</h1>
+        <p className="mt-2 text-pc-text-light">
           Search for recipes based on ingredients you have
         </p>
       </div>
 
       {/* Import From URL */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Import from URL</CardTitle>
-          <CardDescription>
-            Paste a recipe link. We’ll parse schema.org Recipe data or use AI as fallback.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <PCCard>
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-pc-navy">Import from URL</h2>
+          <p className="text-sm text-pc-text-light">
+            Paste a recipe link. We'll parse schema.org Recipe data or use AI as fallback.
+          </p>
+        </div>
+        <div className="space-y-3">
           <div className="flex gap-2">
             <Input
               placeholder="https://example.com/your-favorite-recipe"
@@ -132,31 +148,32 @@ export default function RecipeSearchPage() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleImportFromUrl(true);
               }}
+              className="border-pc-tan/20"
             />
-            <Button
+            <PCButton
               onClick={() => handleImportFromUrl(true)}
               disabled={parseFromUrlMutation.isPending}
               className="gap-2"
             >
               <Link2 className="h-4 w-4" />
               {parseFromUrlMutation.isPending ? 'Importing...' : 'Import'}
-            </Button>
+            </PCButton>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </PCCard>
 
       {/* Search Section */}
-      <Card className="border-2 border-orange-100 bg-gradient-to-br from-orange-50/50 to-white">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ChefHat className="h-5 w-5 text-orange-600" />
+      <PCCard className="border-2 border-pc-tan/40 bg-pc-tan/10">
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-pc-navy flex items-center gap-2 mb-1">
+            <ChefHat className="h-5 w-5 text-pc-olive" />
             Search by Ingredients
-          </CardTitle>
-          <CardDescription>
+          </h2>
+          <p className="text-sm text-pc-text-light">
             Add up to 5 ingredients to discover recipes from multiple sources
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </p>
+        </div>
+        <div className="space-y-4">
           {/* Source Selection */}
           <div>
             <Label className="text-sm font-medium mb-2 block">Recipe Sources</Label>
@@ -165,7 +182,11 @@ export default function RecipeSearchPage() {
                 <Badge
                   key={source}
                   variant={selectedSources.includes(source) ? "default" : "outline"}
-                  className="cursor-pointer hover:bg-orange-100 transition-colors"
+                  className={`cursor-pointer transition-colors ${
+                    selectedSources.includes(source)
+                      ? "bg-pc-navy text-pc-white hover:bg-pc-navy/90"
+                      : "border-pc-tan/40 hover:bg-pc-tan/20"
+                  }`}
                   onClick={() => {
                     setSelectedSources(prev =>
                       prev.includes(source)
@@ -178,7 +199,7 @@ export default function RecipeSearchPage() {
                 </Badge>
               ))}
             </div>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-pc-text-light mt-2">
               {selectedSources.length === 0 && "Select at least one source to search"}
               {selectedSources.length > 0 && `Searching ${selectedSources.length} source${selectedSources.length > 1 ? 's' : ''}`}
             </p>
@@ -191,14 +212,15 @@ export default function RecipeSearchPage() {
               value={currentIngredient}
               onChange={(e) => setCurrentIngredient(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleAddIngredient()}
+              className="border-pc-tan/20"
             />
-            <Button onClick={handleAddIngredient} variant="outline">
+            <PCButton onClick={handleAddIngredient} className="bg-pc-olive hover:bg-pc-olive/90">
               Add
-            </Button>
-            <Button onClick={handleUseMyIngredients} variant="outline" className="gap-2">
+            </PCButton>
+            <PCButton onClick={handleUseMyIngredients} className="bg-pc-olive hover:bg-pc-olive/90 gap-2">
               <ChefHat className="h-4 w-4" />
               Use My Pantry
-            </Button>
+            </PCButton>
           </div>
 
           {/* Selected Ingredients */}
@@ -219,176 +241,133 @@ export default function RecipeSearchPage() {
           )}
 
           {/* Search Button */}
-          <Button
+          <PCButton
             onClick={handleSearch}
-            disabled={searchRecipesMutation.isPending || searchIngredients.length === 0 || selectedSources.length === 0}
-            className="w-full gap-2 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white shadow-lg"
-            size="lg"
+            disabled={isSearching || searchIngredients.length === 0 || selectedSources.length === 0}
+            className="w-full gap-2 bg-pc-navy hover:bg-pc-navy/90"
           >
             <Search className="h-4 w-4" />
-            {searchRecipesMutation.isPending ? 'Searching...' : 'Search Recipes'}
-          </Button>
-        </CardContent>
-      </Card>
+            {isSearching ? 'Searching...' : 'Search Recipes'}
+          </PCButton>
+        </div>
+      </PCCard>
 
       {/* Search Results */}
-      {searchRecipesMutation.data && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Found {searchRecipesMutation.data.length} Recipes
-            </CardTitle>
-            <CardDescription>
+      {searchResults.length > 0 && (
+        <PCCard>
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold text-pc-navy">
+              Found {searchResults.length} Recipes
+            </h2>
+            <p className="text-sm text-pc-text-light">
               Recipes matching your ingredients
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {searchRecipesMutation.isPending ? (
+            </p>
+          </div>
+          <div>
+            {isSearching ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
                   <RecipeCardSkeleton key={i} />
                 ))}
               </div>
-            ) : searchRecipesMutation.data.length === 0 ? (
+            ) : searchResults.length === 0 ? (
               <div className="text-center py-16">
                 <div className="relative inline-block mb-6">
-                  <div className="absolute inset-0 bg-orange-100 rounded-full blur-2xl opacity-50" />
-                  <div className="relative bg-gradient-to-br from-orange-100 to-orange-50 p-8 rounded-full">
-                    <BookOpen className="h-20 w-20 text-orange-600 mx-auto" />
+                  <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-2xl opacity-50" />
+                  <div className="relative bg-pc-tan/20 p-8 rounded-full">
+                    <BookOpen className="h-20 w-20 text-pc-olive mx-auto" />
                   </div>
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">No recipes found</h3>
-                <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                <h3 className="text-2xl font-bold text-pc-navy mb-2">No recipes found</h3>
+                <p className="text-pc-text-light mb-6 max-w-md mx-auto">
                   We couldn't find any recipes matching your ingredients. Try adding different ingredients or searching other sources.
                 </p>
-                <Button
+                <PCButton
                   onClick={() => {
                     setSearchIngredients([]);
                     setCurrentIngredient('');
                   }}
-                  variant="outline"
-                  className="gap-2"
+                  className="gap-2 bg-pc-olive hover:bg-pc-olive/90"
                 >
                   <Search className="h-4 w-4" />
                   Start New Search
-                </Button>
+                </PCButton>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {searchRecipesMutation.data.map((meal: any) => (
-                  <Card key={meal.idMeal} className="hover:shadow-xl transition-all duration-200 border-orange-100 overflow-hidden">
-                    <CardContent className="p-0">
-                      <div className="relative">
-                        <img
-                          src={meal.strMealThumb}
-                          alt={meal.strMeal}
-                          className="w-full h-48 object-cover"
-                        />
-                        {meal.source && (
-                          <Badge className="absolute top-2 right-2 bg-white/90 text-orange-700 border-orange-200">
-                            {meal.source}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <h3 className="font-semibold text-gray-900 mb-3 line-clamp-2">{meal.strMeal}</h3>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1 gap-2"
-                            onClick={() => setSelectedMealId(meal.idMeal)}
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            View
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1 bg-orange-600 hover:bg-orange-700"
-                            onClick={() => handleImportRecipe(meal.idMeal)}
-                            disabled={isRecipeSaved(meal.idMeal) || importFromTheMealDBMutation.isPending}
-                          >
-                            {isRecipeSaved(meal.idMeal) ? 'Saved ✓' : 'Save'}
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                {searchResults.map((meal: any) => (
+                  <RecipeCard
+                    key={meal.idMeal}
+                    recipe={{
+                      id: meal.idMeal,
+                      name: meal.strMeal,
+                      imageUrl: meal.strMealThumb,
+                      cuisine: meal.strArea,
+                      category: meal.strCategory,
+                      cookingTime: null,
+                      servings: null,
+                      isFavorite: savedRecipes?.some((r: any) => r.externalId === meal.idMeal && r.isFavorite),
+                    }}
+                    onClick={() => {
+                      setSelectedMealId(meal.idMeal);
+                    }}
+                  />
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </PCCard>
       )}
 
-      {/* My Saved Recipes */}
-      <Card>
-        <CardHeader>
-          <CardTitle>My Saved Recipes</CardTitle>
-          <CardDescription>Recipes you've saved to your collection</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {savedRecipes && savedRecipes.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {savedRecipes.map((recipe) => (
-                <Card key={recipe.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    {recipe.imageUrl && (
-                      <img
-                        src={recipe.imageUrl}
-                        alt={recipe.name}
-                        className="w-full h-32 object-cover rounded-md mb-3"
-                      />
-                    )}
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold text-gray-900">{recipe.name}</h3>
-                      {recipe.isFavorite && (
-                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                      )}
-                    </div>
-                    {recipe.cuisine && (
-                      <Badge variant="secondary" className="text-xs">{recipe.cuisine}</Badge>
-                    )}
-                    <div className="flex items-center gap-4 mt-3 text-sm text-gray-600">
-                      {recipe.cookingTime && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {recipe.cookingTime}m
-                        </div>
-                      )}
-                      {recipe.servings && (
-                        <div className="flex items-center gap-1">
-                          <Users className="h-3 w-3" />
-                          {recipe.servings}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-16">
-              <div className="relative inline-block mb-6">
-                <div className="absolute inset-0 bg-orange-100 rounded-full blur-2xl opacity-50" />
-                <div className="relative bg-gradient-to-br from-orange-100 to-orange-50 p-8 rounded-full">
-                  <Star className="h-20 w-20 text-orange-600 mx-auto" />
-                </div>
+      {/* Saved Recipes Section - Enhanced */}
+      <PCCard className="bg-gradient-to-br from-pc-tan/10 to-pc-olive/5 border-pc-olive/20">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="p-2 rounded-lg bg-pc-olive/10">
+            <BookOpen className="h-5 w-5 text-pc-olive" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-pc-navy">Your Recipe Collection</h2>
+            <p className="text-sm text-pc-text-light">Saved recipes ready to cook</p>
+          </div>
+        </div>
+        {savedRecipes && savedRecipes.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {savedRecipes.map((recipe: any) => (
+              <RecipeCard
+                key={recipe.id}
+                recipe={{
+                  id: recipe.id,
+                  name: recipe.name,
+                  imageUrl: recipe.imageUrl,
+                  cuisine: recipe.cuisine,
+                  category: recipe.category,
+                  cookingTime: recipe.cookingTime,
+                  servings: recipe.servings,
+                  isFavorite: recipe.isFavorite,
+                }}
+                onClick={() => {
+                  // Navigate to recipe detail
+                  window.location.href = `/recipes`;
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="relative inline-block mb-6">
+              <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-2xl opacity-50" />
+              <div className="relative bg-pc-tan/20 p-8 rounded-full">
+                <ChefHat className="h-20 w-20 text-pc-olive mx-auto" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">No saved recipes yet</h3>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                Start discovering amazing recipes! Search by ingredients and save your favorites here.
-              </p>
-              <Link href="/recipes">
-                <Button className="gap-2 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 shadow-lg">
-                  <Search className="h-5 w-5" />
-                  Find Recipes
-                </Button>
-              </Link>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <h3 className="text-xl font-semibold text-pc-navy mb-2">No saved recipes yet</h3>
+            <p className="text-pc-text-light mb-6 max-w-md mx-auto">
+              Start building your recipe collection by searching and saving your favorite dishes!
+            </p>
+          </div>
+        )}
+      </PCCard>
+
     </div>
   );
 }

@@ -1,6 +1,6 @@
 {
-	"name": "AI Cooking Agent",
-	"short_name": "Cooking AI",
+	"name": "Sous",
+	"short_name": "Sous",
 	"description": "Cooking assistant with recipe parsing and pantry tools.",
 	"start_url": "/",
 	"scope": "/",

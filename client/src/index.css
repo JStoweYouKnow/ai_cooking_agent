@@ -42,6 +42,41 @@
 }
 
 :root {
+  /* Project Comfort Theme Tokens */
+  --pc-bg: #FAF8F4;
+  --pc-bg-alt: #F4EFE8;
+  --pc-card: #FFFFFF;
+  --pc-border: rgba(17,24,39,0.06);
+
+  --pc-navy: #1E2A38;
+  --pc-olive: #77856A;
+  --pc-tan: #D4C3A9;
+  --pc-muted: #6B6B6B;
+
+  --pc-radius: 1rem; /* 16px */
+  --pc-radius-lg: 1.5rem;
+
+  --pc-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+  --pc-shadow-md: 0 4px 6px rgba(0,0,0,0.05), 0 10px 20px rgba(0,0,0,0.08);
+  --pc-shadow-lg: 0 10px 15px rgba(0,0,0,0.06), 0 20px 40px rgba(0,0,0,0.1);
+  --pc-shadow-hover: 0 8px 12px rgba(0,0,0,0.08), 0 16px 32px rgba(0,0,0,0.12);
+  --pc-shadow-xl: 0 20px 25px rgba(0,0,0,0.08), 0 40px 60px rgba(0,0,0,0.12);
+
+  --pc-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --pc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --pc-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* spacing scale */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+
+  /* Legacy tokens for backward compatibility */
+  --pc-bg-dark: #1a1a1a;
+  --pc-white: #ffffff;
+  --pc-text: #1a1a1a;
+  --pc-text-light: #4f4f4f;
+  --pc-transition: 200ms ease;
+  --pc-transition-slow: 350ms ease;
+
   --primary: var(--color-orange-600);
   --primary-foreground: var(--color-orange-50);
   --sidebar-primary: var(--color-orange-600);
@@ -117,7 +152,118 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    background: var(--pc-bg);
+    color: var(--pc-text);
+    font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  
+  /* Sophisticated typography utilities */
+  .pc-h1 { 
+    font-size: 2.5rem; 
+    line-height: 1.1; 
+    font-weight: 700; 
+    letter-spacing: -0.02em;
+  }
+  .pc-h2 { 
+    font-size: 1.875rem; 
+    line-height: 1.2; 
+    font-weight: 600; 
+    letter-spacing: -0.01em;
+  }
+  .pc-h3 {
+    font-size: 1.5rem;
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .pc-body { 
+    font-size: 1rem; 
+    line-height: 1.6;
+    color: var(--pc-muted); 
+  }
+  .pc-caption {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--pc-muted);
+  }
+  
+  /* Sophisticated animations */
+  @keyframes slideInFromLeft {
+    from {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes slideInFromBottom {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  /* Smooth transitions for interactive elements */
+  * {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+    transition-timing-function: var(--pc-ease);
+    transition-duration: 150ms;
+  }
+  
+  /* Menu item hover effects */
+  .menu-item-active {
+    position: relative;
+  }
+  
+  .menu-item-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 60%;
+    background: var(--pc-olive);
+    border-radius: 0 2px 2px 0;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),

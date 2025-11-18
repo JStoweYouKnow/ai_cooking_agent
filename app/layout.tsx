@@ -1,19 +1,18 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import Providers from "./providers";
-import "@/index.css";
 import { Layout } from "@/components/Layout";
+import "@/index.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-	title: "AI Cooking Agent",
-	description: "Cooking assistant powered by AI",
-	themeColor: [
-		{ media: "(prefers-color-scheme: light)", color: "#ffffff" },
-		{ media: "(prefers-color-scheme: dark)", color: "#0b0b0c" },
-	],
-	applicationName: "AI Cooking Agent",
+	title: "Sous",
+	description: "Your kitchen companion - Cooking assistant powered by AI",
+	applicationName: "Sous",
 	appleWebApp: {
 		capable: true,
-		title: "AI Cooking Agent",
+		title: "Sous",
 		statusBarStyle: "default",
 	},
 	formatDetection: {
@@ -28,11 +27,15 @@ export const viewport: Viewport = {
 	maximumScale: 1,
 	userScalable: false,
 	viewportFit: "cover",
+	themeColor: [
+		{ media: "(prefers-color-scheme: light)", color: "#ffffff" },
+		{ media: "(prefers-color-scheme: dark)", color: "#0b0b0c" },
+	],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
 	return (
-		<html lang="en" suppressHydrationWarning>
+		<html lang="en" suppressHydrationWarning className={inter.variable}>
 			<body>
 				<Providers>
 					<Layout>

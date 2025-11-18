@@ -1,7 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, optionalAuthProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
@@ -10,23 +10,27 @@ import { exportShoppingList, getMimeType, getFileExtension } from "./services/ex
 
 // Recipe router
 const recipeRouter = router({
-  list: protectedProcedure.query(({ ctx }) => db.getUserRecipes(ctx.user.id)),
+  list: optionalAuthProcedure.query(async ({ ctx }) => {
+    const user = ctx.user || await db.getOrCreateAnonymousUser();
+    return db.getUserRecipes(user.id);
+  }),
 
-  getById: protectedProcedure
+  getById: optionalAuthProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const recipe = await db.getRecipeById(input.id);
       if (!recipe) {
         throw new Error("Recipe not found");
       }
       // Verify ownership
-      if (recipe.userId !== ctx.user.id) {
+      if (recipe.userId !== user.id) {
         throw new Error("Unauthorized: You can only view your own recipes");
       }
       return recipe;
     }),
 
-  create: protectedProcedure
+  create: optionalAuthProcedure
     .input(
       z.object({
         name: z.string().min(1).max(255),
@@ -53,16 +57,17 @@ const recipeRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const { ingredients: ingredientsList, ...recipeData } = input;
 
       // Create recipe
       await db.createRecipe({
         ...recipeData,
-        userId: ctx.user.id,
+        userId: user.id,
       });
 
       // Get the created recipe
-      const recipes = await db.getUserRecipes(ctx.user.id);
+      const recipes = await db.getUserRecipes(user.id);
       const created = recipes[recipes.length - 1];
 
       // Add ingredients if provided
@@ -81,7 +86,7 @@ const recipeRouter = router({
       return { id: created?.id || 0 };
     }),
 
-  parseFromUrl: protectedProcedure
+  parseFromUrl: optionalAuthProcedure
     .input(
       z.object({
         url: z.string().url(),
@@ -89,6 +94,7 @@ const recipeRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const parsed = await parseRecipeFromUrl(input.url);
       if (!parsed) {
         try {
@@ -138,7 +144,8 @@ const recipeRouter = router({
             },
           });
           const content = llm.choices[0].message.content;
-          const fallback = JSON.parse(content ?? "{}");
+          const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+          const fallback = JSON.parse(contentStr ?? "{}");
           if (!fallback?.name) {
             throw new Error("LLM parsing failed");
           }
@@ -155,10 +162,10 @@ const recipeRouter = router({
             cookingTime: fallback.cookingTime,
             servings: fallback.servings,
             sourceUrl: input.url,
-            userId: ctx.user!.id,
+            userId: user.id,
             source: "url_import",
           });
-          const recipes = await db.getUserRecipes(ctx.user!.id);
+          const recipes = await db.getUserRecipes(user.id);
           const created = recipes[recipes.length - 1];
           if (created && Array.isArray(fallback.ingredients)) {
             for (const ing of fallback.ingredients) {
@@ -192,10 +199,10 @@ const recipeRouter = router({
         cookingTime: parsed.cookingTime ?? undefined,
         servings: parsed.servings ?? undefined,
         sourceUrl: parsed.sourceUrl ?? undefined,
-        userId: ctx.user!.id,
+        userId: user.id,
         source: parsed.source ?? "url_import",
       });
-      const recipes = await db.getUserRecipes(ctx.user!.id);
+      const recipes = await db.getUserRecipes(user.id);
       const created = recipes[recipes.length - 1];
       if (created && parsed.ingredients?.length) {
         for (const ing of parsed.ingredients) {
@@ -210,15 +217,16 @@ const recipeRouter = router({
       }
       return { id: created?.id || 0 };
     }),
-  toggleFavorite: protectedProcedure
+  toggleFavorite: optionalAuthProcedure
     .input(z.object({ id: z.number().int().positive(), isFavorite: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const recipe = await db.getRecipeById(input.id);
       if (!recipe) {
         throw new Error("Recipe not found");
       }
       // Verify ownership
-      if (recipe.userId !== ctx.user.id) {
+      if (recipe.userId !== user.id) {
         throw new Error("Unauthorized: You can only modify your own recipes");
       }
       return db.updateRecipeFavorite(input.id, input.isFavorite);
@@ -334,10 +342,11 @@ const recipeRouter = router({
       }
     }),
 
-  importFromTheMealDB: protectedProcedure
+  importFromTheMealDB: optionalAuthProcedure
     .input(z.object({ mealId: z.string().min(1).max(20) }))
     .mutation(async ({ ctx, input }) => {
       try {
+        const user = ctx.user || await db.getOrCreateAnonymousUser();
         const response = await fetch(
           `https://www.themealdb.com/api/json/v1/1/lookup.php?i=${encodeURIComponent(input.mealId)}`
         );
@@ -383,13 +392,13 @@ const recipeRouter = router({
           imageUrl: meal.strMealThumb,
           category: meal.strCategory,
           cuisine: meal.strArea,
-          userId: ctx.user.id,
+          userId: user.id,
           externalId: meal.idMeal,
           source: "TheMealDB",
         });
 
         // Get the created recipe
-        const recipes = await db.getUserRecipes(ctx.user.id);
+        const recipes = await db.getUserRecipes(user.id);
         const created = recipes[recipes.length - 1];
 
         // Add ingredients
@@ -411,17 +420,49 @@ const recipeRouter = router({
         throw new Error("Failed to import recipe from TheMealDB");
       }
     }),
+
+  getRecipeIngredients: optionalAuthProcedure
+    .input(z.object({ recipeId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const recipe = await db.getRecipeById(input.recipeId);
+      if (!recipe) {
+        throw new Error("Recipe not found");
+      }
+      // Verify ownership
+      if (recipe.userId !== user.id) {
+        throw new Error("Unauthorized: You can only view ingredients from your own recipes");
+      }
+      return db.getRecipeIngredients(input.recipeId);
+    }),
 });
 
 // Ingredient router
 const ingredientRouter = router({
-  list: protectedProcedure.query(() => db.getAllIngredients()),
+  list: publicProcedure.query(() => db.getAllIngredients()),
 
-  getOrCreate: protectedProcedure
-    .input(z.object({ name: z.string().min(1).max(255), category: z.string().max(100).optional() }))
-    .mutation(({ input }) => db.getOrCreateIngredient(input.name, input.category)),
+  getOrCreate: publicProcedure
+    .input(z.object({ name: z.string().min(1).max(255), category: z.string().max(100).optional(), imageUrl: z.string().url().max(1000).optional() }))
+    .mutation(async ({ input }) => {
+      const ingredient = await db.getOrCreateIngredient(input.name, input.category);
+      // If imageUrl is provided and ingredient doesn't have one, update it
+      if (input.imageUrl && !ingredient.imageUrl) {
+        await db.updateIngredientImage(ingredient.id, input.imageUrl);
+        return { ...ingredient, imageUrl: input.imageUrl };
+      }
+      return ingredient;
+    }),
 
-  recognizeFromImage: protectedProcedure
+  updateImage: optionalAuthProcedure
+    .input(z.object({ ingredientId: z.number().int().positive(), imageUrl: z.string().url().max(1000) }))
+    .mutation(async ({ input }) => {
+      await db.updateIngredientImage(input.ingredientId, input.imageUrl);
+      const updated = await db.getIngredientById(input.ingredientId);
+      if (!updated) throw new Error("Ingredient not found");
+      return updated;
+    }),
+
+  recognizeFromImage: optionalAuthProcedure
     .input(z.object({ imageUrl: z.string().url().max(500) }))
     .mutation(async ({ input }) => {
       try {
@@ -467,7 +508,8 @@ const ingredientRouter = router({
         });
 
         const content = response.choices[0].message.content;
-        const parsed = JSON.parse(content);
+        const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+        const parsed = JSON.parse(contentStr);
         return parsed.ingredients || [];
       } catch (error) {
         console.error("Error recognizing ingredients from image:", error);
@@ -475,7 +517,7 @@ const ingredientRouter = router({
       }
     }),
 
-  getUploadUrl: protectedProcedure
+  getUploadUrl: optionalAuthProcedure
     .input(
       z.object({
         fileName: z.string().min(1).max(255),
@@ -492,7 +534,7 @@ const ingredientRouter = router({
       }
     }),
 
-  uploadImage: protectedProcedure
+  uploadImage: optionalAuthProcedure
     .input(
       z.object({
         imageData: z.string(), // base64 encoded image
@@ -511,7 +553,7 @@ const ingredientRouter = router({
       }
     }),
 
-  addToUserList: protectedProcedure
+  addToUserList: optionalAuthProcedure
     .input(
       z.object({
         ingredientId: z.number().int().positive(),
@@ -519,28 +561,36 @@ const ingredientRouter = router({
         unit: z.string().max(50).optional(),
       })
     )
-    .mutation(({ ctx, input }) =>
-      db.addUserIngredient({
-        userId: ctx.user.id,
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      return db.addUserIngredient({
+        userId: user.id,
         ingredientId: input.ingredientId,
         quantity: input.quantity,
         unit: input.unit,
-      })
-    ),
+      });
+    }),
 
-  getUserIngredients: protectedProcedure.query(({ ctx }) =>
-    db.getUserIngredients(ctx.user.id)
-  ),
+  getUserIngredients: optionalAuthProcedure.query(async ({ ctx }) => {
+    try {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      return await db.getUserIngredients(user.id);
+    } catch (error: any) {
+      console.error("Error in getUserIngredients:", error);
+      throw new Error(error.message || "Failed to fetch user ingredients");
+    }
+  }),
 
-  removeFromUserList: protectedProcedure
+  removeFromUserList: optionalAuthProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const userIngredient = await db.getUserIngredientById(input.id);
       if (!userIngredient) {
         throw new Error("User ingredient not found");
       }
       // Verify ownership
-      if (userIngredient.userId !== ctx.user.id) {
+      if (userIngredient.userId !== user.id) {
         throw new Error("Unauthorized: You can only remove your own ingredients");
       }
       return db.deleteUserIngredient(input.id);
@@ -549,43 +599,61 @@ const ingredientRouter = router({
 
 // Shopping list router
 const shoppingListRouter = router({
-  list: protectedProcedure.query(({ ctx }) => db.getUserShoppingLists(ctx.user.id)),
+  list: optionalAuthProcedure.query(async ({ ctx }) => {
+    const user = ctx.user || await db.getOrCreateAnonymousUser();
+    return db.getUserShoppingLists(user.id);
+  }),
 
-  create: protectedProcedure
+  create: optionalAuthProcedure
     .input(z.object({ name: z.string().min(1).max(255), description: z.string().max(1000).optional() }))
-    .mutation(({ ctx, input }) =>
-      db.createShoppingList({ ...input, userId: ctx.user.id })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const user = ctx.user || await db.getOrCreateAnonymousUser();
+        const createdList = await db.createShoppingList({ ...input, userId: user.id });
+        
+        // createShoppingList should always return the created list object
+        if (!createdList || !('id' in createdList)) {
+          throw new Error("Failed to create shopping list: invalid response from database");
+        }
+        
+        return createdList;
+      } catch (error: any) {
+        console.error("Error creating shopping list:", error);
+        throw new Error(error.message || "Failed to create shopping list");
+      }
+    }),
 
-  getById: protectedProcedure
+  getById: optionalAuthProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const shoppingList = await db.getShoppingListById(input.id);
       if (!shoppingList) {
         throw new Error("Shopping list not found");
       }
       // Verify ownership
-      if (shoppingList.userId !== ctx.user.id) {
+      if (shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only view your own shopping lists");
       }
       return shoppingList;
     }),
 
-  getItems: protectedProcedure
+  getItems: optionalAuthProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const shoppingList = await db.getShoppingListById(input.id);
       if (!shoppingList) {
         throw new Error("Shopping list not found");
       }
       // Verify ownership
-      if (shoppingList.userId !== ctx.user.id) {
+      if (shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only view items from your own shopping lists");
       }
       return db.getShoppingListItems(input.id);
     }),
 
-  addItem: protectedProcedure
+  addItem: optionalAuthProcedure
     .input(
       z.object({
         shoppingListId: z.number().int().positive(),
@@ -595,73 +663,110 @@ const shoppingListRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const shoppingList = await db.getShoppingListById(input.shoppingListId);
-      if (!shoppingList) {
-        throw new Error("Shopping list not found");
+      try {
+        console.log("addItem mutation called with:", input);
+        const user = ctx.user || await db.getOrCreateAnonymousUser();
+        console.log("User:", { id: user.id, openId: user.openId });
+        
+        const shoppingList = await db.getShoppingListById(input.shoppingListId);
+        if (!shoppingList) {
+          console.error("Shopping list not found:", input.shoppingListId);
+          throw new Error("Shopping list not found");
+        }
+        console.log("Shopping list found:", { id: shoppingList.id, userId: shoppingList.userId });
+        
+        // Verify ownership
+        if (shoppingList.userId !== user.id) {
+          console.error(`Ownership mismatch: list userId=${shoppingList.userId}, user id=${user.id}`);
+          throw new Error("Unauthorized: You can only add items to your own shopping lists");
+        }
+        
+        console.log("Adding item:", {
+          shoppingListId: input.shoppingListId,
+          ingredientId: input.ingredientId,
+          quantity: input.quantity,
+          unit: input.unit,
+        });
+        
+        // Verify ingredient exists
+        const ingredient = await db.getIngredientById(input.ingredientId);
+        if (!ingredient) {
+          console.error("Ingredient not found:", input.ingredientId);
+          throw new Error(`Ingredient with ID ${input.ingredientId} not found`);
+        }
+        console.log("Ingredient verified:", ingredient.name);
+        
+        const result = await db.addShoppingListItem({
+          shoppingListId: input.shoppingListId,
+          ingredientId: input.ingredientId,
+          quantity: input.quantity,
+          unit: input.unit,
+        });
+        
+        console.log("Item added successfully:", result);
+        return result;
+      } catch (error: any) {
+        console.error("Error in addItem mutation:", error);
+        console.error("Error stack:", error.stack);
+        throw new Error(error.message || "Failed to add item to shopping list");
       }
-      // Verify ownership
-      if (shoppingList.userId !== ctx.user.id) {
-        throw new Error("Unauthorized: You can only add items to your own shopping lists");
-      }
-      return db.addShoppingListItem({
-        shoppingListId: input.shoppingListId,
-        ingredientId: input.ingredientId,
-        quantity: input.quantity,
-        unit: input.unit,
-      });
     }),
 
-  toggleItem: protectedProcedure
+  toggleItem: optionalAuthProcedure
     .input(z.object({ itemId: z.number().int().positive(), isChecked: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const item = await db.getShoppingListItemById(input.itemId);
       if (!item) {
         throw new Error("Shopping list item not found");
       }
       const shoppingList = await db.getShoppingListById(item.shoppingListId);
-      if (!shoppingList || shoppingList.userId !== ctx.user.id) {
+      if (!shoppingList || shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only modify items in your own shopping lists");
       }
       return db.updateShoppingListItem(input.itemId, input.isChecked);
     }),
 
-  removeItem: protectedProcedure
+  removeItem: optionalAuthProcedure
     .input(z.object({ itemId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const item = await db.getShoppingListItemById(input.itemId);
       if (!item) {
         throw new Error("Shopping list item not found");
       }
       const shoppingList = await db.getShoppingListById(item.shoppingListId);
-      if (!shoppingList || shoppingList.userId !== ctx.user.id) {
+      if (!shoppingList || shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only remove items from your own shopping lists");
       }
       return db.deleteShoppingListItem(input.itemId);
     }),
 
-  delete: protectedProcedure
+  delete: optionalAuthProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const shoppingList = await db.getShoppingListById(input.id);
       if (!shoppingList) {
         throw new Error("Shopping list not found");
       }
       // Verify ownership
-      if (shoppingList.userId !== ctx.user.id) {
+      if (shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only delete your own shopping lists");
       }
       return db.deleteShoppingList(input.id);
     }),
 
-  addFromRecipe: protectedProcedure
+  addFromRecipe: optionalAuthProcedure
     .input(z.object({ shoppingListId: z.number().int().positive(), recipeId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       // Verify shopping list ownership
       const shoppingList = await db.getShoppingListById(input.shoppingListId);
       if (!shoppingList) {
         throw new Error("Shopping list not found");
       }
-      if (shoppingList.userId !== ctx.user.id) {
+      if (shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only add items to your own shopping lists");
       }
 
@@ -670,7 +775,7 @@ const shoppingListRouter = router({
       if (!recipe) {
         throw new Error("Recipe not found");
       }
-      if (recipe.userId !== ctx.user.id) {
+      if (recipe.userId !== user.id) {
         throw new Error("Unauthorized: You can only add ingredients from your own recipes");
       }
 
@@ -688,18 +793,19 @@ const shoppingListRouter = router({
       return { success: true };
     }),
 
-  export: protectedProcedure
+  export: optionalAuthProcedure
     .input(z.object({
       id: z.number().int().positive(),
       format: z.enum(['csv', 'txt', 'md', 'json'])
     }))
     .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       // Verify shopping list ownership
       const shoppingList = await db.getShoppingListById(input.id);
       if (!shoppingList) {
         throw new Error("Shopping list not found");
       }
-      if (shoppingList.userId !== ctx.user.id) {
+      if (shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only export your own shopping lists");
       }
 

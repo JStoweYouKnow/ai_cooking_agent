@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem } from "../drizzle/schema";
+import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,6 +89,40 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+// Get or create an anonymous user for unauthenticated sessions
+export async function getOrCreateAnonymousUser(): Promise<User> {
+  const db = await getDb();
+  if (!db) {
+    const errorMsg = process.env.DATABASE_URL 
+      ? "Database connection failed. Please check your DATABASE_URL and ensure the database is running."
+      : "Database not configured. Please add DATABASE_URL to your .env.local file. Example: DATABASE_URL=mysql://appuser:apppassword@localhost:3306/ai_cooking_agent";
+    throw new Error(errorMsg);
+  }
+  
+  const ANONYMOUS_OPENID = "anonymous_session";
+  
+  // Try to get existing anonymous user
+  let user = await getUserByOpenId(ANONYMOUS_OPENID);
+  
+  if (!user) {
+    // Create anonymous user
+    await upsertUser({
+      openId: ANONYMOUS_OPENID,
+      name: "Guest User",
+      email: null,
+      loginMethod: "anonymous",
+      lastSignedIn: new Date(),
+    });
+    user = await getUserByOpenId(ANONYMOUS_OPENID);
+  }
+  
+  if (!user) {
+    throw new Error("Failed to create anonymous user");
+  }
+  
+  return user;
+}
+
 // Recipe queries
 export async function createRecipe(recipe: InsertRecipe) {
   const db = await getDb();
@@ -141,6 +175,12 @@ export async function getIngredientById(ingredientId: number) {
   return result[0];
 }
 
+export async function updateIngredientImage(ingredientId: number, imageUrl: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(ingredients).set({ imageUrl }).where(eq(ingredients.id, ingredientId));
+}
+
 // Recipe ingredients queries
 export async function addRecipeIngredient(recipeIngredient: InsertRecipeIngredient) {
   const db = await getDb();
@@ -184,7 +224,40 @@ export async function deleteUserIngredient(userIngredientId: number) {
 export async function createShoppingList(shoppingList: InsertShoppingList) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.insert(shoppingLists).values(shoppingList);
+  
+  try {
+    // Insert the shopping list
+    const result = await db.insert(shoppingLists).values(shoppingList);
+    
+    // For MySQL2 with Drizzle, the result is a ResultSetHeader
+    // Access insertId from the result
+    const insertId = (result as any)?.insertId || (result as any)?.[0]?.insertId;
+    
+    if (insertId) {
+      // Fetch the created list using the insertId
+      const created = await db.select().from(shoppingLists).where(eq(shoppingLists.id, Number(insertId))).limit(1);
+      if (created[0]) {
+        return created[0];
+      }
+    }
+    
+    // Fallback: get the most recently created list for this user
+    // This is more reliable than trying to parse the insert result
+    const recentLists = await db.select().from(shoppingLists)
+      .where(eq(shoppingLists.userId, shoppingList.userId))
+      .orderBy(desc(shoppingLists.createdAt))
+      .limit(1);
+    
+    if (recentLists[0]) {
+      return recentLists[0];
+    }
+    
+    // If we still don't have a result, something went wrong
+    throw new Error("Failed to retrieve created shopping list after insert");
+  } catch (error: any) {
+    console.error("Error creating shopping list:", error);
+    throw new Error(error.message || "Failed to create shopping list");
+  }
 }
 
 export async function getUserShoppingLists(userId: number) {
@@ -197,13 +270,43 @@ export async function getShoppingListById(shoppingListId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.select().from(shoppingLists).where(eq(shoppingLists.id, shoppingListId)).limit(1);
-  return result[0];
+  return result[0] || null;
 }
 
 export async function addShoppingListItem(item: InsertShoppingListItem) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.insert(shoppingListItems).values(item);
+  
+  try {
+    // Insert the item
+    const result = await db.insert(shoppingListItems).values(item);
+    
+    // Access insertId from the result (MySQL2 ResultSetHeader format)
+    const insertId = (result as any)?.insertId || (result as any)?.[0]?.insertId;
+    
+    if (insertId) {
+      // Fetch the created item using the insertId
+      const created = await db.select().from(shoppingListItems).where(eq(shoppingListItems.id, Number(insertId))).limit(1);
+      if (created[0]) {
+        return created[0];
+      }
+    }
+    
+    // Fallback: get the most recently created item for this list
+    const recentItems = await db.select().from(shoppingListItems)
+      .where(eq(shoppingListItems.shoppingListId, item.shoppingListId))
+      .orderBy(desc(shoppingListItems.createdAt))
+      .limit(1);
+    
+    if (recentItems[0]) {
+      return recentItems[0];
+    }
+    
+    throw new Error("Failed to retrieve created shopping list item");
+  } catch (error: any) {
+    console.error("Error adding shopping list item:", error);
+    throw new Error(error.message || "Failed to add item to shopping list");
+  }
 }
 
 export async function getShoppingListItems(shoppingListId: number) {

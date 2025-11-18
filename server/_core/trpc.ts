@@ -27,6 +27,22 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
+// Optional auth procedure - allows operations without login, but uses user if available
+// If no user, creates/uses an anonymous user
+export const optionalAuthProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    
+    // If no user, we'll handle it in the procedures by creating an anonymous user
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user, // Can be null
+      },
+    });
+  }),
+);
+
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;

@@ -114,7 +114,7 @@ export default function RecipeDetailPage() {
     createListMutation.mutate({ name: listName });
   };
 
-  const ingredientsWithDetails = recipeIngredients?.map(ri => {
+  const ingredientsWithDetails = recipeIngredients?.map((ri: any) => {
     const ingredient = allIngredients?.find(i => i.id === ri.ingredientId);
     return {
       ...ri,
@@ -248,7 +248,7 @@ export default function RecipeDetailPage() {
           <CardContent>
             {ingredientsWithDetails && ingredientsWithDetails.length > 0 ? (
               <ul className="space-y-3">
-                {ingredientsWithDetails.map((item) => {
+                {ingredientsWithDetails.map((item: any) => {
                   const quantityDisplay = [item.quantity, item.unit]
                     .filter(Boolean)
                     .join(' ');
