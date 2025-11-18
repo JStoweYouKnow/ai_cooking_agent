@@ -8,11 +8,29 @@ import path from "path";
 // vite is dynamically imported to avoid build errors in Next.js
 const viteConfig = {} as any;
 
+// Minimal type definition for vite module to avoid requiring vite to be installed during Next.js builds
+interface ViteModule {
+  createServer: (options: {
+    configFile?: boolean;
+    server?: {
+      middlewareMode?: boolean;
+      hmr?: { server: Server };
+      allowedHosts?: boolean | string[];
+    };
+    appType?: "custom" | "spa" | "mpa";
+    [key: string]: unknown;
+  }) => Promise<{
+    middlewares: express.RequestHandler;
+    transformIndexHtml: (url: string, html: string) => Promise<string>;
+    ssrFixStacktrace: (error: Error) => void;
+  }>;
+}
+
 export async function setupVite(app: Express, server: Server) {
   // Dynamic import to avoid build errors in Next.js where vite is not available
-  let viteModule: typeof import("vite");
+  let viteModule: ViteModule;
   try {
-    viteModule = await import("vite");
+    viteModule = await import("vite") as unknown as ViteModule;
   } catch (error) {
     throw new Error(
       "vite is required for setupVite but is not installed. " +
