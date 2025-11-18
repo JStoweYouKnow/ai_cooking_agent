@@ -3,7 +3,7 @@
  * Supports PDF, CSV, and plain text formats
  */
 
-import type { ShoppingListItem, Ingredient } from '@drizzle/schema';
+import type { ShoppingListItem, Ingredient } from '../../drizzle/schema';
 
 interface ShoppingListExportData {
   listName: string;
