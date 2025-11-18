@@ -53,7 +53,17 @@ export function PCButton({ children, className, ...props }: Omit<React.ButtonHTM
 }
 
 /* ---------------------------------- PCCard --------------------------------- */
-export function PCCard({ children, className, ...props }: { children: React.ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>) {
+export function PCCard({ 
+  children, 
+  className, 
+  ...props 
+}: { 
+  children: React.ReactNode; 
+  className?: string;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, 
+  'onDrag' | 'onDragEnd' | 'onDragStart' | 'onDragEnter' | 'onDragExit' | 'onDragLeave' | 'onDragOver' |
+  'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration' | 'onTransitionEnd'
+>) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}

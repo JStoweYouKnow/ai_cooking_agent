@@ -73,7 +73,7 @@ export function BottomNav({ className }: { className?: string }) {
           return (
             <Link
               key={item.name}
-              href={item.href}
+              href={item.href as any}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 flex-1 h-full relative",
                 "transition-all duration-200",
@@ -224,7 +224,7 @@ export function ModernSidebar({
           return (
             <Link
               key={item.name}
-              href={item.href}
+              href={item.href as any}
               className={cn(
                 "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative",
                 "hover:bg-pc-tan/20",
@@ -276,7 +276,7 @@ export function ModernSidebar({
           return (
             <Link
               key={item.name}
-              href={item.href}
+              href={item.href as any}
               className={cn(
                 "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200",
                 "hover:bg-pc-tan/20",
@@ -494,7 +494,7 @@ export function MobileMenuDrawer({
                   return (
                     <Link
                       key={item.name}
-                      href={item.href}
+                      href={item.href as any}
                       onClick={onClose}
                       className={cn(
                         "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
@@ -556,7 +556,7 @@ export function BreadcrumbNav({
         <React.Fragment key={index}>
           {item.href ? (
             <Link
-              href={item.href}
+              href={item.href as any}
               className="hover:text-pc-olive transition-colors"
             >
               {item.label}

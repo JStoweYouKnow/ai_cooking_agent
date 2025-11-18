@@ -1,0 +1,60 @@
+# Vercel Ignore File
+# Files and directories that Vercel should ignore during deployment
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+.env.development
+
+# Development
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+**/__tests__/
+**/__mocks__/
+vitest.config.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Documentation (optional - uncomment if you don't want to deploy docs)
+# *.md
+# docs/
+
+# Database migrations (already run)
+drizzle/
+
+# Build artifacts
+.next/
+out/
+dist/
+build/
+
+# Misc
+.git/
+.gitignore
+README.md
+HANDOFF.md
+todo.md
+DESIGN_SUMMARY.md
+VERCEL_DEPLOYMENT_GUIDE.md
+RESPONSIVE_DESIGN_GUIDE.md
+PRODUCTION_READY_SUMMARY.md
+FRONTEND_BUILD_SUMMARY.md

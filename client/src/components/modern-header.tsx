@@ -4,7 +4,7 @@
 */
 
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -35,20 +35,15 @@ export function ModernHeader({
   onSearchClick?: () => void;
 }) {
   const pathname = usePathname();
-  const { data: user } = trpc.auth.me.useQuery();
+  const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const [searchFocused, setSearchFocused] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   const navigation = [
     { name: 'Recipes', href: '/recipes', icon: null },
     { name: 'Ingredients', href: '/ingredients', icon: null },
     { name: 'Shopping Lists', href: '/shopping-lists', icon: null },
   ];
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const handleLogout = async () => {
     await logoutMutation.mutateAsync();
@@ -132,14 +127,12 @@ export function ModernHeader({
           </Link>
 
           {/* User Menu */}
-          {!mounted ? (
-            <div className="h-9 w-9 rounded-lg bg-gray-100 animate-pulse" />
-          ) : user ? (
+          {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors" suppressHydrationWarning>
                   <Avatar className="h-9 w-9">
-                    <AvatarFallback className="bg-pc-olive text-white font-semibold text-xs">
+                    <AvatarFallback className="bg-pc-olive text-white font-semibold text-xs" suppressHydrationWarning>
                       {getUserInitials()}
                     </AvatarFallback>
                   </Avatar>
@@ -176,11 +169,22 @@ export function ModernHeader({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link href="/api/oauth/callback">
-              <button className="px-5 py-2.5 rounded-lg bg-pc-olive text-white hover:bg-pc-olive/90 transition-colors font-medium text-sm">
-                Sign in
-              </button>
-            </Link>
+            <>
+              {/* Placeholder avatar that matches exact dimensions to prevent layout shift */}
+              <div 
+                className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center"
+                style={{ width: '36px', height: '36px', borderRadius: '50%' }}
+                suppressHydrationWarning
+                aria-hidden="true"
+              />
+              {!isLoadingUser && (
+                <Link href="/api/oauth/callback" className="ml-2">
+                  <button className="px-5 py-2.5 rounded-lg bg-pc-olive text-white hover:bg-pc-olive/90 transition-colors font-medium text-sm">
+                    Sign in
+                  </button>
+                </Link>
+              )}
+            </>
           )}
 
           {/* Mobile Menu Button */}
@@ -201,19 +205,19 @@ export function ModernHeader({
             <div className="flex items-center gap-8 px-8 py-3.5 bg-white rounded-xl border-2 border-gray-200 shadow-sm">
                 {navigation.map((item) => {
                   const isActive =
-                    mounted &&
-                    (pathname === item.href ||
-                      (item.href !== '/' && pathname.startsWith(item.href)));
+                    pathname === item.href ||
+                    (item.href !== '/' && pathname.startsWith(item.href));
                   return (
                     <Link
                       key={item.name}
-                      href={item.href}
+                      href={item.href as any}
                       className={cn(
                         "text-base font-semibold transition-all duration-300 relative py-2.5 px-5 rounded-lg",
                         isActive
                           ? "text-pc-olive bg-white shadow-md scale-105"
                           : "text-pc-navy hover:text-pc-olive hover:bg-white/70 hover:scale-105"
                       )}
+                      suppressHydrationWarning
                     >
                       {item.name}
                     </Link>

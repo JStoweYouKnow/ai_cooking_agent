@@ -34,8 +34,9 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 	// Handle unauthorized errors globally
 	React.useEffect(() => {
 		const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-			if (event?.type === "error" && event?.error) {
-				const error = event.error;
+			// Check if the query state has an error
+			if (event?.query?.state?.error) {
+				const error = event.query.state.error;
 				if (error instanceof TRPCClientError) {
 					if (error.data?.code === "UNAUTHORIZED" || error.message === UNAUTHED_ERR_MSG) {
 						// Only redirect if we're not already on the login page

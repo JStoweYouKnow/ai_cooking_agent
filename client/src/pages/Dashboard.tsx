@@ -4,6 +4,7 @@ import { RecipeCard, CookingProgress } from '@/components/cooking-theme';
 import {
   Apple,
   BookOpen,
+  Bookmark,
   ShoppingCart,
   Plus,
   ChefHat,
@@ -172,7 +173,7 @@ export default function Dashboard() {
             <h2 className="text-2xl font-semibold text-pc-navy">Today’s Kitchen Pulse</h2>
             <p className="text-sm text-pc-text-light">Live heartbeat of your cooking world</p>
           </div>
-          <Link href="/analytics" className="text-sm text-pc-olive hover:text-pc-navy font-medium flex items-center gap-1">
+          <Link {...({ href: "/analytics" } as any)} className="text-sm text-pc-olive hover:text-pc-navy font-medium flex items-center gap-1">
             View insights <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
@@ -276,7 +277,7 @@ export default function Dashboard() {
                   category: recipe.category,
                   cookingTime: recipe.cookingTime,
                   servings: recipe.servings,
-                  isFavorite: recipe.isFavorite,
+                  isFavorite: recipe.isFavorite ?? undefined,
                 }}
                 onClick={() => {
                   // Navigate to recipe detail if needed
