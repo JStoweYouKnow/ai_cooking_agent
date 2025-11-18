@@ -4,6 +4,7 @@ const nextConfig = {
 	experimental: {
 		serverActions: {
 			allowedOrigins: ['*'],
+			bodySizeLimit: '2mb',
 		},
 	},
 	typescript: {
@@ -15,6 +16,17 @@ const nextConfig = {
 				source: '/404',
 				destination: '/not-found',
 				permanent: false,
+			},
+		];
+	},
+	// Optional: Set custom headers for API routes
+	async headers() {
+		return [
+			{
+				source: '/api/:path*',
+				headers: [
+					{ key: 'Cache-Control', value: 'no-store' },
+				],
 			},
 		];
 	},
