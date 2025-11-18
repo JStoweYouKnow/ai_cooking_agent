@@ -38,8 +38,10 @@ vitest.config.ts
 # *.md
 # docs/
 
-# Database migrations (already run)
-drizzle/
+# Database migrations (already run) - but keep schema.ts and relations.ts which are needed for build
+drizzle/migrations/
+drizzle/meta/
+drizzle/*.sql
 
 # Build artifacts
 .next/
