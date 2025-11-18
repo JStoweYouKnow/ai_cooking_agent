@@ -1,13 +1,15 @@
+"use client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Home } from "lucide-react";
-import { useLocation } from "wouter";
 
+// Use window.location.href for navigation to avoid SSR issues with wouter
+// This works in both Next.js and standalone client app contexts
 export default function NotFound() {
-  const [, setLocation] = useLocation();
-
   const handleGoHome = () => {
-    setLocation("/");
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
   };
 
   return (
