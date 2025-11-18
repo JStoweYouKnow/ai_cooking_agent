@@ -4,6 +4,7 @@
     "shared/**/*",
     "server/**/*",
     "app/**/*",
+    "drizzle/**/*",
     "next-env.d.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
@@ -46,6 +47,9 @@
       ],
       "@server/*": [
         "./server/*"
+      ],
+      "@drizzle/*": [
+        "./drizzle/*"
       ]
     },
     "target": "ES2017",
