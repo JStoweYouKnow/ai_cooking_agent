@@ -34,7 +34,6 @@
     "baseUrl": ".",
     "types": [
       "node",
-      "vite/client",
       "next/types",
       "next"
     ],
