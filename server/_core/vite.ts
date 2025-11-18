@@ -3,19 +3,30 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 // Note: vite.config.ts removed - using Next.js now
 // This file is kept for backward compatibility but may not be used
+// vite is dynamically imported to avoid build errors in Next.js
 const viteConfig = {} as any;
 
 export async function setupVite(app: Express, server: Server) {
+  // Dynamic import to avoid build errors in Next.js where vite is not available
+  let viteModule: typeof import("vite");
+  try {
+    viteModule = await import("vite");
+  } catch (error) {
+    throw new Error(
+      "vite is required for setupVite but is not installed. " +
+      "This function is only needed for the standalone Express server, not Next.js."
+    );
+  }
+
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
     allowedHosts: true as const,
   };
 
-  const vite = await createViteServer({
+  const vite = await viteModule.createServer({
     ...viteConfig,
     configFile: false,
     server: serverOptions,
