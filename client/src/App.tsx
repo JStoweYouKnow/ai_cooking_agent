@@ -8,6 +8,7 @@ import { Layout } from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import IngredientsPage from "./pages/IngredientsPage";
 import RecipeSearchPage from "./pages/RecipeSearchPage";
+import RecipeDetailPage from "./pages/RecipeDetailPage";
 import ShoppingListsPage from "./pages/ShoppingListsPage";
 
 function Router() {
@@ -21,6 +22,9 @@ function Router() {
 			</Route>
 			<Route path="/recipes">
 				{() => <RecipeSearchPage />}
+			</Route>
+			<Route path="/recipes/:id">
+				{() => <RecipeDetailPage />}
 			</Route>
 			<Route path="/shopping-lists">
 				{() => <ShoppingListsPage />}

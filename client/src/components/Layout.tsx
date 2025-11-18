@@ -12,14 +12,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-pc-bg">
-      <ModernHeader
-        onMenuClick={() => setMobileMenuOpen(true)}
-        onSearchClick={() => {
-          if (typeof window !== 'undefined' && (window as any).__openCommandPalette) {
-            (window as any).__openCommandPalette();
-          }
-        }}
-      />
+      {/* Header Section - Visually Defined */}
+      <div className="sticky top-0 z-50 bg-white border-b-2 border-gray-200 shadow-lg">
+        <ModernHeader
+          onMenuClick={() => setMobileMenuOpen(true)}
+          onSearchClick={() => {
+            if (typeof window !== 'undefined' && (window as any).__openCommandPalette) {
+              (window as any).__openCommandPalette();
+            }
+          }}
+        />
+      </div>
       {/* Main Content */}
       <main className={cn(
         "flex-1 w-full max-w-7xl mx-auto p-4 md:p-6 transition-all duration-300",

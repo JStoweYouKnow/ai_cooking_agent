@@ -1,16 +1,14 @@
 import { useRoute } from 'wouter';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
   ArrowLeft, Star, Clock, Users, ChefHat, ShoppingCart,
-  Trash2, ExternalLink, Plus
+  ExternalLink, Plus, UtensilsCrossed
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +17,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PCCard, PCButton } from '@/components/project-comfort-ui';
+import { CookingBadge, CookingTimeBadge, ServingsBadge } from '@/components/cooking-theme';
 
 export default function RecipeDetailPage() {
   const [, params] = useRoute('/recipes/:id');
@@ -72,13 +72,14 @@ export default function RecipeDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto space-y-6">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
-          <div className="space-y-3">
-            <div className="h-4 bg-gray-200 rounded"></div>
-            <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+          <div className="h-10 bg-pc-tan/30 rounded-xl w-1/4"></div>
+          <div className="h-12 bg-pc-tan/30 rounded-xl w-2/3"></div>
+          <div className="h-96 bg-gradient-to-br from-pc-tan/20 to-pc-olive/10 rounded-2xl"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="h-64 bg-pc-tan/20 rounded-2xl"></div>
+            <div className="lg:col-span-2 h-64 bg-pc-tan/20 rounded-2xl"></div>
           </div>
         </div>
       </div>
@@ -87,12 +88,22 @@ export default function RecipeDetailPage() {
 
   if (!recipe) {
     return (
-      <div className="max-w-4xl mx-auto text-center py-12">
-        <ChefHat className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Recipe Not Found</h2>
-        <p className="text-gray-600 mb-6">The recipe you're looking for doesn't exist.</p>
+      <div className="max-w-4xl mx-auto text-center py-16">
+        <div className="relative inline-block mb-6">
+          <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-2xl opacity-50" />
+          <div className="relative bg-pc-tan/20 p-8 rounded-full">
+            <ChefHat className="h-20 w-20 text-pc-olive mx-auto" />
+          </div>
+        </div>
+        <h2 className="text-3xl font-bold text-pc-navy mb-2">Recipe Not Found</h2>
+        <p className="text-pc-text-light mb-8 max-w-md mx-auto">
+          The recipe you're looking for doesn't exist or may have been removed.
+        </p>
         <Link href="/recipes">
-          <Button>Browse Recipes</Button>
+          <PCButton className="gap-2">
+            <UtensilsCrossed className="h-4 w-4" />
+            Browse Recipes
+          </PCButton>
         </Link>
       </div>
     );
@@ -123,41 +134,53 @@ export default function RecipeDetailPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="max-w-4xl mx-auto space-y-6"
+    >
       {/* Back Button */}
       <Link href="/recipes">
-        <Button variant="ghost" className="gap-2">
+        <motion.button
+          whileHover={{ x: -4 }}
+          className="flex items-center gap-2 text-pc-navy hover:text-pc-olive transition-colors"
+        >
           <ArrowLeft className="h-4 w-4" />
-          Back to Recipes
-        </Button>
+          <span className="font-medium">Back to Recipes</span>
+        </motion.button>
       </Link>
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">{recipe.name}</h1>
-          {recipe.description && (
-            <p className="text-lg text-gray-600 mb-4">{recipe.description}</p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {recipe.cuisine && (
-              <Badge variant="secondary" className="gap-1">
-                <ChefHat className="h-3 w-3" />
-                {recipe.cuisine}
-              </Badge>
+      <PCCard className="border-2 border-pc-tan/40">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold text-pc-navy mb-3 leading-tight">{recipe.name}</h1>
+            {recipe.description && (
+              <p className="text-lg text-pc-text-light mb-4 leading-relaxed">{recipe.description}</p>
             )}
-            {recipe.category && <Badge variant="outline">{recipe.category}</Badge>}
-            {recipe.source && (
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                {recipe.source}
-              </Badge>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {recipe.cuisine && (
+                <CookingBadge variant="cuisine">
+                  <ChefHat className="h-3 w-3" />
+                  {recipe.cuisine}
+                </CookingBadge>
+              )}
+              {recipe.category && (
+                <CookingBadge variant="category">{recipe.category}</CookingBadge>
+              )}
+              {recipe.cookingTime && <CookingTimeBadge minutes={recipe.cookingTime} />}
+              {recipe.servings && <ServingsBadge count={recipe.servings} />}
+              {recipe.source && (
+                <CookingBadge className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300">
+                  {recipe.source}
+                </CookingBadge>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant={recipe.isFavorite ? 'default' : 'outline'}
-            size="icon"
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() =>
               toggleFavoriteMutation.mutate({
                 id: recipe.id,
@@ -165,146 +188,184 @@ export default function RecipeDetailPage() {
               })
             }
             disabled={toggleFavoriteMutation.isPending}
+            className={`p-3 rounded-xl transition-all ${
+              recipe.isFavorite
+                ? 'bg-gradient-to-br from-yellow-100 to-yellow-200 text-yellow-600'
+                : 'bg-pc-tan/30 text-pc-text-light hover:bg-pc-tan/50'
+            }`}
           >
-            <Star className={`h-4 w-4 ${recipe.isFavorite ? 'fill-current' : ''}`} />
-          </Button>
+            <Star className={`h-6 w-6 ${recipe.isFavorite ? 'fill-current' : ''}`} />
+          </motion.button>
         </div>
-      </div>
+      </PCCard>
 
       {/* Recipe Image */}
       {recipe.imageUrl && (
-        <Card className="overflow-hidden">
-          <img
-            src={recipe.imageUrl}
-            alt={recipe.name}
-            className="w-full h-96 object-cover"
-          />
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <PCCard className="overflow-hidden p-0">
+            <div className="relative h-96 overflow-hidden group">
+              <img
+                src={recipe.imageUrl}
+                alt={recipe.name}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+            </div>
+          </PCCard>
+        </motion.div>
       )}
 
       {/* Meta Information */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {recipe.cookingTime && (
-              <div className="flex items-center gap-3">
-                <div className="bg-orange-50 p-3 rounded-lg">
-                  <Clock className="h-5 w-5 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Cooking Time</p>
-                  <p className="font-semibold text-gray-900">{recipe.cookingTime} min</p>
-                </div>
+      {recipe.sourceUrl && (
+        <PCCard className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+          <a
+            href={recipe.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-blue-100 text-blue-600">
+                <ExternalLink className="h-5 w-5" />
               </div>
-            )}
-            {recipe.servings && (
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <Users className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Servings</p>
-                  <p className="font-semibold text-gray-900">{recipe.servings}</p>
-                </div>
+              <div>
+                <p className="text-sm text-blue-600 font-medium">Original Recipe</p>
+                <p className="text-xs text-blue-500">View on external website</p>
               </div>
-            )}
-            {recipe.sourceUrl && (
-              <div className="col-span-2">
-                <a
-                  href={recipe.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-blue-600 hover:text-blue-700"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  View Original Recipe
-                </a>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+            <motion.div whileHover={{ x: 4 }} className="text-blue-600">
+              →
+            </motion.div>
+          </a>
+        </PCCard>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Ingredients */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Ingredients</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2"
+        <PCCard className="lg:col-span-1 bg-gradient-to-br from-pc-tan/10 to-pc-olive/5">
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-pc-olive/10">
+                  <UtensilsCrossed className="h-5 w-5 text-pc-olive" />
+                </div>
+                <h2 className="text-xl font-semibold text-pc-navy">Ingredients</h2>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setIsAddToListDialogOpen(true)}
+                className="p-2 rounded-lg bg-pc-navy text-white hover:bg-pc-navy/90 transition-colors"
               >
                 <ShoppingCart className="h-4 w-4" />
-                Add to List
-              </Button>
+              </motion.button>
             </div>
-            <CardDescription>
+            <p className="text-sm text-pc-text-light">
               {ingredientsWithDetails?.length || 0} items needed
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {ingredientsWithDetails && ingredientsWithDetails.length > 0 ? (
-              <ul className="space-y-3">
-                {ingredientsWithDetails.map((item: any) => {
-                  const quantityDisplay = [item.quantity, item.unit]
-                    .filter(Boolean)
-                    .join(' ');
+            </p>
+          </div>
 
-                  return (
-                    <li key={item.id} className="flex items-start gap-2">
-                      <span className="text-orange-600 font-bold mt-1">•</span>
-                      <div className="flex-1">
-                        <span className="font-medium text-gray-900">
-                          {item.ingredientName}
-                        </span>
-                        {quantityDisplay && (
-                          <span className="text-gray-600 text-sm ml-2">
-                            ({quantityDisplay})
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="text-gray-500 text-sm">No ingredients listed</p>
-            )}
-          </CardContent>
-        </Card>
+          {ingredientsWithDetails && ingredientsWithDetails.length > 0 ? (
+            <div className="space-y-2">
+              {ingredientsWithDetails.map((item: any, index: number) => {
+                const quantityDisplay = [item.quantity, item.unit]
+                  .filter(Boolean)
+                  .join(' ');
+
+                return (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex items-start gap-3 p-3 rounded-xl bg-white/60 backdrop-blur-sm hover:bg-white transition-colors"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-pc-olive mt-2 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-pc-navy">
+                        {item.ingredientName}
+                      </p>
+                      {quantityDisplay && (
+                        <p className="text-sm text-pc-text-light">
+                          {quantityDisplay}
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <UtensilsCrossed className="h-12 w-12 text-pc-tan/40 mx-auto mb-2" />
+              <p className="text-pc-text-light text-sm">No ingredients listed</p>
+            </div>
+          )}
+        </PCCard>
 
         {/* Instructions */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Instructions</CardTitle>
-            <CardDescription>Follow these steps to prepare the recipe</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recipe.instructions ? (
-              <div className="prose prose-sm max-w-none">
-                {recipe.instructions.split('\n\n').map((step, index) => (
-                  <div key={index} className="mb-4 last:mb-0">
-                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                      {step}
-                    </p>
-                  </div>
-                ))}
+        <PCCard className="lg:col-span-2 bg-gradient-to-br from-white to-pc-tan/5">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 rounded-lg bg-pc-navy/10">
+                <ChefHat className="h-5 w-5 text-pc-navy" />
               </div>
-            ) : (
-              <p className="text-gray-500">No instructions available</p>
-            )}
-          </CardContent>
-        </Card>
+              <h2 className="text-xl font-semibold text-pc-navy">Instructions</h2>
+            </div>
+            <p className="text-sm text-pc-text-light">
+              Follow these steps to prepare the recipe
+            </p>
+          </div>
+
+          {recipe.instructions ? (
+            <div className="space-y-4">
+              {recipe.instructions.split('\n').filter(Boolean).map((step, index) => {
+                const isNumbered = /^\d+[\.\)]\s/.test(step.trim());
+                const stepText = isNumbered ? step.trim() : step;
+
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.08 }}
+                    className="flex gap-4 group"
+                  >
+                    <div className="flex-shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pc-navy to-pc-olive text-white flex items-center justify-center font-semibold text-sm group-hover:scale-110 transition-transform">
+                        {index + 1}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-pc-navy leading-relaxed whitespace-pre-wrap">
+                        {stepText}
+                      </p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <ChefHat className="h-16 w-16 text-pc-tan/40 mx-auto mb-3" />
+              <p className="text-pc-text-light">No instructions available</p>
+            </div>
+          )}
+        </PCCard>
       </div>
 
       {/* Add to Shopping List Dialog */}
       <Dialog open={isAddToListDialogOpen} onOpenChange={setIsAddToListDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add to Shopping List</DialogTitle>
+            <DialogTitle className="text-pc-navy flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-pc-olive" />
+              Add to Shopping List
+            </DialogTitle>
             <DialogDescription>
               Add all ingredients from this recipe to a shopping list
             </DialogDescription>
@@ -313,11 +374,11 @@ export default function RecipeDetailPage() {
             {shoppingLists && shoppingLists.length > 0 ? (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                  <label className="text-sm font-medium text-pc-navy mb-2 block">
                     Select a list
                   </label>
                   <Select value={selectedListId} onValueChange={setSelectedListId}>
-                    <SelectTrigger>
+                    <SelectTrigger className="border-pc-tan/20">
                       <SelectValue placeholder="Choose a shopping list" />
                     </SelectTrigger>
                     <SelectContent>
@@ -329,30 +390,27 @@ export default function RecipeDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1"
-                    onClick={handleAddToList}
-                    disabled={addToShoppingListMutation.isPending}
-                  >
-                    Add to Selected List
-                  </Button>
-                </div>
+                <PCButton
+                  className="w-full"
+                  onClick={handleAddToList}
+                  disabled={addToShoppingListMutation.isPending}
+                >
+                  {addToShoppingListMutation.isPending ? 'Adding...' : 'Add to Selected List'}
+                </PCButton>
                 <Separator />
               </>
             ) : null}
-            <Button
-              variant="outline"
-              className="w-full gap-2"
+            <PCButton
+              className="w-full gap-2 bg-pc-olive hover:bg-pc-olive/90"
               onClick={handleCreateNewList}
               disabled={createListMutation.isPending}
             >
               <Plus className="h-4 w-4" />
-              Create New List for This Recipe
-            </Button>
+              {createListMutation.isPending ? 'Creating...' : 'Create New List for This Recipe'}
+            </PCButton>
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </motion.div>
   );
 }
