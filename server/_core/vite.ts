@@ -28,9 +28,13 @@ interface ViteModule {
 
 export async function setupVite(app: Express, server: Server) {
   // Dynamic import to avoid build errors in Next.js where vite is not available
+  // This function is only used by the standalone Express server, not Next.js
+  // Using Function constructor to prevent static analysis by Turbopack/Next.js
   let viteModule: ViteModule;
   try {
-    viteModule = await import("vite") as unknown as ViteModule;
+    // Dynamic import using Function constructor prevents static analysis
+    const dynamicImport = new Function("specifier", "return import(specifier)");
+    viteModule = await dynamicImport("vite") as unknown as ViteModule;
   } catch (error) {
     throw new Error(
       "vite is required for setupVite but is not installed. " +
