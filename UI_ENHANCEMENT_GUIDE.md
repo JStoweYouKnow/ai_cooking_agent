@@ -135,11 +135,13 @@ import { HeroParallax } from "aceternity-ui";
 ```
 
 ### Option 2: Magic UI (Animated Components)
-Gorgeous animation-first components
+Gorgeous animation-first components that use the shadcn/ui installer flow
 
 ```bash
-npx magicui-cli add shine-border
+npx shadcn@latest add "https://magicui.design/r/shine-border"
 ```
+
+**Note:** Magic UI components use the shadcn/ui installer flow. The component URL above points to the shine-border example component. You can browse other components at [magicui.design](https://magicui.design) and add them using the same pattern.
 
 **Best for:**
 - Card animations
