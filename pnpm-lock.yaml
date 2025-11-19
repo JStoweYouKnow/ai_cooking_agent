@@ -161,7 +161,7 @@ importers:
         specifier: ^5.1.5
         version: 5.1.6
       next:
-        specifier: latest
+        specifier: ^16.0.0
         version: 16.0.3(@babel/core@7.28.4)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       next-themes:
         specifier: ^0.4.6
@@ -243,7 +243,7 @@ importers:
         specifier: ^0.25.0
         version: 0.25.10
       eslint-config-next:
-        specifier: latest
+        specifier: ^16.0.3
         version: 16.0.3(@typescript-eslint/parser@8.47.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       pnpm:
         specifier: ^10.15.1
