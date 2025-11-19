@@ -74,15 +74,9 @@ export function GradientHero({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight mb-6"
+          className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight mb-6 text-pc-text dark:text-white"
         >
-          {typeof title === 'string' ? (
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-pc-navy via-pc-olive to-pc-navy">
-              {title}
-            </span>
-          ) : (
-            title
-          )}
+          {title}
         </motion.h1>
 
         {description && (
@@ -155,7 +149,7 @@ export function GlassCard({
         whileHover={hover ? { y: -4 } : undefined}
         transition={{ duration: 0.3 }}
         className={cn(
-          "relative bg-white dark:bg-gray-800 backdrop-blur-xl rounded-2xl border border-gray-200 dark:border-gray-700",
+          "relative bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700",
           "shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
           hover && "hover:shadow-[0_20px_48px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_20px_48px_rgba(0,0,0,0.6)]",
           "transition-all duration-300"
@@ -300,7 +294,7 @@ export function SectionHeader({
               <Icon className="h-5 w-5 md:h-6 md:w-6 text-pc-olive" />
             </div>
           )}
-          <h2 className="text-3xl md:text-4xl font-black text-pc-navy">
+          <h2 className="text-3xl md:text-4xl font-black text-pc-text dark:text-white">
             {title}
           </h2>
         </div>
@@ -482,10 +476,7 @@ export function GradientText({
   return (
     <span
       className={cn(
-        "text-transparent bg-clip-text bg-gradient-to-r",
-        `from-${from}`,
-        via && `via-${via}`,
-        `to-${to}`,
+        "text-pc-text dark:text-white font-bold",
         className
       )}
     >

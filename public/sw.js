@@ -22,14 +22,27 @@ self.addEventListener('activate', function(event) {
       // Force all window clients to reload and wait for navigation to complete
       return self.clients.matchAll().then(function(clients) {
         var navigationPromises = [];
+        var windowClients = [];
 
         clients.forEach(function(client) {
           if (client.type === 'window') {
+            windowClients.push(client);
             navigationPromises.push(client.navigate(client.url));
           }
         });
 
-        return Promise.all(navigationPromises);
+        return Promise.allSettled(navigationPromises).then(function(results) {
+          // Log any failures but don't reject the activation
+          results.forEach(function(result, index) {
+            if (result.status === 'rejected') {
+              var client = windowClients[index];
+              var clientId = client.id || client.url || 'unknown';
+              console.error('Service worker: Failed to navigate client', clientId, result.reason);
+            }
+          });
+          // Always resolve to allow activation to complete
+          return Promise.resolve();
+        });
       });
     })
   );

@@ -110,6 +110,11 @@ html.dark {
   --pc-text: #e5e7eb;
   --pc-text-light: #9ca3af;
 
+  /* Redefine brand colors for dark mode visibility */
+  --pc-navy: #a8b8cc;
+  --pc-olive: #9fb08a;
+  --pc-tan: #e5d9c9;
+
   /* Dark Mode Glassmorphism */
   --glass-bg: rgba(15, 15, 26, 0.6);
   --glass-border: rgba(255, 255, 255, 0.1);
