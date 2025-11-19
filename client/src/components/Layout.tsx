@@ -3,17 +3,19 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { BottomNav, ModernSidebar, MobileMenuDrawer } from './modern-menu';
 import { ModernHeader } from './modern-header';
+import { AnimatedBackground } from './web3';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-
-
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-pc-bg via-white to-pc-tan/5">
-      {/* Header Section */}
-      <div className="sticky top-0 z-50 bg-white border-b-2 border-gray-200 shadow-lg">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Web 3.0 Animated Background */}
+      <AnimatedBackground variant="gradient" intensity="low" />
+      
+      {/* Header Section with Glass Effect */}
+      <div className="sticky top-0 z-50 glass dark:glass-dark border-b border-gray-200/50 dark:border-white/10 shadow-lg backdrop-blur-xl">
         <ModernHeader
           onMenuClick={() => setMobileMenuOpen(true)}
           onSearchClick={() => {
@@ -28,7 +30,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex">
         {/* Desktop Sidebar - Hidden on mobile/tablet */}
         <div className="hidden lg:block lg:flex-shrink-0">
-          <div className="sticky top-[180px] h-[calc(100vh-180px)]">
+          <div className="sticky top-[64px] md:top-[80px] h-[calc(100vh-64px)] md:h-[calc(100vh-80px)]">
             <ModernSidebar
               collapsed={sidebarCollapsed}
               onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -38,7 +40,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Main Content Area */}
         <main className={cn(
-          "flex-1 w-full transition-all duration-300",
+          "flex-1 w-full transition-all duration-300 relative z-10",
           // Mobile: compact padding with bottom nav space
           "p-4 pb-20",
           // Tablet: more breathing room

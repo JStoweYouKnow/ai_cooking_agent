@@ -1,6 +1,8 @@
 "use client";
 import { PCCard, PCButton } from '@/components/project-comfort-ui';
 import { RecipeCard, CookingProgress } from '@/components/cooking-theme';
+import { GlassCard } from '@/components/web3';
+import { PageTransition } from '@/components/web3/PageTransition';
 import {
   Apple,
   BookOpen,
@@ -81,7 +83,8 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-8 pb-16">
+    <PageTransition>
+      <div className="space-y-8 pb-16">
       {/* Hero + Spotlight */}
       <div className="grid gap-6 lg:grid-cols-[1.8fr,1fr]">
         <PCCard className="relative overflow-hidden bg-gradient-to-br from-pc-tan/40 via-white to-pc-olive/10 border-0 shadow-lg">
@@ -182,9 +185,12 @@ export default function Dashboard() {
             {statHighlights.map((stat) => {
               const Icon = stat.icon;
               return (
-                <PCCard
+                <GlassCard
                   key={stat.label}
-                  className={`min-w-[220px] bg-gradient-to-br ${stat.accent} border-0 shadow-md hover:-translate-y-1 transition-transform duration-300`}
+                  hover
+                  glow
+                  gradient="primary"
+                  className={`min-w-[220px] bg-gradient-to-br ${stat.accent} border-0`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -196,7 +202,7 @@ export default function Dashboard() {
                       <Icon className="h-5 w-5 text-pc-navy" />
                     </div>
                   </div>
-                </PCCard>
+                </GlassCard>
               );
             })}
           </div>
@@ -420,6 +426,7 @@ export default function Dashboard() {
           </div>
         </PCCard>
       )}
-    </div>
+      </div>
+    </PageTransition>
   );
 }

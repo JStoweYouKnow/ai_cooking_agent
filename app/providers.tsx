@@ -2,7 +2,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import superjson from "superjson";
@@ -84,7 +84,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
 	return (
 		<ErrorBoundary>
-			<ThemeProvider defaultTheme="light">
+			<ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
 				<TooltipProvider>
 					{/* Register the Service Worker for PWA */}
 					{typeof window !== "undefined" && "serviceWorker" in navigator ? (
