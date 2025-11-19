@@ -242,7 +242,6 @@ export default function ShoppingListsPage() {
           title="Shopping Lists"
           subtitle="Organized grocery planning"
           description="Create and manage your shopping lists with ease. Export to multiple formats and never forget an ingredient."
-          compact
           className="flex-1"
         />
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -319,7 +318,6 @@ export default function ShoppingListsPage() {
           <SectionHeader
             icon={ShoppingCart}
             title={`My Lists (${shoppingLists?.length || 0})`}
-            subtitle=""
           />
           <div className="mt-6">
             {shoppingLists && shoppingLists.length > 0 ? (

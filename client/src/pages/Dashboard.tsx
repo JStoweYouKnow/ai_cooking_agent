@@ -201,7 +201,7 @@ export default function Dashboard() {
         <SectionHeader
           icon={Sparkles}
           title="Today's Kitchen Pulse"
-          subtitle="Live heartbeat of your cooking world"
+          description="Live heartbeat of your cooking world"
           action={
             <Link href="/analytics" className="text-sm text-pc-olive hover:text-pc-navy font-medium flex items-center gap-1 transition-colors">
               View insights <ChevronRight className="h-4 w-4" />
@@ -244,7 +244,7 @@ export default function Dashboard() {
           <SectionHeader
             icon={ChefHat}
             title="Kitchen Quick Actions"
-            subtitle="Launchpad for your next culinary move"
+            description="Launchpad for your next culinary move"
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
             <Link href="/ingredients">
@@ -274,7 +274,7 @@ export default function Dashboard() {
         <SectionHeader
           icon={BookOpen}
           title="Recent Recipes"
-          subtitle="Your recently added recipes"
+          description="Your recently added recipes"
           action={
             <Link href="/recipes">
               <button className="text-sm text-pc-olive hover:text-pc-navy font-medium transition-colors flex items-center gap-1">
@@ -333,7 +333,7 @@ export default function Dashboard() {
           <SectionHeader
             icon={AlarmClock}
             title="Interactive Kitchen Timeline"
-            subtitle="Live feed of what Sous is orchestrating"
+            description="Live feed of what Sous is orchestrating"
             action={
               <button className="text-sm text-pc-olive hover:text-pc-navy font-medium transition-colors">
                 View full log

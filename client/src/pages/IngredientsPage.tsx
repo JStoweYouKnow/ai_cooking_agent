@@ -124,7 +124,6 @@ export default function IngredientsPage() {
           title="My Ingredients"
           subtitle="Smart pantry tracking"
           description="Manage your pantry and discover what you can cook with AI-powered ingredient recognition."
-          compact
           className="flex-1"
         />
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -309,7 +308,7 @@ export default function IngredientsPage() {
           <SectionHeader
             icon={ChefHat}
             title={`Your Pantry (${userIngredients?.length || 0} items)`}
-            subtitle="Ingredients you have on hand"
+            description="Ingredients you have on hand"
           />
           <div className="mt-8">
         <div>

@@ -157,7 +157,6 @@ export default function RecipeSearchPage() {
         title="Find Your Next Favorite Recipe"
         subtitle="Powered by AI and curated sources"
         description="Search for recipes based on ingredients you have, or import from your favorite cooking websites. Discover delicious meals tailored to your pantry."
-        compact
       />
 
       {/* Import From URL */}
@@ -165,7 +164,7 @@ export default function RecipeSearchPage() {
         <SectionHeader
           icon={Link2}
           title="Import from URL"
-          subtitle="Paste a recipe link. We'll parse schema.org Recipe data or use AI as fallback."
+          description="Paste a recipe link. We'll parse schema.org Recipe data or use AI as fallback."
         />
         <div className="mt-6">
           <div className="flex gap-3">
@@ -198,7 +197,7 @@ export default function RecipeSearchPage() {
           <SectionHeader
             icon={ChefHat}
             title="Search by Ingredients"
-            subtitle="Add up to 5 ingredients to discover recipes from multiple sources"
+            description="Add up to 5 ingredients to discover recipes from multiple sources"
           />
           <div className="space-y-6 mt-6">
             {/* Source Selection */}
@@ -288,7 +287,7 @@ export default function RecipeSearchPage() {
           <SectionHeader
             icon={Search}
             title={`Found ${searchResults.length} Recipes`}
-            subtitle="Recipes matching your ingredients"
+            description="Recipes matching your ingredients"
           />
           <div className="mt-8">
             {isSearching ? (
@@ -354,7 +353,7 @@ export default function RecipeSearchPage() {
           <SectionHeader
             icon={BookOpen}
             title="Your Recipe Collection"
-            subtitle="Saved recipes ready to cook"
+            description="Saved recipes ready to cook"
           />
           <div className="mt-8">
             {savedRecipes && savedRecipes.length > 0 ? (
