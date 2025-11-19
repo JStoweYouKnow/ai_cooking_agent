@@ -1,12 +1,8 @@
 "use client";
-import { PCCard, PCButton } from '@/components/project-comfort-ui';
-import { RecipeCard, CookingProgress } from '@/components/cooking-theme';
-import { GlassCard } from '@/components/web3';
+import { RecipeCard } from '@/components/cooking-theme';
 import { PageTransition } from '@/components/web3/PageTransition';
 import {
   GradientHero,
-  StatCard,
-  FeatureCard,
   SectionHeader,
   PremiumButton,
   DecorativeBlob,
@@ -14,7 +10,6 @@ import {
   GradientText
 } from '@/components/premium-ui';
 import {
-  Apple,
   BookOpen,
   Bookmark,
   ShoppingCart,
@@ -24,8 +19,6 @@ import {
   Flame,
   Sparkles,
   Leaf,
-  TimerReset,
-  AlarmClock,
   ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
@@ -39,64 +32,6 @@ export default function Dashboard() {
   const favoriteRecipes = recipes?.filter(r => r.isFavorite) || [];
   const recentRecipes = recipes?.slice(0, 3) || [];
   const spotlightRecipe = recipes?.[0];
-
-  const statHighlights: Array<{
-    label: string;
-    value: string;
-    trend?: { value: string; positive: boolean; };
-    icon: typeof Apple;
-    accent: string;
-  }> = [
-    {
-      label: 'Pantry Restocked',
-      value: `${ingredients?.length || 0} items`,
-      trend: { value: '+4 new', positive: true },
-      icon: Apple,
-      accent: 'from-green-100 via-white to-green-50'
-    },
-    {
-      label: 'Recipes Curated',
-      value: `${recipes?.length || 0}`,
-      trend: favoriteRecipes.length ? { value: `${favoriteRecipes.length} favorites`, positive: true } : undefined,
-      icon: BookOpen,
-      accent: 'from-amber-100 via-white to-amber-50'
-    },
-    {
-      label: 'Shopping Momentum',
-      value: `${shoppingLists?.length || 0} lists`,
-      trend: { value: '2 reminders', positive: true },
-      icon: ShoppingCart,
-      accent: 'from-purple-100 via-white to-purple-50'
-    },
-    {
-      label: 'Chef Energy',
-      value: '92%',
-      trend: { value: 'Focused & Inspired', positive: true },
-      icon: Sparkles,
-      accent: 'from-pink-100 via-white to-pink-50'
-    }
-  ];
-
-  const timelineEvents = [
-    {
-      time: '08:30 AM',
-      title: 'Seasonal produce suggestion',
-      detail: 'Fresh asparagus pairs with your salmon',
-      badge: 'Suggestion'
-    },
-    {
-      time: '12:15 PM',
-      title: 'Pantry sync complete',
-      detail: 'Added 3 new spices from photo import',
-      badge: 'Pantry'
-    },
-    {
-      time: '05:45 PM',
-      title: 'Dinner playlist',
-      detail: 'Mediterranean feast ready in 40m',
-      badge: 'Dinner'
-    }
-  ];
 
   return (
     <PageTransition>
@@ -202,73 +137,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats Ribbon */}
-      <section className="space-y-4">
-        <SectionHeader
-          icon={Sparkles}
-          title="Today's Kitchen Pulse"
-          description="Live heartbeat of your cooking world"
-        />
-        <div className="overflow-x-auto pb-2">
-          <div className="flex gap-4 min-w-[680px]">
-            {statHighlights.map((stat) => {
-              const colorMap: Record<string, 'olive' | 'tan' | 'purple'> = {
-                'from-green-100': 'olive',
-                'from-amber-100': 'tan',
-                'from-purple-100': 'purple',
-                'from-pink-100': 'purple'
-              };
-              const foundKey = Object.keys(colorMap).find(key => stat.accent.includes(key));
-              const color = (foundKey && foundKey in colorMap ? colorMap[foundKey] : 'olive') as 'olive' | 'navy' | 'tan' | 'orange' | 'blue' | 'purple';
-
-              return (
-                <StatCard
-                  key={stat.label}
-                  icon={stat.icon}
-                  label={stat.label}
-                  value={stat.value}
-                  trend={stat.trend}
-                  color={color}
-                  className="min-w-[220px]"
-                />
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Quick Actions */}
-      <div className="relative">
-        <BackgroundPattern pattern="mesh" opacity={0.05} className="rounded-2xl" />
-        <GlassCard glow={false} className="relative z-10">
-          <SectionHeader
-            icon={ChefHat}
-            title="Kitchen Quick Actions"
-            description="Launchpad for your next culinary move"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-            <Link href="/ingredients">
-              <PremiumButton size="lg" color="olive" className="w-full">
-                <Plus className="h-4 w-4" />
-                Stock Pantry
-              </PremiumButton>
-            </Link>
-            <Link href="/recipes">
-              <PremiumButton size="lg" color="navy" className="w-full">
-                <BookOpen className="h-4 w-4" />
-                Discover Recipes
-              </PremiumButton>
-            </Link>
-            <Link href="/shopping-lists">
-              <PremiumButton size="lg" color="tan" className="w-full">
-                <ShoppingCart className="h-4 w-4" />
-                Plan Shopping
-              </PremiumButton>
-            </Link>
-          </div>
-        </GlassCard>
-      </div>
-
       {/* Recent Recipes */}
       <GlassCard glow={false}>
         <SectionHeader
@@ -326,95 +194,6 @@ export default function Dashboard() {
           )}
         </div>
       </GlassCard>
-
-      {/* Timeline + Cooking Playlist */}
-      <div className="grid gap-6 lg:grid-cols-[1.5fr,1fr]">
-        <GlassCard glow={false}>
-          <SectionHeader
-            icon={AlarmClock}
-            title="Interactive Kitchen Timeline"
-            description="Live feed of what Sous is orchestrating"
-            action={
-              <button className="text-sm text-pc-olive hover:text-pc-navy font-medium transition-colors">
-                View full log
-              </button>
-            }
-          />
-          <div className="space-y-6 mt-8">
-            {timelineEvents.map((event, index) => (
-              <div key={event.time} className="flex gap-4">
-                <div className="flex flex-col items-center min-w-[60px]">
-                  <span className="text-xs font-bold text-pc-navy bg-pc-olive/10 px-2 py-1 rounded-md">{event.time}</span>
-                  {index !== timelineEvents.length - 1 && (
-                    <div className="w-0.5 flex-1 bg-gradient-to-b from-pc-olive/60 via-pc-olive/30 to-transparent mt-3" />
-                  )}
-                </div>
-                <div className="flex-1 pb-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs tracking-wide uppercase text-white bg-pc-olive px-3 py-1 rounded-full font-semibold">
-                      {event.badge}
-                    </span>
-                    <span className="w-2 h-2 rounded-full bg-pc-olive animate-pulse" />
-                  </div>
-                  <p className="text-pc-navy font-bold text-lg mb-1">{event.title}</p>
-                  <p className="text-base text-pc-text-light leading-relaxed">{event.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </GlassCard>
-
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-pc-navy via-pc-navy/95 to-pc-olive text-white shadow-2xl">
-          <BackgroundPattern pattern="grid" opacity={0.08} className="text-white" />
-          <div className="relative z-10 p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 rounded-xl bg-white/20 backdrop-blur-sm">
-                <TimerReset className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold tracking-tight">Tonight's Cooking Playlist</h2>
-                <p className="text-base text-white/80">Mediterranean feast · 4 steps</p>
-              </div>
-            </div>
-            <div className="space-y-6">
-              <CookingProgress currentStep={2} totalSteps={4} label="Progress" />
-              <div className="space-y-3">
-                {[
-                  { label: 'Prep produce & marinade', duration: '12m' },
-                  { label: 'Sear salmon with herbs', duration: '18m' },
-                  { label: 'Toast saffron couscous', duration: '10m' },
-                  { label: 'Plating & garnish', duration: '5m' },
-                ].map((step, idx) => (
-                  <div
-                    key={step.label}
-                    className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-200 ${
-                      idx === 0
-                        ? 'bg-white/20 border-white/40 shadow-lg'
-                        : 'bg-white/5 border-white/10 hover:bg-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md ${
-                          idx === 0 ? 'bg-white text-pc-navy' : 'bg-white/20 text-white'
-                        }`}
-                      >
-                        {idx + 1}
-                      </div>
-                      <span className="text-white font-medium">{step.label}</span>
-                    </div>
-                    <span className="text-white/80 font-semibold">{step.duration}</span>
-                  </div>
-                ))}
-              </div>
-              <PremiumButton size="lg" className="bg-white text-pc-navy hover:bg-white/95 w-full">
-                <AlarmClock className="h-4 w-4" />
-                Send reminder to devices
-              </PremiumButton>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Getting Started - Cooking Themed */}
       {(!recipes || recipes.length === 0) && (
