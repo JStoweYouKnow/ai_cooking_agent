@@ -40,32 +40,38 @@ export default function Dashboard() {
   const recentRecipes = recipes?.slice(0, 3) || [];
   const spotlightRecipe = recipes?.[0];
 
-  const statHighlights = [
+  const statHighlights: Array<{
+    label: string;
+    value: string;
+    trend?: { value: string; positive: boolean; };
+    icon: typeof Apple;
+    accent: string;
+  }> = [
     {
       label: 'Pantry Restocked',
       value: `${ingredients?.length || 0} items`,
-      trend: '+4 new',
+      trend: { value: '+4 new', positive: true },
       icon: Apple,
       accent: 'from-green-100 via-white to-green-50'
     },
     {
       label: 'Recipes Curated',
       value: `${recipes?.length || 0}`,
-      trend: favoriteRecipes.length ? `${favoriteRecipes.length} favorites` : 'Add favorites',
+      trend: favoriteRecipes.length ? { value: `${favoriteRecipes.length} favorites`, positive: true } : undefined,
       icon: BookOpen,
       accent: 'from-amber-100 via-white to-amber-50'
     },
     {
       label: 'Shopping Momentum',
       value: `${shoppingLists?.length || 0} lists`,
-      trend: '2 reminders',
+      trend: { value: '2 reminders', positive: true },
       icon: ShoppingCart,
       accent: 'from-purple-100 via-white to-purple-50'
     },
     {
       label: 'Chef Energy',
       value: '92%',
-      trend: 'Focused & Inspired',
+      trend: { value: 'Focused & Inspired', positive: true },
       icon: Sparkles,
       accent: 'from-pink-100 via-white to-pink-50'
     }
