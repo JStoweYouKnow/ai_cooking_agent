@@ -212,14 +212,14 @@ export default function Dashboard() {
         <div className="overflow-x-auto pb-2">
           <div className="flex gap-4 min-w-[680px]">
             {statHighlights.map((stat) => {
-              const colorMap: Record<string, 'olive' | 'tan' | 'purple' | 'pink'> = {
+              const colorMap: Record<string, 'olive' | 'tan' | 'purple'> = {
                 'from-green-100': 'olive',
                 'from-amber-100': 'tan',
                 'from-purple-100': 'purple',
-                'from-pink-100': 'pink'
+                'from-pink-100': 'purple'
               };
               const foundKey = Object.keys(colorMap).find(key => stat.accent.includes(key));
-              const color = (foundKey && foundKey in colorMap ? colorMap[foundKey] : 'olive') as 'olive' | 'navy' | 'tan' | 'purple' | 'pink' | 'blue' | 'green';
+              const color = (foundKey && foundKey in colorMap ? colorMap[foundKey] : 'olive') as 'olive' | 'navy' | 'tan' | 'orange' | 'blue' | 'purple';
 
               return (
                 <StatCard
