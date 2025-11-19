@@ -30,7 +30,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex">
         {/* Desktop Sidebar - Hidden on mobile/tablet */}
         <div className="hidden lg:block lg:flex-shrink-0">
-          <div className="sticky top-[64px] md:top-[80px] h-[calc(100vh-64px)] md:h-[calc(100vh-80px)]">
+          <div className="sticky top-[180px] h-[calc(100vh-180px)]">
             <ModernSidebar
               collapsed={sidebarCollapsed}
               onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
