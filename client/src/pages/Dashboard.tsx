@@ -202,11 +202,6 @@ export default function Dashboard() {
           icon={Sparkles}
           title="Today's Kitchen Pulse"
           description="Live heartbeat of your cooking world"
-          action={
-            <Link href="/analytics" className="text-sm text-pc-olive hover:text-pc-navy font-medium flex items-center gap-1 transition-colors">
-              View insights <ChevronRight className="h-4 w-4" />
-            </Link>
-          }
         />
         <div className="overflow-x-auto pb-2">
           <div className="flex gap-4 min-w-[680px]">
