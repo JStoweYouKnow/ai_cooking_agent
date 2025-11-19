@@ -5,7 +5,7 @@
 
 "use client";
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
 
@@ -300,7 +300,7 @@ export function PremiumButton({
   children: React.ReactNode;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
-} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onDrag' | 'onDragEnd' | 'onDragStart'>) {
+} & Omit<HTMLMotionProps<"button">, 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'>) {
   const variants = {
     primary: "bg-gradient-to-r from-pc-navy to-pc-olive text-white shadow-lg hover:shadow-xl",
     secondary: "bg-gradient-to-r from-pc-tan to-amber-200 text-pc-navy shadow-md hover:shadow-lg",
