@@ -1,12 +1,12 @@
 "use client";
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { BottomNav, ModernSidebar } from './modern-menu';
+import { MobileMenuDrawer } from './modern-menu';
 import { ModernHeader } from './modern-header';
 import { AnimatedBackground } from './web3';
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
@@ -20,29 +20,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
             (window as any).__openCommandPalette();
           }
         }}
+        onMenuClick={() => setMobileMenuOpen(true)}
       />
 
       {/* Main Layout Container */}
       <div className="flex-1 flex">
-        {/* Desktop Sidebar - Hidden on mobile/tablet */}
-        <div className="hidden lg:block lg:flex-shrink-0">
-          <div className="sticky top-[56px] md:top-[64px] h-[calc(100vh-56px)] md:h-[calc(100vh-64px)]">
-            <ModernSidebar
-              collapsed={sidebarCollapsed}
-              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-            />
-          </div>
-        </div>
+        {/* Desktop Sidebar - Hidden since navigation is now in header */}
+        {/* Sidebar removed - using horizontal navigation in header on desktop */}
 
         {/* Main Content Area */}
         <main className={cn(
           "flex-1 w-full transition-all duration-300 relative z-10",
-          // Mobile: compact padding with bottom nav space
-          "p-4 pb-20",
+          // Mobile: compact padding
+          "p-4",
           // Tablet: more breathing room
-          "md:p-6 md:pb-6",
-          // Desktop with sidebar: generous padding
-          "lg:p-8 lg:pb-8",
+          "md:p-6",
+          // Desktop: generous padding
+          "lg:p-8",
           // Extra large: maximum comfort
           "xl:px-12 xl:py-10"
         )}>
@@ -53,8 +47,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation (hidden on desktop) */}
-      <BottomNav />
+      {/* Mobile Menu Drawer - Vertical navigation on mobile */}
+      <MobileMenuDrawer
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+      />
     </div>
   );
 }

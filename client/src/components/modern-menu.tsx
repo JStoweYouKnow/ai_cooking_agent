@@ -429,10 +429,17 @@ export function MobileMenuDrawer({
   const pathname = usePathname();
   const { data: user } = trpc.auth.me.useQuery();
   
-  // Only show secondary items in drawer since main nav is in bottom nav
+  // Main navigation items for mobile vertical drawer
   const menuItems = [
-    { name: 'Settings', href: '/settings', icon: Settings },
-    { name: 'Notifications', href: '/notifications', icon: Bell },
+    { name: 'Dashboard', href: '/', icon: Home },
+    { name: 'My Ingredients', href: '/ingredients', icon: Apple },
+    { name: 'Find Recipes', href: '/recipes', icon: BookOpen },
+    { name: 'Shopping Lists', href: '/shopping-lists', icon: ShoppingCart },
+  ];
+
+  const bottomItems = [
+    { name: 'Settings', href: '/settings', icon: Settings, badge: null },
+    { name: 'Notifications', href: '/notifications', icon: Bell, badge: 2 },
   ];
 
   return (
@@ -457,56 +464,93 @@ export function MobileMenuDrawer({
             className="fixed left-0 top-0 bottom-0 w-80 bg-white z-50 shadow-2xl lg:hidden"
           >
             <div className="flex flex-col h-full">
-              {/* Header - Simplified, no logo since it's in header */}
-              <div className="p-4 border-b border-pc-tan/10 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-pc-navy">Menu</div>
-                  <div className="text-xs text-pc-text-light">Additional options</div>
-                </div>
-                <button
-                  onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-pc-tan/20"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+          {/* Header */}
+          <div className="p-4 border-b border-pc-tan/10 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-pc-olive p-2 rounded-lg">
+                <ChefHat className="h-5 w-5 text-white" />
               </div>
+              <div>
+                <div className="font-semibold text-pc-navy">Navigation</div>
+                <div className="text-xs text-pc-text-light">Menu</div>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-pc-tan/20"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
 
-              {/* Navigation - Only secondary items */}
-              <nav className="flex-1 overflow-y-auto p-4 space-y-2">
-                {menuItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href;
-                  
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href as any}
-                      onClick={onClose}
-                      className={cn(
-                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
-                        isActive 
-                          ? "bg-pc-olive/10 text-pc-olive" 
-                          : "hover:bg-pc-tan/20 text-pc-navy"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-10 h-10 rounded-lg flex items-center justify-center relative",
-                        isActive 
-                          ? "bg-pc-olive text-white" 
-                          : "bg-pc-tan/30"
-                      )}>
-                        <Icon className="h-5 w-5" />
-                        {item.name === 'Notifications' && (
-                          <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold">
-                            2
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-medium">{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </nav>
+          {/* Main Navigation */}
+          <nav className="flex-1 overflow-y-auto p-4 space-y-2">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href as any}
+                  onClick={onClose}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                    isActive 
+                      ? "bg-pc-olive/10 text-pc-olive" 
+                      : "hover:bg-pc-tan/20 text-pc-navy"
+                  )}
+                >
+                  <div className={cn(
+                    "w-10 h-10 rounded-lg flex items-center justify-center",
+                    isActive 
+                      ? "bg-pc-olive text-white" 
+                      : "bg-pc-tan/30"
+                  )}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <span className="font-medium">{item.name}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Bottom Section */}
+          <div className="p-4 border-t border-pc-tan/10 space-y-2">
+            {bottomItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href as any}
+                  onClick={onClose}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                    isActive 
+                      ? "bg-pc-olive/10 text-pc-olive" 
+                      : "hover:bg-pc-tan/20 text-pc-navy"
+                  )}
+                >
+                  <div className={cn(
+                    "w-10 h-10 rounded-lg flex items-center justify-center relative",
+                    isActive 
+                      ? "bg-pc-olive text-white" 
+                      : "bg-pc-tan/30"
+                  )}>
+                    <Icon className="h-5 w-5" />
+                    {item.badge && (
+                      <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-medium">{item.name}</span>
+                </Link>
+              );
+            })}
+          </div>
 
               {/* User Section */}
               {user && (

@@ -15,6 +15,11 @@ import {
   LogOut,
   Bell,
   MessageSquare,
+  Home,
+  BookOpen,
+  Apple,
+  ShoppingCart,
+  Menu,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
@@ -31,13 +36,22 @@ import { ThemeToggle } from '@/components/web3/ThemeToggle';
 
 export function ModernHeader({
   onSearchClick,
+  onMenuClick,
 }: {
   onSearchClick?: () => void;
+  onMenuClick?: () => void;
 }) {
   const pathname = usePathname();
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const [searchFocused, setSearchFocused] = useState(false);
+
+  const navigation = [
+    { name: 'Home', href: '/', icon: Home },
+    { name: 'Recipes', href: '/recipes', icon: BookOpen },
+    { name: 'Ingredients', href: '/ingredients', icon: Apple },
+    { name: 'Lists', href: '/shopping-lists', icon: ShoppingCart },
+  ];
 
   const handleLogout = async () => {
     await logoutMutation.mutateAsync();
@@ -99,8 +113,51 @@ export function ModernHeader({
           </div>
         </div>
 
-        {/* Right: Actions - Navigation moved to sidebar on desktop, bottom nav on mobile */}
-        <div className="flex items-center gap-1 md:gap-2 lg:gap-4 flex-1 justify-end ml-auto">
+        {/* Center: Horizontal Navigation (Desktop only) */}
+        <nav className="hidden lg:flex items-center gap-1 flex-1 justify-center mx-8">
+          {navigation.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              (item.href === '/' && pathname === '/') ||
+              (item.href !== '/' && pathname.startsWith(item.href));
+            
+            return (
+              <Link
+                key={item.name}
+                href={item.href as any}
+                className={cn(
+                  "flex flex-col items-center justify-center px-3 lg:px-4 py-1.5 min-w-[64px] lg:min-w-[72px]",
+                  "transition-colors duration-200 rounded-md",
+                  "hover:bg-gray-100 dark:hover:bg-gray-800",
+                  isActive && "bg-transparent"
+                )}
+                suppressHydrationWarning
+              >
+                <Icon 
+                  className={cn(
+                    "h-5 w-5 lg:h-6 lg:w-6 mb-0.5 transition-colors",
+                    isActive 
+                      ? "text-[var(--russet-brown)]" 
+                      : "text-gray-600 dark:text-gray-400"
+                  )} 
+                />
+                <span 
+                  className={cn(
+                    "text-xs font-medium leading-tight whitespace-nowrap transition-colors",
+                    isActive 
+                      ? "text-[var(--russet-brown)] border-b-2 border-[var(--russet-brown)] pb-0.5" 
+                      : "text-gray-600 dark:text-gray-400"
+                  )}
+                >
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1 md:gap-2 lg:gap-4 flex-shrink-0">
           {/* Mobile Search Button */}
           <button
             onClick={onSearchClick}
@@ -108,6 +165,15 @@ export function ModernHeader({
             aria-label="Search"
           >
             <Search className="h-5 w-5 text-[var(--russet-brown)]" />
+          </button>
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={onMenuClick}
+            className="lg:hidden p-2 rounded hover:bg-gray-100 transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5 text-[var(--russet-brown)]" />
           </button>
 
           {/* Secondary Actions */}
