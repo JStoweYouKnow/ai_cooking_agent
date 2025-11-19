@@ -14,23 +14,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Web 3.0 Animated Background */}
       <AnimatedBackground variant="gradient" intensity="low" />
       
-      {/* Header Section with Glass Effect */}
-      <div className="sticky top-0 z-50 glass dark:glass-dark border-b border-gray-200/50 dark:border-white/10 shadow-lg backdrop-blur-xl">
-        <ModernHeader
-          onMenuClick={() => setMobileMenuOpen(true)}
-          onSearchClick={() => {
-            if (typeof window !== 'undefined' && (window as any).__openCommandPalette) {
-              (window as any).__openCommandPalette();
-            }
-          }}
-        />
-      </div>
+      {/* Header Section - LinkedIn Style */}
+      <ModernHeader
+        onMenuClick={() => setMobileMenuOpen(true)}
+        onSearchClick={() => {
+          if (typeof window !== 'undefined' && (window as any).__openCommandPalette) {
+            (window as any).__openCommandPalette();
+          }
+        }}
+      />
 
       {/* Main Layout Container */}
       <div className="flex-1 flex">
         {/* Desktop Sidebar - Hidden on mobile/tablet */}
         <div className="hidden lg:block lg:flex-shrink-0">
-          <div className="sticky top-[180px] h-[calc(100vh-180px)]">
+          <div className="sticky top-[56px] md:top-[64px] h-[calc(100vh-56px)] md:h-[calc(100vh-64px)]">
             <ModernSidebar
               collapsed={sidebarCollapsed}
               onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}

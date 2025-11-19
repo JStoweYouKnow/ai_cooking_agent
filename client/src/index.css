@@ -73,6 +73,7 @@
   --pc-olive: #77856A;
   --pc-tan: #D4C3A9;
   --pc-muted: #6B6B6B;
+  --russet-brown: #854D3D;
 
   --pc-radius: 1rem; /* 16px */
   --pc-radius-lg: 1.5rem;
@@ -150,6 +151,9 @@
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
   
   --pc-shadow-glow: 0 0 20px rgba(0, 212, 255, 0.3), 0 0 40px rgba(176, 38, 255, 0.2);
+  
+  /* Russet brown for dark mode (lighter shade for visibility) */
+  --russet-brown: #B57160;
   
   --primary: var(--color-blue-700);
   --primary-foreground: var(--color-blue-50);
