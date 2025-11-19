@@ -18,12 +18,16 @@ export function GradientHero({
   subtitle,
   description,
   action,
+  badge,
+  stats,
   className
 }: {
   title: string | React.ReactNode;
   subtitle?: string;
   description?: string;
   action?: React.ReactNode;
+  badge?: React.ReactNode;
+  stats?: Array<{ label: string; value: number }>;
   className?: string;
 }) {
   return (
@@ -40,6 +44,19 @@ export function GradientHero({
 
       {/* Content */}
       <div className="relative z-10 py-12 md:py-16 lg:py-24">
+        {badge && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="inline-block mb-4"
+          >
+            <span className="px-4 py-2 rounded-full bg-gradient-to-r from-pc-olive/10 to-pc-navy/10 border border-pc-olive/20 text-pc-olive font-semibold text-sm">
+              {badge}
+            </span>
+          </motion.div>
+        )}
+
         {subtitle && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -84,8 +101,25 @@ export function GradientHero({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
+            className="mb-8"
           >
             {action}
+          </motion.div>
+        )}
+
+        {stats && stats.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="flex flex-wrap gap-6"
+          >
+            {stats.map((stat, index) => (
+              <div key={index} className="flex flex-col">
+                <span className="text-3xl font-black text-pc-navy">{stat.value}</span>
+                <span className="text-sm text-pc-text-light font-medium">{stat.label}</span>
+              </div>
+            ))}
           </motion.div>
         )}
       </div>
@@ -294,12 +328,15 @@ export function PremiumButton({
   children,
   variant = 'primary',
   size = 'md',
+  color,
   className,
   ...props
 }: {
   children: React.ReactNode;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
+  color?: 'olive' | 'navy' | 'tan';
+  className?: string;
 } & Omit<HTMLMotionProps<"button">, 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'>) {
   const variants = {
     primary: "bg-gradient-to-r from-pc-navy to-pc-olive text-white shadow-lg hover:shadow-xl",
@@ -308,11 +345,20 @@ export function PremiumButton({
     ghost: "hover:bg-pc-tan/20",
   };
 
+  const colorVariants = {
+    olive: "bg-gradient-to-r from-pc-olive to-emerald-600 text-white shadow-lg hover:shadow-xl",
+    navy: "bg-gradient-to-r from-pc-navy to-indigo-700 text-white shadow-lg hover:shadow-xl",
+    tan: "bg-gradient-to-r from-pc-tan to-amber-300 text-pc-navy shadow-md hover:shadow-lg",
+  };
+
   const sizes = {
     sm: "px-4 py-2 text-sm",
     md: "px-6 py-3 text-base",
     lg: "px-8 py-4 text-lg",
   };
+
+  // If color is specified, use color variant instead of regular variant
+  const buttonStyle = color ? colorVariants[color] : variants[variant];
 
   return (
     <motion.button
@@ -322,7 +368,7 @@ export function PremiumButton({
       className={cn(
         "font-semibold rounded-xl transition-all duration-300",
         "focus:outline-none focus:ring-2 focus:ring-pc-olive/40 focus:ring-offset-2",
-        variants[variant],
+        buttonStyle,
         sizes[size],
         className
       )}
