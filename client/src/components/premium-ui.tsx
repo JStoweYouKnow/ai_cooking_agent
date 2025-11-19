@@ -341,11 +341,13 @@ export function DecorativeBlob({
   color = 'olive',
   position = 'top-right',
   size = 'lg',
+  opacity,
   className
 }: {
   color?: 'olive' | 'navy' | 'tan';
   position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
   size?: 'sm' | 'md' | 'lg';
+  opacity?: number;
   className?: string;
 }) {
   const colors = {
@@ -377,6 +379,7 @@ export function DecorativeBlob({
         sizes[size],
         className
       )}
+      style={opacity !== undefined ? { opacity } : undefined}
     />
   );
 }
@@ -386,10 +389,12 @@ export function DecorativeBlob({
 /* -------------------------------------------------------------------------- */
 
 export function BackgroundPattern({
-  variant = 'dots',
+  pattern = 'dots',
+  opacity,
   className
 }: {
-  variant?: 'dots' | 'grid' | 'mesh';
+  pattern?: 'dots' | 'grid' | 'mesh';
+  opacity?: number;
   className?: string;
 }) {
   const patterns = {
@@ -401,10 +406,12 @@ export function BackgroundPattern({
   return (
     <div
       className={cn(
-        "absolute inset-0 -z-10 opacity-40",
-        patterns[variant],
+        "absolute inset-0 -z-10",
+        patterns[pattern],
+        opacity === undefined && "opacity-40",
         className
       )}
+      style={opacity !== undefined ? { opacity } : undefined}
     />
   );
 }
