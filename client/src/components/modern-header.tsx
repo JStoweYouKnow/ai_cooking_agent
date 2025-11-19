@@ -14,10 +14,6 @@ import {
   User,
   Menu,
   LogOut,
-  Home,
-  BookOpen,
-  Apple,
-  ShoppingCart,
   Bell,
   MessageSquare,
 } from 'lucide-react';
@@ -45,13 +41,6 @@ export function ModernHeader({
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const [searchFocused, setSearchFocused] = useState(false);
-
-  const navigation = [
-    { name: 'Home', href: '/', icon: Home },
-    { name: 'Recipes', href: '/recipes', icon: BookOpen },
-    { name: 'Ingredients', href: '/ingredients', icon: Apple },
-    { name: 'Lists', href: '/shopping-lists', icon: ShoppingCart },
-  ];
 
   const handleLogout = async () => {
     await logoutMutation.mutateAsync();
@@ -114,51 +103,8 @@ export function ModernHeader({
           </div>
         </div>
 
-        {/* Right: Navigation Items (LinkedIn Style - Icons Above Text) */}
+        {/* Right: Actions - Navigation moved to sidebar on desktop, bottom nav on mobile */}
         <div className="flex items-center gap-1 md:gap-2 lg:gap-4 flex-1 justify-end ml-auto">
-          {/* Main Navigation Items */}
-          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                (item.href === '/' && pathname === '/') ||
-                (item.href !== '/' && pathname.startsWith(item.href));
-              
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href as any}
-                  className={cn(
-                    "flex flex-col items-center justify-center px-2 md:px-3 lg:px-4 py-1.5 min-w-[64px] md:min-w-[72px]",
-                    "transition-colors duration-200 rounded-md",
-                    "hover:bg-gray-100 dark:hover:bg-gray-800",
-                    isActive && "bg-transparent"
-                  )}
-                  suppressHydrationWarning
-                >
-                  <Icon 
-                    className={cn(
-                      "h-5 w-5 md:h-6 md:w-6 mb-0.5 transition-colors",
-                      isActive 
-                        ? "text-[var(--russet-brown)]" 
-                        : "text-gray-600 dark:text-gray-400"
-                    )} 
-                  />
-                  <span 
-                    className={cn(
-                      "text-xs md:text-xs font-medium leading-tight whitespace-nowrap transition-colors",
-                      isActive 
-                        ? "text-[var(--russet-brown)] border-b-2 border-[var(--russet-brown)] pb-0.5" 
-                        : "text-gray-600 dark:text-gray-400"
-                    )}
-                  >
-                    {item.name}
-                  </span>
-                </Link>
-              );
-            })}
-          </nav>
-
           {/* Mobile Search Button */}
           <button
             onClick={onSearchClick}
@@ -267,10 +213,10 @@ export function ModernHeader({
             </>
           )}
 
-          {/* Mobile Menu Button */}
+          {/* Mobile Menu Button - Only show on mobile where bottom nav might not be enough */}
           <button
             onClick={onMenuClick}
-            className="md:hidden p-2 rounded hover:bg-gray-100 transition-colors"
+            className="lg:hidden p-2 rounded hover:bg-gray-100 transition-colors"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5 text-[var(--russet-brown)]" />

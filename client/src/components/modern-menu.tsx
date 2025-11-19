@@ -186,29 +186,22 @@ export function ModernSidebar({
       "bg-white border-r border-pc-tan/10 h-full flex flex-col transition-all duration-300",
       collapsed ? "w-20" : "w-72"
     )}>
-      {/* Header */}
+      {/* Header - Simplified, logo removed since it's in main header */}
       <div className="p-4 border-b border-pc-tan/10 flex items-center justify-between">
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <div className="bg-pc-olive p-2 rounded-lg">
-              <ChefHat className="h-5 w-5 text-white" />
-            </div>
             <div>
-              <div className="font-semibold text-pc-navy text-sm">Kitchen</div>
-              <div className="text-xs text-pc-text-light">Companion</div>
-            </div>
-          </div>
-        )}
-        {collapsed && (
-          <div className="w-full flex justify-center">
-            <div className="bg-pc-olive p-2 rounded-lg">
-              <ChefHat className="h-5 w-5 text-white" />
+              <div className="font-semibold text-pc-navy text-sm">Navigation</div>
+              <div className="text-xs text-pc-text-light">Main menu</div>
             </div>
           </div>
         )}
         <button
           onClick={onToggle}
-          className="p-1.5 rounded-lg hover:bg-pc-tan/20 transition-colors"
+          className={cn(
+            "p-1.5 rounded-lg hover:bg-pc-tan/20 transition-colors",
+            collapsed && "ml-auto"
+          )}
           aria-label="Toggle sidebar"
         >
           {collapsed ? <Menu className="h-4 w-4" /> : <X className="h-4 w-4" />}
@@ -436,12 +429,10 @@ export function MobileMenuDrawer({
   const pathname = usePathname();
   const { data: user } = trpc.auth.me.useQuery();
   
+  // Only show secondary items in drawer since main nav is in bottom nav
   const menuItems = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'My Ingredients', href: '/ingredients', icon: Apple },
-    { name: 'Find Recipes', href: '/recipes', icon: BookOpen },
-    { name: 'Shopping Lists', href: '/shopping-lists', icon: ShoppingCart },
     { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Notifications', href: '/notifications', icon: Bell },
   ];
 
   return (
@@ -454,28 +445,23 @@ export function MobileMenuDrawer({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 z-50 md:hidden"
+            className="fixed inset-0 bg-black/50 z-50 lg:hidden"
           />
           
-          {/* Drawer */}
+          {/* Drawer - Only for secondary actions, main nav is in bottom nav */}
           <motion.aside
             initial={{ x: '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed left-0 top-0 bottom-0 w-80 bg-white z-50 shadow-2xl md:hidden"
+            className="fixed left-0 top-0 bottom-0 w-80 bg-white z-50 shadow-2xl lg:hidden"
           >
             <div className="flex flex-col h-full">
-              {/* Header */}
+              {/* Header - Simplified, no logo since it's in header */}
               <div className="p-4 border-b border-pc-tan/10 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-pc-olive p-2 rounded-lg">
-                    <ChefHat className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-pc-navy">Sous</div>
-                    <div className="text-xs text-pc-text-light">Menu</div>
-                  </div>
+                <div>
+                  <div className="font-semibold text-pc-navy">Menu</div>
+                  <div className="text-xs text-pc-text-light">Additional options</div>
                 </div>
                 <button
                   onClick={onClose}
@@ -485,7 +471,7 @@ export function MobileMenuDrawer({
                 </button>
               </div>
 
-              {/* Navigation */}
+              {/* Navigation - Only secondary items */}
               <nav className="flex-1 overflow-y-auto p-4 space-y-2">
                 {menuItems.map((item) => {
                   const Icon = item.icon;
@@ -504,12 +490,17 @@ export function MobileMenuDrawer({
                       )}
                     >
                       <div className={cn(
-                        "w-10 h-10 rounded-lg flex items-center justify-center",
+                        "w-10 h-10 rounded-lg flex items-center justify-center relative",
                         isActive 
                           ? "bg-pc-olive text-white" 
                           : "bg-pc-tan/30"
                       )}>
                         <Icon className="h-5 w-5" />
+                        {item.name === 'Notifications' && (
+                          <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold">
+                            2
+                          </span>
+                        )}
                       </div>
                       <span className="font-medium">{item.name}</span>
                     </Link>
