@@ -1,10 +1,19 @@
 import { useState } from 'react';
 import { PCCard, PCButton } from '@/components/project-comfort-ui';
+import {
+  GradientHero,
+  GlassCard,
+  SectionHeader,
+  PremiumButton,
+  DecorativeBlob,
+  BackgroundPattern,
+  GradientText
+} from '@/components/premium-ui';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Camera, Plus, Search, Trash2, Upload, ChefHat } from 'lucide-react';
+import { Camera, Plus, Search, Trash2, Upload, ChefHat, Sparkles, Apple } from 'lucide-react';
 import { getIngredientIcon } from '@/lib/ingredientIcons';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
@@ -88,21 +97,42 @@ export default function IngredientsPage() {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-pc-navy">My Ingredients</h1>
-          <p className="mt-2 text-pc-text-light">
-            Manage your pantry and discover what you can cook
-          </p>
-        </div>
+    <div className="relative space-y-8 pb-16">
+      {/* Background decorative elements */}
+      <DecorativeBlob
+        color="olive"
+        position="top-right"
+        size="lg"
+        opacity={0.1}
+      />
+      <DecorativeBlob
+        color="tan"
+        position="bottom-left"
+        size="md"
+        opacity={0.08}
+      />
+
+      {/* Hero Header */}
+      <div className="flex items-start justify-between gap-6">
+        <GradientHero
+          badge={
+            <div className="inline-flex items-center gap-2">
+              <Apple className="h-4 w-4" />
+              Pantry Management
+            </div>
+          }
+          title="My Ingredients"
+          subtitle="Smart pantry tracking"
+          description="Manage your pantry and discover what you can cook with AI-powered ingredient recognition."
+          compact
+          className="flex-1"
+        />
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <PCButton className="gap-2">
+            <PremiumButton size="lg" color="olive" className="mt-4">
               <Plus className="h-4 w-4" />
               Add Ingredient
-            </PCButton>
+            </PremiumButton>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -153,13 +183,15 @@ export default function IngredientsPage() {
                     />
                   </div>
                 </div>
-                <PCButton
+                <PremiumButton
+                  size="lg"
+                  color="olive"
                   className="w-full"
                   onClick={handleAddIngredient}
                   disabled={addToUserListMutation.isPending || getOrCreateMutation.isPending}
                 >
                   Add to Pantry
-                </PCButton>
+                </PremiumButton>
               </TabsContent>
 
               <TabsContent value="image" className="space-y-4">
@@ -238,14 +270,16 @@ export default function IngredientsPage() {
                     onChange={(e) => setImageUrl(e.target.value)}
                   />
                 </div>
-                <PCButton
-                  className="w-full gap-2"
+                <PremiumButton
+                  size="lg"
+                  color="navy"
+                  className="w-full"
                   onClick={handleRecognizeFromImage}
                   disabled={recognizeFromImageMutation.isPending || !imageUrl.trim()}
                 >
                   <Upload className="h-4 w-4" />
                   {recognizeFromImageMutation.isPending ? 'Analyzing...' : 'Analyze Image'}
-                </PCButton>
+                </PremiumButton>
                 <p className="text-xs text-pc-text-light text-center">
                   Our AI will analyze the image and detect ingredients automatically
                 </p>
@@ -256,26 +290,28 @@ export default function IngredientsPage() {
       </div>
 
       {/* Search */}
-      <PCCard>
-        <div className="pt-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-pc-text-light" />
-            <Input
-              placeholder="Search your ingredients..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 border-pc-tan/20"
-            />
-          </div>
+      <GlassCard glow={false}>
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-pc-text-light" />
+          <Input
+            placeholder="Search your ingredients..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-12 h-14 text-base border-pc-tan/20"
+          />
         </div>
-      </PCCard>
+      </GlassCard>
 
       {/* Ingredients List */}
-      <PCCard>
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold text-pc-navy">Your Pantry ({userIngredients?.length || 0} items)</h2>
-          <p className="text-sm text-pc-text-light">Ingredients you have on hand</p>
-        </div>
+      <div className="relative">
+        <BackgroundPattern pattern="mesh" opacity={0.04} className="rounded-2xl" />
+        <GlassCard glow={false} className="relative z-10">
+          <SectionHeader
+            icon={ChefHat}
+            title={`Your Pantry (${userIngredients?.length || 0} items)`}
+            subtitle="Ingredients you have on hand"
+          />
+          <div className="mt-8">
         <div>
           {userIngredientsError && (
             <div className="text-center py-8 text-red-600">
@@ -366,34 +402,37 @@ export default function IngredientsPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-16">
-              <div className="relative inline-block mb-6">
-                <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-2xl opacity-50" />
-                <div className="relative bg-pc-tan/20 p-8 rounded-full">
-                  <ChefHat className="h-20 w-20 text-pc-olive mx-auto" />
+            <div className="text-center py-20">
+              <div className="relative inline-block mb-8">
+                <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-3xl opacity-60" />
+                <div className="relative bg-gradient-to-br from-pc-tan/30 to-pc-olive/20 p-10 rounded-full">
+                  <ChefHat className="h-24 w-24 text-pc-olive mx-auto" />
                 </div>
               </div>
-              <h3 className="text-2xl font-bold text-pc-navy mb-2">
+              <GradientText className="text-3xl font-bold mb-4">
                 {searchQuery ? 'No matches found' : 'Your pantry is empty'}
-              </h3>
-              <p className="text-pc-text-light mb-6 max-w-md mx-auto">
-                {searchQuery 
+              </GradientText>
+              <p className="text-pc-text-light mb-8 max-w-md mx-auto text-lg">
+                {searchQuery
                   ? 'Try different search terms or add new ingredients to your pantry'
                   : 'Start building your ingredient collection to discover amazing recipes!'}
               </p>
               {!searchQuery && (
-                <PCButton 
-                  onClick={() => setIsAddDialogOpen(true)} 
-                  className="gap-2 bg-pc-olive hover:bg-pc-olive/90"
+                <PremiumButton
+                  onClick={() => setIsAddDialogOpen(true)}
+                  size="lg"
+                  color="olive"
                 >
                   <Plus className="h-5 w-5" />
                   Add Your First Ingredient
-                </PCButton>
+                </PremiumButton>
               )}
             </div>
           )}
         </div>
-      </PCCard>
+          </div>
+        </GlassCard>
+      </div>
     </div>
   );
 }

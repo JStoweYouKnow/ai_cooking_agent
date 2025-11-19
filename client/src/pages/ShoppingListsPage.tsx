@@ -1,11 +1,20 @@
 import { useState } from 'react';
 import { PCCard, PCButton } from '@/components/project-comfort-ui';
+import {
+  GradientHero,
+  GlassCard,
+  SectionHeader,
+  PremiumButton,
+  DecorativeBlob,
+  BackgroundPattern,
+  GradientText
+} from '@/components/premium-ui';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ShoppingCart, Plus, Trash2, Download, Check, Search } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Download, Check, Search, Sparkles, List } from 'lucide-react';
 import { getIngredientIcon } from '@/lib/ingredientIcons';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
@@ -206,21 +215,42 @@ export default function ShoppingListsPage() {
   const totalCount = listItems?.length || 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-pc-navy">Shopping Lists</h1>
-          <p className="mt-2 text-pc-text-light">
-            Create and manage your shopping lists
-          </p>
-        </div>
+    <div className="relative space-y-8 pb-16">
+      {/* Background decorative elements */}
+      <DecorativeBlob
+        color="tan"
+        position="top-right"
+        size="lg"
+        opacity={0.1}
+      />
+      <DecorativeBlob
+        color="olive"
+        position="bottom-left"
+        size="md"
+        opacity={0.08}
+      />
+
+      {/* Hero Header */}
+      <div className="flex items-start justify-between gap-6">
+        <GradientHero
+          badge={
+            <div className="inline-flex items-center gap-2">
+              <List className="h-4 w-4" />
+              Smart Shopping
+            </div>
+          }
+          title="Shopping Lists"
+          subtitle="Organized grocery planning"
+          description="Create and manage your shopping lists with ease. Export to multiple formats and never forget an ingredient."
+          compact
+          className="flex-1"
+        />
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <PCButton className="gap-2">
+            <PremiumButton size="lg" color="tan" className="mt-4">
               <Plus className="h-4 w-4" />
               New List
-            </PCButton>
+            </PremiumButton>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -269,13 +299,15 @@ export default function ShoppingListsPage() {
                   }}
                 />
               </div>
-              <PCButton
+              <PremiumButton
                 type="submit"
+                size="lg"
+                color="olive"
                 className="w-full"
                 disabled={createListMutation.isPending || !newListName.trim()}
               >
                 {createListMutation.isPending ? 'Creating...' : 'Create List'}
-              </PCButton>
+              </PremiumButton>
             </form>
           </DialogContent>
         </Dialog>
@@ -283,25 +315,27 @@ export default function ShoppingListsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Lists Sidebar */}
-        <PCCard className="lg:col-span-1">
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold text-pc-navy">My Lists ({shoppingLists?.length || 0})</h2>
-          </div>
-          <div>
+        <GlassCard glow={false} className="lg:col-span-1">
+          <SectionHeader
+            icon={ShoppingCart}
+            title={`My Lists (${shoppingLists?.length || 0})`}
+            subtitle=""
+          />
+          <div className="mt-6">
             {shoppingLists && shoppingLists.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {shoppingLists.map((list) => (
                   <button
                     key={list.id}
                     onClick={() => setSelectedListId(list.id)}
                     className={cn(
-                      "w-full text-left p-3 rounded-lg border transition-colors",
+                      "w-full text-left p-4 rounded-xl border-2 transition-all duration-200",
                       selectedListId === list.id
-                        ? 'border-pc-navy bg-pc-navy text-pc-white'
-                        : 'border-pc-tan/40 hover:bg-pc-tan/20 text-pc-navy'
+                        ? 'border-pc-navy bg-gradient-to-r from-pc-navy to-pc-navy/90 text-pc-white shadow-lg'
+                        : 'border-pc-tan/40 hover:bg-pc-tan/20 hover:border-pc-olive/40 text-pc-navy'
                     )}
                   >
-                    <h3 className="font-semibold">{list.name}</h3>
+                    <h3 className="font-bold text-lg">{list.name}</h3>
                     {list.description && (
                       <p className="text-sm mt-1 opacity-80">{list.description}</p>
                     )}
@@ -309,39 +343,44 @@ export default function ShoppingListsPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <ShoppingCart className="h-12 w-12 text-pc-tan mx-auto mb-4" />
-                <p className="text-pc-text-light">No lists yet</p>
-                <PCButton
+              <div className="text-center py-12">
+                <div className="relative inline-block mb-6">
+                  <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-2xl opacity-50" />
+                  <div className="relative bg-gradient-to-br from-pc-tan/30 to-pc-olive/20 p-8 rounded-full">
+                    <ShoppingCart className="h-16 w-16 text-pc-tan mx-auto" />
+                  </div>
+                </div>
+                <p className="text-pc-text-light font-medium mb-6">No lists yet</p>
+                <PremiumButton
                   onClick={() => setIsCreateDialogOpen(true)}
-                  className="mt-4"
+                  color="olive"
                 >
                   Create Your First List
-                </PCButton>
+                </PremiumButton>
               </div>
             )}
           </div>
-        </PCCard>
+        </GlassCard>
 
         {/* List Details */}
-        <PCCard className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
+        <GlassCard glow={false} className="lg:col-span-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h2 className="text-xl font-semibold text-pc-navy">{selectedList?.name || 'Select a List'}</h2>
+              <GradientText className="text-2xl font-bold">{selectedList?.name || 'Select a List'}</GradientText>
               {selectedList && (
-                <p className="text-sm text-pc-text-light">
+                <p className="text-base text-pc-text-light mt-1 font-medium">
                   {checkedCount} of {totalCount} items checked
                 </p>
               )}
             </div>
             {selectedListId && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Dialog open={isAddItemDialogOpen} onOpenChange={setIsAddItemDialogOpen}>
                   <DialogTrigger asChild>
-                    <PCButton className="gap-2 bg-pc-olive hover:bg-pc-olive/90">
+                    <PremiumButton size="lg" color="olive">
                       <Plus className="h-4 w-4" />
                       Add Item
-                    </PCButton>
+                    </PremiumButton>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
@@ -415,13 +454,15 @@ export default function ShoppingListsPage() {
                             Selected: {allIngredients?.find(i => i.id === addItemIngredientId)?.name || 'Unknown'}
                           </p>
                         )}
-                        <PCButton
+                        <PremiumButton
+                          size="lg"
+                          color="olive"
                           className="w-full"
                           onClick={handleAddItem}
                           disabled={addItemMutation.isPending || !addItemIngredientId}
                         >
                           {addItemMutation.isPending ? 'Adding...' : 'Add to List'}
-                        </PCButton>
+                        </PremiumButton>
                       </div>
                     </div>
                   </DialogContent>
@@ -438,26 +479,32 @@ export default function ShoppingListsPage() {
                     <SelectItem value="json">💾 JSON (.json)</SelectItem>
                   </SelectContent>
                 </Select>
-                <PCButton
+                <PremiumButton
                   onClick={() => {
                     if (selectedListId && confirm('Are you sure you want to delete this list?')) {
                       deleteListMutation.mutate({ id: selectedListId });
                     }
                   }}
                   disabled={deleteListMutation.isPending}
+                  size="lg"
                   className="gap-2 bg-red-600 hover:bg-red-700"
                 >
                   <Trash2 className="h-4 w-4" />
                   Delete
-                </PCButton>
+                </PremiumButton>
               </div>
             )}
           </div>
           <div>
             {!selectedListId ? (
-              <div className="text-center py-12">
-                <ShoppingCart className="h-16 w-16 text-pc-tan mx-auto mb-4" />
-                <p className="text-pc-text-light">Select a shopping list to view items</p>
+              <div className="text-center py-20">
+                <div className="relative inline-block mb-8">
+                  <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-3xl opacity-60" />
+                  <div className="relative bg-gradient-to-br from-pc-tan/30 to-pc-olive/20 p-10 rounded-full">
+                    <ShoppingCart className="h-20 w-20 text-pc-tan mx-auto" />
+                  </div>
+                </div>
+                <GradientText className="text-2xl font-bold">Select a shopping list to view items</GradientText>
               </div>
             ) : listItems && listItems.length > 0 ? (
               <div className="space-y-2">
@@ -539,14 +586,19 @@ export default function ShoppingListsPage() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-12">
-                <ShoppingCart className="h-16 w-16 text-pc-tan mx-auto mb-4" />
-                <p className="text-pc-text-light">No items in this list</p>
-                <p className="text-sm text-pc-text-light mt-2">Add items from your recipes</p>
+              <div className="text-center py-20">
+                <div className="relative inline-block mb-8">
+                  <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-3xl opacity-60" />
+                  <div className="relative bg-gradient-to-br from-pc-tan/30 to-pc-olive/20 p-10 rounded-full">
+                    <ShoppingCart className="h-20 w-20 text-pc-tan mx-auto" />
+                  </div>
+                </div>
+                <GradientText className="text-2xl font-bold mb-3">No items in this list</GradientText>
+                <p className="text-pc-text-light text-lg">Add items from your recipes</p>
               </div>
             )}
           </div>
-        </PCCard>
+        </GlassCard>
       </div>
     </div>
   );
