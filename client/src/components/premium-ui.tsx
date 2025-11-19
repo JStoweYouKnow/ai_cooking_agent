@@ -155,9 +155,9 @@ export function GlassCard({
         whileHover={hover ? { y: -4 } : undefined}
         transition={{ duration: 0.3 }}
         className={cn(
-          "relative bg-white/60 backdrop-blur-xl rounded-2xl border border-white/20",
-          "shadow-[0_8px_32px_rgba(0,0,0,0.08)]",
-          hover && "hover:shadow-[0_20px_48px_rgba(0,0,0,0.12)]",
+          "relative bg-white dark:bg-gray-800 backdrop-blur-xl rounded-2xl border border-gray-200 dark:border-gray-700",
+          "shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
+          hover && "hover:shadow-[0_20px_48px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_20px_48px_rgba(0,0,0,0.6)]",
           "transition-all duration-300"
         )}
       >

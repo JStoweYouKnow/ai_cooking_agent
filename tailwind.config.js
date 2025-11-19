@@ -1,7 +1,9 @@
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+const config = {
+  darkMode: "class",
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./client/src/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
@@ -13,9 +15,10 @@ module.exports = {
           olive: "var(--pc-olive)",
           navy: "var(--pc-navy)",
           bg: "var(--pc-bg)",
+          "bg-alt": "var(--pc-bg-alt)",
           text: "var(--pc-text)",
           "text-light": "var(--pc-text-light)",
-        }
+        },
       },
       borderRadius: {
         pc: "var(--pc-radius)",
@@ -27,10 +30,12 @@ module.exports = {
       },
       transitionTimingFunction: {
         pc: "var(--pc-transition)",
-        "pc-slow": "var(--pc-transition-slow)"
-      }
-    }
+        "pc-slow": "var(--pc-transition-slow)",
+      },
+    },
   },
   plugins: [],
-}
+};
+
+export default config;
 

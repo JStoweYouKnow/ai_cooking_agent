@@ -19,11 +19,17 @@ self.addEventListener('activate', function(event) {
         );
       });
     }).then(function() {
-      // Force all clients to reload
+      // Force all window clients to reload and wait for navigation to complete
       return self.clients.matchAll().then(function(clients) {
+        var navigationPromises = [];
+
         clients.forEach(function(client) {
-          client.navigate(client.url);
+          if (client.type === 'window') {
+            navigationPromises.push(client.navigate(client.url));
+          }
         });
+
+        return Promise.all(navigationPromises);
       });
     })
   );
