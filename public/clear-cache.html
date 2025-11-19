@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Clear All Caches</title>
+</head>
+<body>
+  <h1>Clearing all caches...</h1>
+  <div id="status"></div>
+  <script>
+    const status = document.getElementById('status');
+
+    async function clearAllCaches() {
+      try {
+        // Unregister all service workers
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (let registration of registrations) {
+          await registration.unregister();
+          status.innerHTML += '<p>✓ Unregistered service worker</p>';
+        }
+
+        // Clear all caches
+        const cacheNames = await caches.keys();
+        for (let cacheName of cacheNames) {
+          await caches.delete(cacheName);
+          status.innerHTML += `<p>✓ Deleted cache: ${cacheName}</p>`;
+        }
+
+        // Clear localStorage
+        localStorage.clear();
+        status.innerHTML += '<p>✓ Cleared localStorage</p>';
+
+        // Clear sessionStorage
+        sessionStorage.clear();
+        status.innerHTML += '<p>✓ Cleared sessionStorage</p>';
+
+        status.innerHTML += '<p><strong>All caches cleared! Redirecting to home page...</strong></p>';
+
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+      } catch (error) {
+        status.innerHTML += `<p>Error: ${error.message}</p>`;
+      }
+    }
+
+    clearAllCaches();
+  </script>
+</body>
+</html>

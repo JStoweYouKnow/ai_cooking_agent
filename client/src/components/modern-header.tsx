@@ -4,7 +4,7 @@
 */
 
 "use client";
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -45,6 +45,13 @@ export function ModernHeader({
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const [searchFocused, setSearchFocused] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const canShowAuthActions = isMounted && !isLoadingUser;
 
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
@@ -158,25 +165,50 @@ export function ModernHeader({
 
         {/* Right: Actions - Upper right on web */}
         <div className="flex items-center gap-2 md:gap-3 lg:gap-4 flex-shrink-0 ml-auto">
-          {/* Mobile Search Button */}
+          {/* Mobile/Tablet Search Button - Hidden on desktop */}
           <button
             onClick={onSearchClick}
-            className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
             aria-label="Search"
           >
             <Search className="h-5 w-5 text-[var(--russet-brown)]" />
           </button>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile/Tablet Menu Button - Hidden on desktop */}
           <button
             onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5 text-[var(--russet-brown)]" />
           </button>
 
-          {/* Desktop: All actions in upper right */}
+          {/* Mobile/Tablet: User avatar or sign in - Hidden on desktop */}
+          <div className="flex lg:hidden items-center gap-2">
+            {user ? (
+              <button
+                onClick={onMenuClick}
+                className="flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                suppressHydrationWarning
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-pc-olive text-white font-semibold text-sm" suppressHydrationWarning>
+                    {getUserInitials()}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+            ) : (
+              canShowAuthActions && (
+                <Link href="/api/oauth/callback">
+                  <button className="px-3 py-1.5 rounded-lg bg-pc-olive text-white hover:bg-pc-olive/90 transition-colors font-medium text-sm">
+                    Sign in
+                  </button>
+                </Link>
+              )
+            )}
+          </div>
+
+          {/* Desktop: All actions in upper right - Hidden on mobile/tablet */}
           <div className="hidden lg:flex items-center gap-3">
             {/* Secondary Actions */}
             {user && (
@@ -251,7 +283,7 @@ export function ModernHeader({
               </DropdownMenu>
             ) : (
               <>
-                {!isLoadingUser && (
+                {canShowAuthActions && (
                   <Link href="/api/oauth/callback">
                     <button className="px-4 py-2 rounded-lg bg-pc-olive text-white hover:bg-pc-olive/90 transition-colors font-medium text-sm border border-pc-olive">
                       Sign in
@@ -259,32 +291,6 @@ export function ModernHeader({
                   </Link>
                 )}
               </>
-            )}
-          </div>
-
-          {/* Mobile: Only show user avatar, no theme toggle (moved to drawer) */}
-          <div className="flex lg:hidden items-center gap-2">
-            {/* User / Sign in - Mobile */}
-            {user ? (
-              <button
-                onClick={onMenuClick}
-                className="flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                suppressHydrationWarning
-              >
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-pc-olive text-white font-semibold text-sm" suppressHydrationWarning>
-                    {getUserInitials()}
-                  </AvatarFallback>
-                </Avatar>
-              </button>
-            ) : (
-              !isLoadingUser && (
-                <Link href="/api/oauth/callback">
-                  <button className="px-3 py-1.5 rounded-lg bg-pc-olive text-white hover:bg-pc-olive/90 transition-colors font-medium text-sm">
-                    Sign in
-                  </button>
-                </Link>
-              )
             )}
           </div>
         </div>
