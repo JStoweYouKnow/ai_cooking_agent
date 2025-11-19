@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { MobileMenuDrawer } from './modern-menu';
+import { MobileMenuDrawer, BottomNav } from './modern-menu';
 import { ModernHeader } from './modern-header';
 import { AnimatedBackground } from './web3';
 
@@ -47,11 +47,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile Menu Drawer - Vertical navigation on mobile */}
+      {/* Mobile Menu Drawer - Settings and profile on mobile */}
       <MobileMenuDrawer
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
       />
+
+      {/* Bottom Navigation - Vertical icon navigation on mobile */}
+      <BottomNav />
     </div>
   );
 }

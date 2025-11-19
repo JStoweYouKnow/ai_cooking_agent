@@ -262,58 +262,21 @@ export function ModernHeader({
             )}
           </div>
 
-          {/* Mobile: Simplified actions */}
+          {/* Mobile: Only show user avatar, no theme toggle (moved to drawer) */}
           <div className="flex lg:hidden items-center gap-2">
-            {/* Theme Toggle - Mobile */}
-            <div className="flex items-center justify-center">
-              <ThemeToggle className="h-8 w-8" />
-            </div>
-
             {/* User / Sign in - Mobile */}
             {user ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button 
-                    className="flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" 
-                    suppressHydrationWarning
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-pc-olive text-white font-semibold text-sm" suppressHydrationWarning>
-                        {getUserInitials()}
-                      </AvatarFallback>
-                    </Avatar>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none text-[var(--russet-brown)]">{user.name || 'User'}</p>
-                      <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/" className="cursor-pointer">
-                      <User className="mr-2 h-4 w-4" />
-                      <span>Profile</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/settings" className="cursor-pointer">
-                      <span>Settings</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={handleLogout}
-                    className="text-red-600 focus:text-red-600 cursor-pointer"
-                    disabled={logoutMutation.isPending}
-                  >
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>{logoutMutation.isPending ? 'Signing out...' : 'Sign out'}</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <button
+                onClick={onMenuClick}
+                className="flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                suppressHydrationWarning
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-pc-olive text-white font-semibold text-sm" suppressHydrationWarning>
+                    {getUserInitials()}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
             ) : (
               !isLoadingUser && (
                 <Link href="/api/oauth/callback">

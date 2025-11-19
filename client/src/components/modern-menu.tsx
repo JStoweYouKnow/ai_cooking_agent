@@ -8,22 +8,24 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Home, 
-  Search, 
-  BookOpen, 
-  ShoppingCart, 
-  Apple, 
-  User, 
-  Settings, 
+import {
+  Home,
+  Search,
+  BookOpen,
+  ShoppingCart,
+  Apple,
+  User,
+  Settings,
   Bell,
   ChefHat,
   Plus,
   Menu,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
+import { ThemeToggle } from '@/components/web3/ThemeToggle';
 
 /* -------------------------------------------------------------------------- */
 /* ------------------------- Bottom Navigation Bar ------------------------- */
@@ -428,16 +430,15 @@ export function MobileMenuDrawer({
 }) {
   const pathname = usePathname();
   const { data: user } = trpc.auth.me.useQuery();
-  
-  // Main navigation items for mobile vertical drawer
-  const menuItems = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'My Ingredients', href: '/ingredients', icon: Apple },
-    { name: 'Find Recipes', href: '/recipes', icon: BookOpen },
-    { name: 'Shopping Lists', href: '/shopping-lists', icon: ShoppingCart },
-  ];
+  const logoutMutation = trpc.auth.logout.useMutation();
 
-  const bottomItems = [
+  const handleLogout = async () => {
+    await logoutMutation.mutateAsync();
+    window.location.href = '/';
+  };
+
+  // Settings and utility items (main nav is in bottom bar)
+  const menuItems = [
     { name: 'Settings', href: '/settings', icon: Settings, badge: null },
     { name: 'Notifications', href: '/notifications', icon: Bell, badge: 2 },
   ];
@@ -455,117 +456,115 @@ export function MobileMenuDrawer({
             className="fixed inset-0 bg-black/50 z-50 lg:hidden"
           />
           
-          {/* Drawer - Only for secondary actions, main nav is in bottom nav */}
+          {/* Drawer - Settings and profile (main nav is in bottom bar) */}
           <motion.aside
             initial={{ x: '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed left-0 top-0 bottom-0 w-80 bg-white z-50 shadow-2xl lg:hidden"
+            className="fixed left-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-900 z-50 shadow-2xl lg:hidden"
           >
             <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="p-4 border-b border-pc-tan/10 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-pc-olive p-2 rounded-lg">
-                <ChefHat className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <div className="font-semibold text-pc-navy">Navigation</div>
-                <div className="text-xs text-pc-text-light">Menu</div>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-pc-tan/20"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Main Navigation */}
-          <nav className="flex-1 overflow-y-auto p-4 space-y-2">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href as any}
-                  onClick={onClose}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
-                    isActive 
-                      ? "bg-pc-olive/10 text-pc-olive" 
-                      : "hover:bg-pc-tan/20 text-pc-navy"
-                  )}
-                >
-                  <div className={cn(
-                    "w-10 h-10 rounded-lg flex items-center justify-center",
-                    isActive 
-                      ? "bg-pc-olive text-white" 
-                      : "bg-pc-tan/30"
-                  )}>
-                    <Icon className="h-5 w-5" />
+              {/* Header */}
+              <div className="p-4 border-b border-pc-tan/10 dark:border-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-pc-olive p-2 rounded-lg">
+                    <ChefHat className="h-5 w-5 text-white" />
                   </div>
-                  <span className="font-medium">{item.name}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Bottom Section */}
-          <div className="p-4 border-t border-pc-tan/10 space-y-2">
-            {bottomItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href as any}
-                  onClick={onClose}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
-                    isActive 
-                      ? "bg-pc-olive/10 text-pc-olive" 
-                      : "hover:bg-pc-tan/20 text-pc-navy"
-                  )}
-                >
-                  <div className={cn(
-                    "w-10 h-10 rounded-lg flex items-center justify-center relative",
-                    isActive 
-                      ? "bg-pc-olive text-white" 
-                      : "bg-pc-tan/30"
-                  )}>
-                    <Icon className="h-5 w-5" />
-                    {item.badge && (
-                      <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold">
-                        {item.badge}
-                      </span>
-                    )}
+                  <div>
+                    <div className="font-semibold text-pc-navy dark:text-white">Settings</div>
+                    <div className="text-xs text-pc-text-light dark:text-gray-400">Preferences & Profile</div>
                   </div>
-                  <span className="font-medium">{item.name}</span>
-                </Link>
-              );
-            })}
-          </div>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-lg hover:bg-pc-tan/20 dark:hover:bg-gray-800"
+                >
+                  <X className="h-5 w-5 dark:text-white" />
+                </button>
+              </div>
 
-              {/* User Section */}
+              {/* User Profile Section */}
               {user && (
-                <div className="p-4 border-t border-pc-tan/10">
-                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-pc-tan/10">
-                    <div className="w-10 h-10 rounded-full bg-pc-olive/20 flex items-center justify-center">
-                      <User className="h-5 w-5 text-pc-olive" />
+                <div className="p-4 border-b border-pc-tan/10 dark:border-gray-700">
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-pc-tan/10 dark:bg-gray-800">
+                    <div className="w-12 h-12 rounded-full bg-pc-olive/20 flex items-center justify-center">
+                      <User className="h-6 w-6 text-pc-olive" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-pc-navy truncate">
+                      <div className="text-sm font-semibold text-pc-navy dark:text-white truncate">
                         {user.name || user.email || 'User'}
                       </div>
-                      <div className="text-xs text-pc-text-light">View Profile</div>
+                      <div className="text-xs text-pc-text-light dark:text-gray-400">{user.email}</div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Menu Items */}
+              <nav className="flex-1 overflow-y-auto p-4 space-y-2">
+                {menuItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href;
+
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href as any}
+                      onClick={onClose}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                        isActive
+                          ? "bg-pc-olive/10 text-pc-olive"
+                          : "hover:bg-pc-tan/20 dark:hover:bg-gray-800 text-pc-navy dark:text-white"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-10 h-10 rounded-lg flex items-center justify-center relative",
+                        isActive
+                          ? "bg-pc-olive text-white"
+                          : "bg-pc-tan/30 dark:bg-gray-800"
+                      )}>
+                        <Icon className="h-5 w-5" />
+                        {item.badge && (
+                          <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold">
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-medium">{item.name}</span>
+                    </Link>
+                  );
+                })}
+
+                {/* Theme Toggle */}
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-pc-tan/30 dark:bg-gray-800">
+                    <Settings className="h-5 w-5 text-pc-navy dark:text-white" />
+                  </div>
+                  <span className="font-medium flex-1 text-pc-navy dark:text-white">Theme</span>
+                  <ThemeToggle className="h-10 w-10" />
+                </div>
+              </nav>
+
+              {/* Bottom Section - Logout */}
+              {user && (
+                <div className="p-4 border-t border-pc-tan/10 dark:border-gray-700">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      handleLogout();
+                    }}
+                    disabled={logoutMutation.isPending}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 w-full"
+                  >
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-50 dark:bg-red-900/20">
+                      <LogOut className="h-5 w-5" />
+                    </div>
+                    <span className="font-medium">
+                      {logoutMutation.isPending ? 'Signing out...' : 'Sign Out'}
+                    </span>
+                  </button>
                 </div>
               )}
             </div>
