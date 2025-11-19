@@ -1,13 +1,12 @@
 "use client";
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { BottomNav, ModernSidebar, MobileMenuDrawer } from './modern-menu';
+import { BottomNav, ModernSidebar } from './modern-menu';
 import { ModernHeader } from './modern-header';
 import { AnimatedBackground } from './web3';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
@@ -16,7 +15,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       
       {/* Header Section - LinkedIn Style */}
       <ModernHeader
-        onMenuClick={() => setMobileMenuOpen(true)}
         onSearchClick={() => {
           if (typeof window !== 'undefined' && (window as any).__openCommandPalette) {
             (window as any).__openCommandPalette();
@@ -57,12 +55,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Navigation (hidden on desktop) */}
       <BottomNav />
-
-      {/* Mobile Menu Drawer */}
-      <MobileMenuDrawer
-        open={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
-      />
     </div>
   );
 }

@@ -12,7 +12,6 @@ import {
   Search,
   Bookmark,
   User,
-  Menu,
   LogOut,
   Bell,
   MessageSquare,
@@ -31,10 +30,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/web3/ThemeToggle';
 
 export function ModernHeader({
-  onMenuClick,
   onSearchClick,
 }: {
-  onMenuClick?: () => void;
   onSearchClick?: () => void;
 }) {
   const pathname = usePathname();
@@ -84,7 +81,6 @@ export function ModernHeader({
                 searchFocused && "ring-1 ring-[var(--russet-brown)]/30 rounded"
               )}
             >
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
                 placeholder="I'm looking for..."
@@ -92,7 +88,7 @@ export function ModernHeader({
                 onBlur={() => setSearchFocused(false)}
                 onClick={onSearchClick}
                 className={cn(
-                  "w-full pl-9 pr-3 py-2 rounded-md border border-gray-300",
+                  "w-full px-3 py-2 rounded-md border border-gray-300",
                   "bg-gray-50 text-[var(--russet-brown)] placeholder:text-gray-400 text-sm",
                   "focus:outline-none focus:border-[var(--russet-brown)] focus:bg-white",
                   "transition-all duration-200",
@@ -213,14 +209,6 @@ export function ModernHeader({
             </>
           )}
 
-          {/* Mobile Menu Button - Only show on mobile where bottom nav might not be enough */}
-          <button
-            onClick={onMenuClick}
-            className="lg:hidden p-2 rounded hover:bg-gray-100 transition-colors"
-            aria-label="Open menu"
-          >
-            <Menu className="h-5 w-5 text-[var(--russet-brown)]" />
-          </button>
         </div>
       </div>
     </header>
