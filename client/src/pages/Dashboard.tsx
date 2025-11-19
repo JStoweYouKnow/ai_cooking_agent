@@ -3,6 +3,7 @@ import { RecipeCard } from '@/components/cooking-theme';
 import { PageTransition } from '@/components/web3/PageTransition';
 import {
   GradientHero,
+  GlassCard,
   SectionHeader,
   PremiumButton,
   DecorativeBlob,
