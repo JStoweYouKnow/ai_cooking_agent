@@ -1,38 +1,86 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { Layout } from "./components/Layout";
-import Dashboard from "./pages/Dashboard";
-import IngredientsPage from "./pages/IngredientsPage";
-import RecipeSearchPage from "./pages/RecipeSearchPage";
-import RecipeDetailPage from "./pages/RecipeDetailPage";
-import ShoppingListsPage from "./pages/ShoppingListsPage";
+import { lazy, Suspense } from "react";
+import { RecipeCardSkeleton } from "@/components/RecipeCardSkeleton";
+
+// Code splitting: Lazy load pages for better performance
+const Dashboard = lazy(() => import("./pages/Dashboard").then(m => ({ default: m.default })));
+const IngredientsPage = lazy(() => import("./pages/IngredientsPage").then(m => ({ default: m.default })));
+const RecipeSearchPage = lazy(() => import("./pages/RecipeSearchPage").then(m => ({ default: m.default })));
+const RecipeDetailPage = lazy(() => import("./pages/RecipeDetailPage").then(m => ({ default: m.default })));
+const ShoppingListsPage = lazy(() => import("./pages/ShoppingListsPage").then(m => ({ default: m.default })));
+const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.default })));
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[400px]">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pc-olive mx-auto mb-4"></div>
+      <p className="text-pc-text-light">Loading...</p>
+    </div>
+  </div>
+);
 
 function Router() {
 	return (
-		<Switch>
-			<Route path="/">
-				{() => <Dashboard />}
-			</Route>
-			<Route path="/ingredients">
-				{() => <IngredientsPage />}
-			</Route>
-			<Route path="/recipes">
-				{() => <RecipeSearchPage />}
-			</Route>
-			<Route path="/recipes/:id">
-				{() => <RecipeDetailPage />}
-			</Route>
-			<Route path="/shopping-lists">
-				{() => <ShoppingListsPage />}
-			</Route>
-			<Route path="/404" component={NotFound} />
-			{/* Final fallback route */}
-			<Route component={NotFound} />
-		</Switch>
+		<Suspense fallback={<PageLoader />}>
+			<Switch>
+				<Route path="/">
+					{() => (
+						<Suspense fallback={<PageLoader />}>
+							<Dashboard />
+						</Suspense>
+					)}
+				</Route>
+				<Route path="/ingredients">
+					{() => (
+						<Suspense fallback={<PageLoader />}>
+							<IngredientsPage />
+						</Suspense>
+					)}
+				</Route>
+				<Route path="/recipes">
+					{() => (
+						<Suspense fallback={<PageLoader />}>
+							<RecipeSearchPage />
+						</Suspense>
+					)}
+				</Route>
+				<Route path="/recipes/:id">
+					{() => (
+						<Suspense fallback={<PageLoader />}>
+							<RecipeDetailPage />
+						</Suspense>
+					)}
+				</Route>
+				<Route path="/shopping-lists">
+					{() => (
+						<Suspense fallback={<PageLoader />}>
+							<ShoppingListsPage />
+						</Suspense>
+					)}
+				</Route>
+				<Route path="/404">
+					{() => (
+						<Suspense fallback={<PageLoader />}>
+							<NotFound />
+						</Suspense>
+					)}
+				</Route>
+				{/* Final fallback route */}
+				<Route>
+					{() => (
+						<Suspense fallback={<PageLoader />}>
+							<NotFound />
+						</Suspense>
+					)}
+				</Route>
+			</Switch>
+		</Suspense>
 	);
 }
 

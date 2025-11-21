@@ -18,18 +18,22 @@ import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { RecipeCardSkeleton } from '@/components/RecipeCardSkeleton';
+import { recipeUrlSchema, type RecipeUrlFormData } from '@/lib/validation';
+import { useLocation } from 'wouter';
 
 export default function RecipeSearchPage() {
+  const [, setLocation] = useLocation();
   const [searchIngredients, setSearchIngredients] = useState<string[]>([]);
   const [currentIngredient, setCurrentIngredient] = useState('');
   const [selectedMealId, setSelectedMealId] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [selectedSources, setSelectedSources] = useState<("TheMealDB" | "Epicurious" | "Delish" | "NYTCooking")[]>(["TheMealDB"]);
+  const [urlError, setUrlError] = useState<string>('');
 
   const utils = trpc.useUtils();
-  const { data: userIngredients } = trpc.ingredients.getUserIngredients.useQuery();
-  const { data: allIngredients } = trpc.ingredients.list.useQuery();
-  const { data: savedRecipes } = trpc.recipes.list.useQuery();
+  const { data: userIngredients, isLoading: userIngredientsLoading } = trpc.ingredients.getUserIngredients.useQuery();
+  const { data: allIngredients, isLoading: allIngredientsLoading } = trpc.ingredients.list.useQuery();
+  const { data: savedRecipes, isLoading: savedRecipesLoading } = trpc.recipes.list.useQuery();
 
   const importFromTheMealDBMutation = trpc.recipes.importFromTheMealDB.useMutation({
     onSuccess: () => {
@@ -49,6 +53,7 @@ export default function RecipeSearchPage() {
         toast.success('Parsed recipe preview ready');
       }
       setImportUrl('');
+      setUrlError('');
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to import recipe');
@@ -119,10 +124,16 @@ export default function RecipeSearchPage() {
   };
 
   const handleImportFromUrl = (autoSave: boolean) => {
-    if (!importUrl.trim()) {
-      toast.error('Enter a recipe URL');
+    const result = recipeUrlSchema.safeParse({ url: importUrl.trim() });
+    
+    if (!result.success) {
+      const errorMessage = result.error.errors[0]?.message || 'Please enter a valid URL';
+      setUrlError(errorMessage);
+      toast.error(errorMessage);
       return;
     }
+    
+    setUrlError('');
     parseFromUrlMutation.mutate({ url: importUrl.trim(), autoSave });
   };
 
@@ -171,12 +182,22 @@ export default function RecipeSearchPage() {
             <Input
               placeholder="https://example.com/your-favorite-recipe"
               value={importUrl}
-              onChange={(e) => setImportUrl(e.target.value)}
+              onChange={(e) => {
+                setImportUrl(e.target.value);
+                if (urlError) setUrlError('');
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleImportFromUrl(true);
               }}
-              className="border-pc-tan/20 h-12 text-base"
+              className={urlError ? "border-red-500 h-12 text-base" : "border-pc-tan/20 h-12 text-base"}
+              aria-invalid={!!urlError}
+              aria-describedby={urlError ? 'url-error' : undefined}
             />
+            {urlError && (
+              <p id="url-error" className="text-sm text-red-600 mt-1" role="alert">
+                {urlError}
+              </p>
+            )}
             <PremiumButton
               onClick={() => handleImportFromUrl(true)}
               disabled={parseFromUrlMutation.isPending}
@@ -220,6 +241,19 @@ export default function RecipeSearchPage() {
                           : [...prev, source]
                       );
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedSources(prev =>
+                          prev.includes(source)
+                            ? prev.filter(s => s !== source)
+                            : [...prev, source]
+                        );
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${selectedSources.includes(source) ? 'Deselect' : 'Select'} ${source} as recipe source`}
                   >
                     {source === "TheMealDB" ? "TheMealDB" : source}
                   </Badge>
@@ -258,8 +292,9 @@ export default function RecipeSearchPage() {
                     <button
                       onClick={() => handleRemoveIngredient(index)}
                       className="text-pc-navy hover:text-red-600 font-bold text-lg"
+                      aria-label={`Remove ${ingredient} from search`}
                     >
-                      ×
+                      <span aria-hidden="true">×</span>
                     </button>
                   </Badge>
                 ))}
@@ -356,7 +391,13 @@ export default function RecipeSearchPage() {
             description="Saved recipes ready to cook"
           />
           <div className="mt-8">
-            {savedRecipes && savedRecipes.length > 0 ? (
+            {savedRecipesLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <RecipeCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : savedRecipes && savedRecipes.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {savedRecipes.map((recipe: any) => (
                   <RecipeCard
@@ -372,9 +413,18 @@ export default function RecipeSearchPage() {
                       isFavorite: recipe.isFavorite,
                     }}
                     onClick={() => {
-                      // Navigate to recipe detail
-                      window.location.href = `/recipes`;
+                      // Navigate to recipe detail using client-side routing
+                      setLocation(`/recipes/${recipe.id}`);
                     }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setLocation(`/recipes/${recipe.id}`);
+                      }
+                    }}
+                    aria-label={`View recipe: ${recipe.name}`}
                   />
                 ))}
               </div>

@@ -18,12 +18,14 @@ import { getIngredientIcon } from '@/lib/ingredientIcons';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { IngredientCardSkeleton } from '@/components/IngredientCardSkeleton';
+import { ingredientSchema, type IngredientFormData } from '@/lib/validation';
 
 export default function IngredientsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [newIngredient, setNewIngredient] = useState({ name: '', quantity: '', unit: '' });
   const [imageUrl, setImageUrl] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof IngredientFormData, string>>>({});
 
   const utils = trpc.useUtils();
   const { data: userIngredients, isLoading, error: userIngredientsError } = trpc.ingredients.getUserIngredients.useQuery();
@@ -33,6 +35,7 @@ export default function IngredientsPage() {
     onSuccess: () => {
       utils.ingredients.getUserIngredients.invalidate();
       setNewIngredient({ name: '', quantity: '', unit: '' });
+      setFormErrors({});
       setIsAddDialogOpen(false);
       toast.success('Ingredient added to your pantry');
     },
@@ -77,10 +80,26 @@ export default function IngredientsPage() {
   });
 
   const handleAddIngredient = () => {
-    if (!newIngredient.name.trim()) {
-      toast.error('Please enter an ingredient name');
+    // Validate with Zod schema
+    const result = ingredientSchema.safeParse(newIngredient);
+    
+    if (!result.success) {
+      const errors: Partial<Record<keyof IngredientFormData, string>> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          errors[err.path[0] as keyof IngredientFormData] = err.message;
+        }
+      });
+      setFormErrors(errors);
+      // Also show toast for first error
+      if (result.error.errors[0]) {
+        toast.error(result.error.errors[0].message);
+      }
       return;
     }
+    
+    // Clear errors on success
+    setFormErrors({});
     getOrCreateMutation.mutate({ name: newIngredient.name });
   };
 
@@ -159,8 +178,22 @@ export default function IngredientsPage() {
                     id="name"
                     placeholder="e.g., Tomatoes"
                     value={newIngredient.name}
-                    onChange={(e) => setNewIngredient({ ...newIngredient, name: e.target.value })}
+                    onChange={(e) => {
+                      setNewIngredient({ ...newIngredient, name: e.target.value });
+                      // Clear error when user types
+                      if (formErrors.name) {
+                        setFormErrors({ ...formErrors, name: undefined });
+                      }
+                    }}
+                    aria-invalid={!!formErrors.name}
+                    aria-describedby={formErrors.name ? 'name-error' : undefined}
+                    className={formErrors.name ? 'border-red-500' : ''}
                   />
+                  {formErrors.name && (
+                    <p id="name-error" className="text-sm text-red-600 mt-1" role="alert">
+                      {formErrors.name}
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -392,8 +425,9 @@ export default function IngredientsPage() {
                         onClick={() => removeFromUserListMutation.mutate({ id: userIngredient.id })}
                         disabled={removeFromUserListMutation.isPending}
                         className="p-2 rounded-lg hover:bg-pc-tan/30 transition text-red-600"
+                        aria-label={`Remove ${ingredient.name} from pantry`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </div>
                   </PCCard>

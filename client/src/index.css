@@ -2,6 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Respect user's motion preferences for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Enhanced focus indicators for accessibility (WCAG 2.1 AA) */
+*:focus-visible {
+  outline: 2px solid var(--pc-olive, #77856A);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Ensure all interactive elements have visible focus */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--pc-olive, #77856A);
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  * {
+    border-color: currentColor !important;
+  }
+  
+  button,
+  a {
+    border: 2px solid currentColor;
+  }
+}
+
 :root {
   /* Web 3.0 Design Tokens - Modern & Futuristic */
   --pc-bg: #FAF8F4;
@@ -60,7 +102,7 @@
   --pc-bg-dark: #1a1a1a;
   --pc-white: #ffffff;
   --pc-text: #1a1a1a;
-  --pc-text-light: #4f4f4f;
+  --pc-text-light: #595959; /* Updated from #4f4f4f for WCAG AA (4.5:1 contrast) */
   --pc-transition: 200ms ease;
   --pc-transition-slow: 350ms ease;
 

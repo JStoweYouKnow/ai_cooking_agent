@@ -10,6 +10,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Skip to main content link for keyboard navigation */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
+
       {/* Web 3.0 Animated Background */}
       <AnimatedBackground variant="gradient" intensity="low" />
       
@@ -29,7 +37,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Sidebar removed - using horizontal navigation in header on desktop */}
 
         {/* Main Content Area */}
-        <main className={cn(
+        <main id="main-content" className={cn(
           "flex-1 w-full transition-all duration-300 relative z-10",
           // Mobile: compact padding
           "p-4",

@@ -8,6 +8,7 @@ import React from 'react';
 import { motion, HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 
 /* -------------------------------------------------------------------------- */
 /* ------------------------- Gradient Hero Section ------------------------- */
@@ -137,22 +138,24 @@ export function GlassCard({
   hover?: boolean;
   glow?: boolean;
 } & React.HTMLAttributes<HTMLDivElement>) {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <div className={cn("relative group", className)} {...props}>
       {/* Glow effect on hover */}
-      {glow && (
+      {glow && !prefersReducedMotion && (
         <div className="absolute -inset-0.5 bg-gradient-to-r from-pc-olive via-pc-navy to-pc-olive rounded-2xl opacity-0 group-hover:opacity-30 blur-xl transition-all duration-500" />
       )}
 
       {/* Glass card */}
       <motion.div
-        whileHover={hover ? { y: -4 } : undefined}
-        transition={{ duration: 0.3 }}
+        whileHover={hover && !prefersReducedMotion ? { y: -4 } : undefined}
+        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.3 }}
         className={cn(
           "relative bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700",
           "shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
           hover && "hover:shadow-[0_20px_48px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_20px_48px_rgba(0,0,0,0.6)]",
-          "transition-all duration-300"
+          !prefersReducedMotion && "transition-all duration-300"
         )}
       >
         {children}

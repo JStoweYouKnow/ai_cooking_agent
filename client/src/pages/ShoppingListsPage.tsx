@@ -19,6 +19,8 @@ import { getIngredientIcon } from '@/lib/ingredientIcons';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { shoppingListSchema, shoppingListItemSchema, type ShoppingListFormData, type ShoppingListItemFormData } from '@/lib/validation';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ShoppingListsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -30,18 +32,20 @@ export default function ShoppingListsPage() {
   const [addItemQuantity, setAddItemQuantity] = useState('');
   const [addItemUnit, setAddItemUnit] = useState('');
   const [ingredientSearch, setIngredientSearch] = useState('');
+  const [listFormErrors, setListFormErrors] = useState<Partial<Record<keyof ShoppingListFormData, string>>>({});
+  const [itemFormErrors, setItemFormErrors] = useState<Partial<Record<keyof ShoppingListItemFormData, string>>>({});
 
   const utils = trpc.useUtils();
-  const { data: shoppingLists } = trpc.shoppingLists.list.useQuery();
-  const { data: selectedList } = trpc.shoppingLists.getById.useQuery(
+  const { data: shoppingLists, isLoading: listsLoading } = trpc.shoppingLists.list.useQuery();
+  const { data: selectedList, isLoading: selectedListLoading } = trpc.shoppingLists.getById.useQuery(
     { id: selectedListId! },
     { enabled: !!selectedListId }
   );
-  const { data: listItems } = trpc.shoppingLists.getItems.useQuery(
+  const { data: listItems, isLoading: itemsLoading } = trpc.shoppingLists.getItems.useQuery(
     { id: selectedListId! },
     { enabled: !!selectedListId }
   );
-  const { data: allIngredients } = trpc.ingredients.list.useQuery();
+  const { data: allIngredients, isLoading: ingredientsLoading } = trpc.ingredients.list.useQuery();
 
   const createListMutation = trpc.shoppingLists.create.useMutation({
     onSuccess: async (data) => {
@@ -67,6 +71,7 @@ export default function ShoppingListsPage() {
         // Clear form and close dialog
         setNewListName('');
         setNewListDescription('');
+        setListFormErrors({});
         setIsCreateDialogOpen(false);
         toast.success('Shopping list created successfully');
       } catch (error: any) {
@@ -135,10 +140,26 @@ export default function ShoppingListsPage() {
   });
 
   const handleCreateList = () => {
-    if (!newListName.trim()) {
-      toast.error('Please enter a list name');
+    const result = shoppingListSchema.safeParse({
+      name: newListName,
+      description: newListDescription,
+    });
+    
+    if (!result.success) {
+      const errors: Partial<Record<keyof ShoppingListFormData, string>> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          errors[err.path[0] as keyof ShoppingListFormData] = err.message;
+        }
+      });
+      setListFormErrors(errors);
+      if (result.error.errors[0]) {
+        toast.error(result.error.errors[0].message);
+      }
       return;
     }
+    
+    setListFormErrors({});
     createListMutation.mutate({
       name: newListName,
       description: newListDescription || undefined,
@@ -150,14 +171,30 @@ export default function ShoppingListsPage() {
       toast.error('Please select a shopping list');
       return;
     }
-    if (!addItemIngredientId) {
-      toast.error('Please select an ingredient');
+    
+    const result = shoppingListItemSchema.safeParse({
+      ingredientId: addItemIngredientId || 0,
+      quantity: addItemQuantity,
+      unit: addItemUnit,
+    });
+    
+    if (!result.success) {
+      const errors: Partial<Record<keyof ShoppingListItemFormData, string>> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          errors[err.path[0] as keyof ShoppingListItemFormData] = err.message;
+        }
+      });
+      setItemFormErrors(errors);
+      if (result.error.errors[0]) {
+        toast.error(result.error.errors[0].message);
+      }
       return;
     }
     
     const payload = {
       shoppingListId: selectedListId,
-      ingredientId: addItemIngredientId,
+      ingredientId: addItemIngredientId!,
       quantity: addItemQuantity || undefined,
       unit: addItemUnit || undefined,
     };
@@ -171,6 +208,7 @@ export default function ShoppingListsPage() {
       setAddItemQuantity('');
       setAddItemUnit('');
       setIngredientSearch('');
+      setItemFormErrors({});
     } catch (error: any) {
       // Error is already handled by onError in the mutation
       // Don't close dialog on error so user can try again
@@ -271,9 +309,16 @@ export default function ShoppingListsPage() {
                   id="listName"
                   placeholder="e.g., Weekly Groceries"
                   value={newListName}
-                  onChange={(e) => setNewListName(e.target.value)}
-                  className="border-pc-tan/20"
+                  onChange={(e) => {
+                    setNewListName(e.target.value);
+                    if (listFormErrors.name) {
+                      setListFormErrors({ ...listFormErrors, name: undefined });
+                    }
+                  }}
+                  className={cn("border-pc-tan/20", listFormErrors.name && "border-red-500")}
                   autoFocus
+                  aria-invalid={!!listFormErrors.name}
+                  aria-describedby={listFormErrors.name ? 'listName-error' : undefined}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && newListName.trim()) {
                       e.preventDefault();
@@ -281,6 +326,11 @@ export default function ShoppingListsPage() {
                     }
                   }}
                 />
+                {listFormErrors.name && (
+                  <p id="listName-error" className="text-sm text-red-600 mt-1" role="alert">
+                    {listFormErrors.name}
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="listDescription">Description (optional)</Label>
@@ -320,7 +370,13 @@ export default function ShoppingListsPage() {
             title={`My Lists (${shoppingLists?.length || 0})`}
           />
           <div className="mt-6">
-            {shoppingLists && shoppingLists.length > 0 ? (
+            {listsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : shoppingLists && shoppingLists.length > 0 ? (
               <div className="space-y-3">
                 {shoppingLists.map((list) => (
                   <button
@@ -400,7 +456,13 @@ export default function ShoppingListsPage() {
                             className="pl-10 border-pc-tan/20"
                           />
                         </div>
-                        {!allIngredients || allIngredients.length === 0 ? (
+                        {ingredientsLoading ? (
+                          <div className="mt-2 space-y-2">
+                            {[1, 2, 3].map((i) => (
+                              <Skeleton key={i} className="h-10 w-full rounded-lg" />
+                            ))}
+                          </div>
+                        ) : !allIngredients || allIngredients.length === 0 ? (
                           <p className="mt-2 text-sm text-pc-text-light">No ingredients available. Please add ingredients first.</p>
                         ) : filteredIngredients.length > 0 ? (
                           <div className="mt-2 max-h-48 overflow-y-auto border border-pc-tan/20 rounded-lg">
@@ -494,7 +556,13 @@ export default function ShoppingListsPage() {
             )}
           </div>
           <div>
-            {!selectedListId ? (
+            {selectedListLoading || itemsLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : !selectedListId ? (
               <div className="text-center py-20">
                 <div className="relative inline-block mb-8">
                   <div className="absolute inset-0 bg-pc-tan/30 rounded-full blur-3xl opacity-60" />
@@ -531,6 +599,7 @@ export default function ShoppingListsPage() {
                           <img 
                             src={ingredient.imageUrl} 
                             alt={ingredient.name}
+                            loading="lazy"
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               const target = e.target as HTMLImageElement;
@@ -576,8 +645,9 @@ export default function ShoppingListsPage() {
                         onClick={() => removeItemMutation.mutate({ itemId: item.id })}
                         disabled={removeItemMutation.isPending}
                         className="p-2 rounded-lg hover:bg-pc-tan/30 transition text-red-600"
+                        aria-label={`Remove ${ingredient.name} from shopping list`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </div>
                   );
