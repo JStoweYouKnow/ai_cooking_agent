@@ -28,7 +28,7 @@ export function GradientHero({
   description?: string;
   action?: React.ReactNode;
   badge?: React.ReactNode;
-  stats?: Array<{ label: string; value: number }>;
+  stats?: Array<{ label: string; value: number | string }>;
   className?: string;
 }) {
   return (

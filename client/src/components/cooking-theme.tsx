@@ -90,7 +90,11 @@ export function ServingsBadge({ count }: { count: number }) {
 export function RecipeCard({ 
   recipe,
   onClick,
-  className
+  className,
+  role,
+  tabIndex,
+  onKeyDown,
+  'aria-label': ariaLabel,
 }: {
   recipe: {
     id: number;
@@ -104,6 +108,10 @@ export function RecipeCard({
   };
   onClick?: () => void;
   className?: string;
+  role?: string;
+  tabIndex?: number;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+  'aria-label'?: string;
 }) {
   return (
     <motion.div
@@ -111,6 +119,10 @@ export function RecipeCard({
       whileTap={{ scale: 0.98 }}
       className={cn('cursor-pointer', className)}
       onClick={onClick}
+      role={role}
+      tabIndex={tabIndex}
+      onKeyDown={onKeyDown}
+      aria-label={ariaLabel}
     >
       <PCCard className="overflow-hidden p-0 group">
         {/* Recipe Image */}

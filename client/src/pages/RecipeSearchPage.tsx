@@ -19,10 +19,10 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { RecipeCardSkeleton } from '@/components/RecipeCardSkeleton';
 import { recipeUrlSchema, type RecipeUrlFormData } from '@/lib/validation';
-import { useLocation } from 'wouter';
+import { useRouter } from 'next/navigation';
 
 export default function RecipeSearchPage() {
-  const [, setLocation] = useLocation();
+  const router = useRouter();
   const [searchIngredients, setSearchIngredients] = useState<string[]>([]);
   const [currentIngredient, setCurrentIngredient] = useState('');
   const [selectedMealId, setSelectedMealId] = useState<string | null>(null);
@@ -414,14 +414,14 @@ export default function RecipeSearchPage() {
                     }}
                     onClick={() => {
                       // Navigate to recipe detail using client-side routing
-                      setLocation(`/recipes/${recipe.id}`);
+                      router.push(`/recipes/${recipe.id}` as any);
                     }}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        setLocation(`/recipes/${recipe.id}`);
+                        router.push(`/recipes/${recipe.id}` as any);
                       }
                     }}
                     aria-label={`View recipe: ${recipe.name}`}

@@ -33,7 +33,7 @@ export function EmptyState({
       y: 0,
       transition: {
         duration: prefersReducedMotion ? 0 : 0.4,
-        ease: "easeOut",
+        ease: [0.4, 0, 0.2, 1] as const, // easeOut cubic bezier
         staggerChildren: prefersReducedMotion ? 0 : 0.1,
       },
     },

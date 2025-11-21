@@ -23,11 +23,11 @@ import {
   ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
-import { useLocation } from 'wouter';
 
 export default function Dashboard() {
-  const [, setLocation] = useLocation();
+  const router = useRouter();
   const { data: recipes, isLoading: recipesLoading } = trpc.recipes.list.useQuery();
   const { data: ingredients, isLoading: ingredientsLoading } = trpc.ingredients.getUserIngredients.useQuery();
   const { data: shoppingLists, isLoading: listsLoading } = trpc.shoppingLists.list.useQuery();
@@ -88,9 +88,9 @@ export default function Dashboard() {
             </div>
           }
           stats={[
-            { label: 'Pantry items ready', value: ingredientsLoading ? '...' : (ingredients?.length || 0) },
-            { label: 'Recipes curated', value: recipesLoading ? '...' : (recipes?.length || 0) },
-            { label: 'Shopping lists', value: listsLoading ? '...' : (shoppingLists?.length || 0) }
+            { label: 'Pantry items ready', value: ingredientsLoading ? ('...' as any) : (ingredients?.length || 0) },
+            { label: 'Recipes curated', value: recipesLoading ? ('...' as any) : (recipes?.length || 0) },
+            { label: 'Shopping lists', value: listsLoading ? ('...' as any) : (shoppingLists?.length || 0) }
           ]}
         />
 
@@ -189,14 +189,14 @@ export default function Dashboard() {
                   }}
                   onClick={() => {
                     // Navigate to recipe detail using client-side routing
-                    setLocation(`/recipes/${recipe.id}`);
+                    router.push(`/recipes/${recipe.id}` as any);
                   }}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setLocation(`/recipes/${recipe.id}`);
+                      router.push(`/recipes/${recipe.id}` as any);
                     }
                   }}
                   aria-label={`View recipe: ${recipe.name}`}

@@ -21,15 +21,24 @@ async function initSentry() {
 
   try {
     // Dynamic import to avoid requiring Sentry if not configured
-    const sentryModule = await import('@sentry/node');
-    Sentry = sentryModule;
+    // Use Function constructor to bypass TypeScript module resolution
+    const importSentry = new Function('return import("@sentry/node")');
+    try {
+      const sentryModule = await importSentry();
+      Sentry = sentryModule;
+    } catch (importError) {
+      // Package not installed, skip initialization
+      logger.debug('Sentry package not installed, skipping initialization');
+      isSentryInitialized = true;
+      return;
+    }
     
     Sentry.init({
       dsn,
       environment: process.env.NODE_ENV || 'development',
       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
       profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-      beforeSend(event) {
+      beforeSend(event: any) {
         // Filter out sensitive data
         if (event.request) {
           // Remove sensitive headers
@@ -88,7 +97,8 @@ export async function captureMessage(message: string, level: 'info' | 'warning' 
   }
   
   // Always log to our logger
-  logger[level](message, context);
+  const logMethod = level === 'error' ? 'error' : level === 'warning' ? 'warn' : 'info';
+  logger[logMethod](message, context);
 }
 
 /**
