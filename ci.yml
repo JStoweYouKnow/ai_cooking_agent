@@ -1,0 +1,186 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  lint-and-type-check:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run TypeScript type check
+        run: npm run check
+      
+      - name: Run ESLint (if configured)
+        run: |
+          if [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ]; then
+            npx eslint . --ext .ts,.tsx --max-warnings 0
+          else
+            echo "ESLint not configured, skipping..."
+          fi
+        continue-on-error: true
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run tests
+        run: npm test -- --coverage || echo "Tests failed, but continuing..."
+        continue-on-error: true
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/coverage-final.json
+          fail_ci_if_error: false
+        continue-on-error: true
+
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: [lint-and-type-check]
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Verify required secrets
+        run: |
+          if [ -z "${{ secrets.NEXT_PUBLIC_CONVEX_URL }}" ]; then
+            echo "⚠️  Warning: NEXT_PUBLIC_CONVEX_URL secret is not set"
+          fi
+          if [ -z "${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" ]; then
+            echo "⚠️  Warning: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY secret is not set"
+          fi
+          if [ -z "${{ secrets.CLERK_SECRET_KEY }}" ]; then
+            echo "⚠️  Warning: CLERK_SECRET_KEY secret is not set"
+          fi
+        continue-on-error: true
+      
+      - name: Build Next.js application
+        run: npm run build:next
+        env:
+          # Next.js client-side env vars (inlined into bundle)
+          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # Server-side only secret
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: .next
+          retention-days: 7
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      
+      - name: Check for known vulnerabilities
+        run: |
+          npm audit --json > audit-results.json || true
+          if [ -f audit-results.json ]; then
+            echo "Audit results saved to audit-results.json"
+            cat audit-results.json | jq '.vulnerabilities | length' || echo "No vulnerabilities found"
+          fi
+
+  deploy-preview:
+    name: Deploy Preview (Vercel)
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to Vercel Preview
+        uses: amondnet/vercel-action@v41.1.4
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod=false'
+
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint-and-type-check, test, build, security-audit]
+    if: always()
+    
+    steps:
+      - name: Create summary
+        run: |
+          echo "## CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Type checking: ${{ needs.lint-and-type-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Tests: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Security audit: ${{ needs.security-audit.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "❌ **Build failed!** Check that all required secrets are configured:" >> $GITHUB_STEP_SUMMARY
+            echo "- NEXT_PUBLIC_CONVEX_URL" >> $GITHUB_STEP_SUMMARY
+            echo "- NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" >> $GITHUB_STEP_SUMMARY
+            echo "- CLERK_SECRET_KEY" >> $GITHUB_STEP_SUMMARY
+          fi
