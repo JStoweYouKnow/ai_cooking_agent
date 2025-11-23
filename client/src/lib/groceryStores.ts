@@ -26,6 +26,7 @@ interface StoreConfig {
   supportsMultiItem: boolean;
   additionalParams?: Record<string, string>;
   openStorefrontOnly?: boolean;
+  homepageUrl?: string; // URL for the store homepage (used for large lists)
 }
 
 /**
@@ -44,6 +45,7 @@ const STORE_CONFIGS: Record<Exclude<GroceryStore, 'clipboard'>, StoreConfig> = {
     },
     // Whole Foods opens directly to storefront, not search
     openStorefrontOnly: true,
+    homepageUrl: 'https://www.amazon.com/alm/storefront?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=nav_cs_dsk_grfl_stfr_wf',
   },
   sprouts: {
     name: 'Sprouts',
@@ -51,6 +53,7 @@ const STORE_CONFIGS: Record<Exclude<GroceryStore, 'clipboard'>, StoreConfig> = {
     searchUrl: 'https://shop.sprouts.com/search',
     searchParam: 'search_term',
     supportsMultiItem: false,
+    homepageUrl: 'https://shop.sprouts.com',
   },
   instacart: {
     name: 'Instacart',
@@ -58,6 +61,7 @@ const STORE_CONFIGS: Record<Exclude<GroceryStore, 'clipboard'>, StoreConfig> = {
     searchUrl: 'https://www.instacart.com/store/search',
     searchParam: 'query',
     supportsMultiItem: false,
+    homepageUrl: 'https://www.instacart.com',
   },
   amazonfresh: {
     name: 'Amazon Fresh',
@@ -66,6 +70,7 @@ const STORE_CONFIGS: Record<Exclude<GroceryStore, 'clipboard'>, StoreConfig> = {
     searchParam: 'k',
     additionalParams: { i: 'amazonfresh' },
     supportsMultiItem: false,
+    homepageUrl: 'https://www.amazon.com/alm/storefront?almBrandId=ATVPDKIKX0DER',
   },
   walmart: {
     name: 'Walmart',
@@ -73,6 +78,7 @@ const STORE_CONFIGS: Record<Exclude<GroceryStore, 'clipboard'>, StoreConfig> = {
     searchUrl: 'https://www.walmart.com/search',
     searchParam: 'q',
     supportsMultiItem: false,
+    homepageUrl: 'https://www.walmart.com',
   },
   target: {
     name: 'Target',
@@ -80,6 +86,7 @@ const STORE_CONFIGS: Record<Exclude<GroceryStore, 'clipboard'>, StoreConfig> = {
     searchUrl: 'https://www.target.com/s',
     searchParam: 'searchTerm',
     supportsMultiItem: false,
+    homepageUrl: 'https://www.target.com',
   },
 };
 
@@ -137,11 +144,38 @@ function generateSearchUrl(store: GroceryStore, searchTerm: string): string {
 }
 
 /**
+ * Get the homepage URL for a store
+ */
+function getStoreHomepage(store: GroceryStore): string {
+  if (store === 'clipboard') return '';
+  
+  const config = STORE_CONFIGS[store];
+  
+  // Use explicit homepage URL if provided
+  if (config.homepageUrl) {
+    return config.homepageUrl;
+  }
+  
+  // Otherwise, derive from search URL by removing search path
+  try {
+    const url = new URL(config.searchUrl);
+    // Remove the search path (e.g., /search, /s) and keep just the base domain
+    url.pathname = '/';
+    // Remove search params
+    url.search = '';
+    return url.toString();
+  } catch {
+    // Fallback to search URL without path
+    return config.searchUrl.split('/search')[0] || config.searchUrl.split('/s')[0] || config.searchUrl;
+  }
+}
+
+/**
  * Send shopping list to a grocery store
  * Opens search pages in new tabs (one per item or combined)
- * For lists over 10 items, uses a single combined search
+ * For lists over 10 items, opens homepage and copies list to clipboard
  */
-export function sendToGroceryStore(
+export async function sendToGroceryStore(
   items: ShoppingListItem[],
   store: GroceryStore,
   options: {
@@ -149,11 +183,11 @@ export function sendToGroceryStore(
     maxTabs?: number;
     combinedSearchThreshold?: number;
   } = {}
-): void {
+): Promise<void> {
   const { openInNewTabs = true, maxTabs = 10, combinedSearchThreshold = 10 } = options;
 
   if (store === 'clipboard') {
-    copyToClipboard(items);
+    await copyToClipboard(items);
     return;
   }
 
@@ -169,12 +203,11 @@ export function sendToGroceryStore(
     return;
   }
 
-  // For lists over the threshold, use combined search in a single tab
+  // For lists over the threshold, open homepage and copy list to clipboard
   if (uncheckedItems.length > combinedSearchThreshold) {
-    // Combine all item names into a single search query
-    const allItemNames = uncheckedItems.map(item => item.name).join(' ');
-    const url = generateSearchUrl(store, allItemNames);
-    window.open(url, openInNewTabs ? '_blank' : '_self');
+    const homepageUrl = getStoreHomepage(store);
+    window.open(homepageUrl, openInNewTabs ? '_blank' : '_self');
+    await copyToClipboard(uncheckedItems, 'withQuantity');
     return;
   }
 

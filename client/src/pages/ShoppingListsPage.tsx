@@ -310,12 +310,12 @@ export default function ShoppingListsPage() {
         toast.success('Shopping list copied to clipboard!');
       } else {
         const storeConfig = getAllStores().find(s => s.id === store);
-        const useCombinedSearch = uncheckedItems.length > 10;
-        sendToGroceryStore(uncheckedItems, store, { maxTabs: 10 });
+        const useHomepage = uncheckedItems.length > 10;
+        await sendToGroceryStore(uncheckedItems, store, { maxTabs: 10 });
         
-        if (useCombinedSearch) {
-          toast.success(`Opening combined search in ${storeConfig?.name}...`, {
-            description: `${uncheckedItems.length} items in one search`,
+        if (useHomepage) {
+          toast.success(`Opening ${storeConfig?.name} homepage...`, {
+            description: 'Shopping list copied to clipboard',
           });
         } else {
           toast.success(`Opening ${uncheckedItems.length} items in ${storeConfig?.name}...`, {
