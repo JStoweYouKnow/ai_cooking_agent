@@ -97,9 +97,7 @@ export function ModernHeader({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (setLocation && typeof setLocation === 'function') {
-                setLocation('/');
-              } else if (typeof window !== 'undefined') {
+              if (typeof window !== 'undefined') {
                 window.location.href = '/';
               }
             }}
@@ -151,11 +149,9 @@ export function ModernHeader({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  // Ensure navigation works by explicitly calling setLocation
-                  if (setLocation && typeof setLocation === 'function') {
-                    setLocation(item.href);
-                  } else if (typeof window !== 'undefined') {
-                    // Fallback to window.location if setLocation is not available
+                  // Use window.location.href directly to ensure navigation works
+                  // This bypasses any router context issues with dynamic imports
+                  if (typeof window !== 'undefined') {
                     window.location.href = item.href;
                   }
                 }}
@@ -252,9 +248,7 @@ export function ModernHeader({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (setLocation && typeof setLocation === 'function') {
-                      setLocation('/messages');
-                    } else if (typeof window !== 'undefined') {
+                    if (typeof window !== 'undefined') {
                       window.location.href = '/messages';
                     }
                   }}
@@ -308,9 +302,7 @@ export function ModernHeader({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (setLocation && typeof setLocation === 'function') {
-                          setLocation('/');
-                        } else if (typeof window !== 'undefined') {
+                        if (typeof window !== 'undefined') {
                           window.location.href = '/';
                         }
                       }}
@@ -326,9 +318,7 @@ export function ModernHeader({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (setLocation && typeof setLocation === 'function') {
-                          setLocation('/settings');
-                        } else if (typeof window !== 'undefined') {
+                        if (typeof window !== 'undefined') {
                           window.location.href = '/settings';
                         }
                       }}
