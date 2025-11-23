@@ -213,8 +213,8 @@ Save as `test-vercel-integration.sh`, make executable (`chmod +x test-vercel-int
 If none of the above methods work:
 
 1. **Check Vercel Status**: https://www.vercel-status.com/
-2. **Vercel Support**: https://vercel.com/support
-3. **GitHub Integration Docs**: https://vercel.com/docs/concepts/git
+2. **Vercel Support**: https://vercel.com/help
+3. **GitHub Integration Docs**: https://vercel.com/docs/git
 
 Common final fixes:
 - Clear browser cache and cookies

@@ -5,8 +5,7 @@
 
 "use client";
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link, useLocation } from 'wouter';
 import {
   ChefHat,
   Search,
@@ -33,6 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/web3/ThemeToggle';
+import { NotificationDropdown } from '@/components/NotificationDropdown';
 
 export function ModernHeader({
   onSearchClick,
@@ -41,9 +41,14 @@ export function ModernHeader({
   onSearchClick?: () => void;
   onMenuClick?: () => void;
 }) {
-  const pathname = usePathname();
+  const [location] = useLocation();
+  const pathname = location;
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
+  const { data: unreadMessageCount } = trpc.messages.getUnreadCount.useQuery(undefined, {
+    enabled: !!user,
+    refetchInterval: 30000,
+  });
   const [searchFocused, setSearchFocused] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -131,7 +136,7 @@ export function ModernHeader({
             return (
               <Link
                 key={item.name}
-                href={item.href as any}
+                href={item.href}
                 className={cn(
                   "flex flex-col items-center justify-center px-3 lg:px-4 py-1.5 min-w-[64px] lg:min-w-[72px]",
                   "transition-colors duration-200 rounded-md",
@@ -214,20 +219,22 @@ export function ModernHeader({
             {user && (
               <>
                 {/* Notifications */}
-                <button 
-                  className="flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                </button>
+                <NotificationDropdown />
 
                 {/* Messages */}
-                <button 
-                  className="flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
-                  aria-label="Messages"
-                >
-                  <MessageSquare className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                </button>
+                <Link href="/messages">
+                  <button 
+                    className="relative flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
+                    aria-label="Messages"
+                  >
+                    <MessageSquare className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                    {unreadMessageCount !== undefined && unreadMessageCount > 0 && (
+                      <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-semibold text-white">
+                        {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                      </span>
+                    )}
+                  </button>
+                </Link>
               </>
             )}
 

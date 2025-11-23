@@ -29,6 +29,8 @@ import { toast } from 'sonner';
 import { PageTransition } from '@/components/web3/PageTransition';
 import { getUUID } from '@/lib/utils';
 
+const RECIPE_SOURCE_USER_IMPORT = 'user_import';
+
 interface IngredientInput {
   id: string;
   name: string;
@@ -229,25 +231,35 @@ export default function CreateRecipePage() {
       return;
     }
 
+    // Helper to trim and convert empty strings to undefined
+    const trimOrUndefined = (value: string | undefined): string | undefined => {
+      if (!value) return undefined;
+      const trimmed = value.trim();
+      return trimmed === '' ? undefined : trimmed;
+    };
+
+    // Filter and map ingredients, ensuring names are trimmed and non-empty
+    const validIngredients = ingredients
+      .map((ing) => ({
+        name: ing.name.trim(),
+        quantity: trimOrUndefined(ing.quantity),
+        unit: trimOrUndefined(ing.unit),
+        category: trimOrUndefined(ing.category),
+      }))
+      .filter((ing) => ing.name.length > 0); // Remove ingredients with empty names
+
     createRecipeMutation.mutate({
-      name: formData.name,
-      description: formData.description || undefined,
-      instructions: formData.instructions || undefined,
-      imageUrl: formData.imageUrl || undefined,
-      cuisine: formData.cuisine || undefined,
-      category: formData.category || undefined,
+      name: formData.name.trim(),
+      description: trimOrUndefined(formData.description),
+      instructions: trimOrUndefined(formData.instructions),
+      imageUrl: trimOrUndefined(formData.imageUrl),
+      cuisine: trimOrUndefined(formData.cuisine),
+      category: trimOrUndefined(formData.category),
       cookingTime: formData.cookingTime ? Number(formData.cookingTime) : undefined,
       servings: formData.servings ? Number(formData.servings) : undefined,
-      sourceUrl: formData.sourceUrl || undefined,
-      source: 'user_import',
-      ingredients: ingredients.length > 0
-        ? ingredients.map((ing) => ({
-            name: ing.name,
-            quantity: ing.quantity || undefined,
-            unit: ing.unit || undefined,
-            category: ing.category || undefined,
-          }))
-        : undefined,
+      sourceUrl: trimOrUndefined(formData.sourceUrl),
+      source: RECIPE_SOURCE_USER_IMPORT,
+      ingredients: validIngredients.length > 0 ? validIngredients : undefined,
     });
   };
 

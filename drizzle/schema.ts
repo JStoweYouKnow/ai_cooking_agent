@@ -156,3 +156,75 @@ export const shoppingListItems = mysqlTable("shopping_list_items", {
 
 export type ShoppingListItem = typeof shoppingListItems.$inferSelect;
 export type InsertShoppingListItem = typeof shoppingListItems.$inferInsert;
+
+/**
+ * Notifications table - stores user notifications
+ */
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Notification type (e.g., 'recipe_shared', 'new_follower', 'recipe_liked') */
+  type: varchar("type", { length: 100 }).notNull(),
+  /** Notification title */
+  title: varchar("title", { length: 255 }).notNull(),
+  /** Notification content/body */
+  content: text("content"),
+  /** Whether the notification has been read */
+  isRead: boolean("isRead").default(false),
+  /** Optional link/action URL */
+  actionUrl: text("actionUrl"),
+  /** Optional metadata as JSON string */
+  metadata: text("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("notifications_userId_idx").on(table.userId),
+  isReadIdx: index("notifications_isRead_idx").on(table.isRead),
+  createdAtIdx: index("notifications_createdAt_idx").on(table.createdAt),
+}));
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
+/**
+ * Conversations table - stores message conversations between users
+ */
+export const conversations = mysqlTable("conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  /** First participant user ID */
+  user1Id: int("user1Id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Second participant user ID */
+  user2Id: int("user2Id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Last message timestamp for sorting */
+  lastMessageAt: timestamp("lastMessageAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  user1IdIdx: index("conversations_user1Id_idx").on(table.user1Id),
+  user2IdIdx: index("conversations_user2Id_idx").on(table.user2Id),
+  lastMessageAtIdx: index("conversations_lastMessageAt_idx").on(table.lastMessageAt),
+}));
+
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = typeof conversations.$inferInsert;
+
+/**
+ * Messages table - stores individual messages in conversations
+ */
+export const messages = mysqlTable("messages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  /** Sender user ID */
+  senderId: int("senderId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Message content */
+  content: text("content").notNull(),
+  /** Whether the message has been read */
+  isRead: boolean("isRead").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  conversationIdIdx: index("messages_conversationId_idx").on(table.conversationId),
+  senderIdIdx: index("messages_senderId_idx").on(table.senderId),
+  createdAtIdx: index("messages_createdAt_idx").on(table.createdAt),
+}));
+
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = typeof messages.$inferInsert;

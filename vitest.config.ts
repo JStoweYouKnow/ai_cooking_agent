@@ -11,13 +11,28 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
-    include: [
-      "server/**/*.test.ts",
-      "server/**/*.spec.ts",
-      "client/**/*.test.ts",
-      "client/**/*.spec.ts",
-    ],
     globals: true,
+    projects: [
+      {
+        name: "server",
+        test: {
+          environment: "node",
+          include: [
+            "server/**/*.test.ts",
+            "server/**/*.spec.ts",
+          ],
+        },
+      },
+      {
+        name: "client",
+        test: {
+          environment: "jsdom",
+          include: [
+            "client/**/*.test.ts",
+            "client/**/*.spec.ts",
+          ],
+        },
+      },
+    ],
   },
 });

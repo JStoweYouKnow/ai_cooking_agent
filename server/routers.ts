@@ -902,6 +902,147 @@ const shoppingListRouter = router({
     }),
 });
 
+// Notification router
+const notificationRouter = router({
+  list: protectedProcedure
+    .input(z.object({ limit: z.number().int().positive().max(100).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const limit = input?.limit || 50;
+      return db.getUserNotifications(ctx.user.id, limit);
+    }),
+
+  getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+    return db.getUnreadNotificationCount(ctx.user.id);
+  }),
+
+  markAsRead: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      await db.markNotificationAsRead(input.id, ctx.user.id);
+      return { success: true };
+    }),
+
+  markAllAsRead: protectedProcedure.mutation(async ({ ctx }) => {
+    await db.markAllNotificationsAsRead(ctx.user.id);
+    return { success: true };
+  }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      await db.deleteNotification(input.id, ctx.user.id);
+      return { success: true };
+    }),
+});
+
+// Message router
+const messageRouter = router({
+  getConversations: protectedProcedure.query(async ({ ctx }) => {
+    const conversations = await db.getUserConversations(ctx.user.id);
+    // Enrich with other user info and last message preview
+    const enriched = await Promise.all(
+      conversations.map(async (conv) => {
+        const otherUserId = conv.user1Id === ctx.user.id ? conv.user2Id : conv.user1Id;
+        const otherUser = await db.getUserById(otherUserId);
+        // Get last message
+        const messages = await db.getConversationMessages(conv.id, 1);
+        const lastMessage = messages[0] || null;
+        
+        return {
+          ...conv,
+          otherUser: otherUser ? { id: otherUser.id, name: otherUser.name, email: otherUser.email } : null,
+          lastMessage,
+        };
+      })
+    );
+    return enriched;
+  }),
+
+  getConversation: protectedProcedure
+    .input(z.object({ conversationId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const conversation = await db.getConversationById(input.conversationId, ctx.user.id);
+      if (!conversation) {
+        throw new Error("Conversation not found");
+      }
+      
+      const otherUserId = conversation.user1Id === ctx.user.id ? conversation.user2Id : conversation.user1Id;
+      const otherUser = await db.getUserById(otherUserId);
+      
+      return {
+        ...conversation,
+        otherUser: otherUser ? { id: otherUser.id, name: otherUser.name, email: otherUser.email } : null,
+      };
+    }),
+
+  getMessages: protectedProcedure
+    .input(z.object({ 
+      conversationId: z.number().int().positive(),
+      limit: z.number().int().positive().max(100).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Verify user has access to conversation
+      const conversation = await db.getConversationById(input.conversationId, ctx.user.id);
+      if (!conversation) {
+        throw new Error("Conversation not found");
+      }
+      
+      const limit = input.limit || 100;
+      const messages = await db.getConversationMessages(input.conversationId, limit);
+      
+      // Mark messages as read when user views them
+      await db.markMessagesAsRead(input.conversationId, ctx.user.id);
+      
+      return messages.reverse(); // Return in chronological order (oldest first)
+    }),
+
+  sendMessage: protectedProcedure
+    .input(z.object({
+      conversationId: z.number().int().positive().optional(),
+      recipientId: z.number().int().positive().optional(),
+      content: z.string().min(1).max(5000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (!input.conversationId && !input.recipientId) {
+        throw new Error("Either conversationId or recipientId must be provided");
+      }
+      
+      let conversationId = input.conversationId;
+      
+      // If recipientId provided, get or create conversation
+      if (input.recipientId) {
+        if (input.recipientId === ctx.user.id) {
+          throw new Error("Cannot send message to yourself");
+        }
+        const conversation = await db.getOrCreateConversation(ctx.user.id, input.recipientId);
+        conversationId = conversation.id;
+      }
+      
+      if (!conversationId) {
+        throw new Error("Conversation not found");
+      }
+      
+      // Verify user has access to conversation
+      const conversation = await db.getConversationById(conversationId, ctx.user.id);
+      if (!conversation) {
+        throw new Error("Conversation not found");
+      }
+      
+      const message = await db.createMessage({
+        conversationId,
+        senderId: ctx.user.id,
+        content: input.content,
+        isRead: false,
+      });
+      
+      return message;
+    }),
+
+  getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+    return db.getUnreadMessageCount(ctx.user.id);
+  }),
+});
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -917,6 +1058,8 @@ export const appRouter = router({
   recipes: recipeRouter,
   ingredients: ingredientRouter,
   shoppingLists: shoppingListRouter,
+  notifications: notificationRouter,
+  messages: messageRouter,
 });
 
 export type AppRouter = typeof appRouter;

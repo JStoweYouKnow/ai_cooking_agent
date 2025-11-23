@@ -1,6 +1,6 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, or, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem } from "../drizzle/schema";
+import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem, notifications, InsertNotification, Notification, conversations, InsertConversation, Conversation, messages, InsertMessage, Message } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -85,6 +85,18 @@ export async function getUserByOpenId(openId: string) {
   }
 
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserById(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
 }
@@ -344,4 +356,222 @@ export async function deleteShoppingListItem(itemId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.delete(shoppingListItems).where(eq(shoppingListItems.id, itemId));
+}
+
+// Notification queries
+export async function createNotification(notification: InsertNotification) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(notifications).values(notification);
+}
+
+export async function getUserNotifications(userId: number, limit: number = 50) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select()
+    .from(notifications)
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit);
+}
+
+export async function getUnreadNotificationCount(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select()
+    .from(notifications)
+    .where(and(
+      eq(notifications.userId, userId),
+      eq(notifications.isRead, false)
+    ));
+  return result.length;
+}
+
+export async function markNotificationAsRead(notificationId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(notifications)
+    .set({ isRead: true })
+    .where(and(
+      eq(notifications.id, notificationId),
+      eq(notifications.userId, userId)
+    ));
+}
+
+export async function markAllNotificationsAsRead(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(notifications)
+    .set({ isRead: true })
+    .where(eq(notifications.userId, userId));
+}
+
+export async function deleteNotification(notificationId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(notifications)
+    .where(and(
+      eq(notifications.id, notificationId),
+      eq(notifications.userId, userId)
+    ));
+}
+
+// Conversation queries
+export async function getOrCreateConversation(user1Id: number, user2Id: number): Promise<Conversation> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Ensure consistent ordering (smaller ID first)
+  const [id1, id2] = user1Id < user2Id ? [user1Id, user2Id] : [user2Id, user1Id];
+  
+  // Try to find existing conversation
+  const existing = await db.select()
+    .from(conversations)
+    .where(and(
+      eq(conversations.user1Id, id1),
+      eq(conversations.user2Id, id2)
+    ))
+    .limit(1);
+  
+  if (existing[0]) {
+    return existing[0];
+  }
+  
+  // Create new conversation
+  await db.insert(conversations).values({
+    user1Id: id1,
+    user2Id: id2,
+    lastMessageAt: new Date(),
+  });
+  
+  const created = await db.select()
+    .from(conversations)
+    .where(and(
+      eq(conversations.user1Id, id1),
+      eq(conversations.user2Id, id2)
+    ))
+    .limit(1);
+  
+  if (!created[0]) {
+    throw new Error("Failed to create conversation");
+  }
+  
+  return created[0];
+}
+
+export async function getUserConversations(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Get conversations where user is either user1 or user2
+  const allConversations = await db.select()
+    .from(conversations)
+    .where(or(
+      eq(conversations.user1Id, userId),
+      eq(conversations.user2Id, userId)
+    ))
+    .orderBy(desc(conversations.lastMessageAt));
+  
+  return allConversations;
+}
+
+export async function getConversationById(conversationId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.select()
+    .from(conversations)
+    .where(and(
+      eq(conversations.id, conversationId),
+      or(
+        eq(conversations.user1Id, userId),
+        eq(conversations.user2Id, userId)
+      )
+    ))
+    .limit(1);
+  
+  return result[0] || null;
+}
+
+export async function updateConversationLastMessage(conversationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(conversations)
+    .set({ lastMessageAt: new Date() })
+    .where(eq(conversations.id, conversationId));
+}
+
+// Message queries
+export async function createMessage(message: InsertMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Insert message
+  await db.insert(messages).values(message);
+  
+  // Update conversation's lastMessageAt
+  await updateConversationLastMessage(message.conversationId);
+  
+  // Fetch the created message
+  const recentMessages = await db.select()
+    .from(messages)
+    .where(eq(messages.conversationId, message.conversationId))
+    .orderBy(desc(messages.createdAt))
+    .limit(1);
+  
+  return recentMessages[0];
+}
+
+export async function getConversationMessages(conversationId: number, limit: number = 100) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(desc(messages.createdAt))
+    .limit(limit);
+}
+
+export async function markMessagesAsRead(conversationId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Mark all messages in conversation as read, except those sent by the user
+  return db.update(messages)
+    .set({ isRead: true })
+    .where(and(
+      eq(messages.conversationId, conversationId),
+      ne(messages.senderId, userId), // Only mark messages NOT sent by user
+      eq(messages.isRead, false) // Only mark unread messages
+    ));
+}
+
+export async function getUnreadMessageCount(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Get all conversations for the user
+  const userConvs = await getUserConversations(userId);
+  const convIds = userConvs.map(c => c.id);
+  
+  if (convIds.length === 0) return 0;
+  
+  // Count unread messages in user's conversations where user is not the sender
+  // This is a simplified version - in production you'd want a more efficient query
+  let totalUnread = 0;
+  for (const convId of convIds) {
+    const conv = await getConversationById(convId, userId);
+    if (!conv) continue;
+    
+    const otherUserId = conv.user1Id === userId ? conv.user2Id : conv.user1Id;
+    const unread = await db.select()
+      .from(messages)
+      .where(and(
+        eq(messages.conversationId, convId),
+        eq(messages.senderId, otherUserId),
+        eq(messages.isRead, false)
+      ));
+    totalUnread += unread.length;
+  }
+  
+  return totalUnread;
 }
