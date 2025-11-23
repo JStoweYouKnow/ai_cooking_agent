@@ -25,6 +25,7 @@ interface StoreConfig {
   searchParam: string;
   supportsMultiItem: boolean;
   additionalParams?: Record<string, string>;
+  openStorefrontOnly?: boolean;
 }
 
 /**
@@ -34,9 +35,15 @@ const STORE_CONFIGS: Record<Exclude<GroceryStore, 'clipboard'>, StoreConfig> = {
   wholefoods: {
     name: 'Whole Foods',
     icon: '🛒',
-    searchUrl: 'https://www.wholefoodsmarket.com/search',
-    searchParam: 'text',
+    searchUrl: 'https://www.amazon.com/alm/storefront',
+    searchParam: 'k',
     supportsMultiItem: false,
+    additionalParams: {
+      almBrandId: 'VUZHIFdob2xlIEZvb2Rz',
+      ref: 'nav_cs_dsk_grfl_stfr_wf',
+    },
+    // Whole Foods opens directly to storefront, not search
+    openStorefrontOnly: true,
   },
   sprouts: {
     name: 'Sprouts',
@@ -104,6 +111,19 @@ function generateSearchUrl(store: GroceryStore, searchTerm: string): string {
 
   const config = STORE_CONFIGS[store];
   const url = new URL(config.searchUrl);
+  
+  // For Whole Foods, just open the storefront (no search)
+  if (store === 'wholefoods') {
+    // Add the required params for the storefront
+    if (config.additionalParams) {
+      Object.entries(config.additionalParams).forEach(([key, value]) => {
+        url.searchParams.set(key, value);
+      });
+    }
+    return url.toString();
+  }
+  
+  // For other stores, add search term
   url.searchParams.set(config.searchParam, searchTerm);
 
   // Add any additional required params
@@ -141,6 +161,13 @@ export function sendToGroceryStore(
 
   // Filter out checked items (assuming you might add this later)
   const uncheckedItems = items;
+
+  // For stores that only open storefront (like Whole Foods), just open the storefront URL
+  if (config.openStorefrontOnly) {
+    const url = generateSearchUrl(store, '');
+    window.open(url, openInNewTabs ? '_blank' : '_self');
+    return;
+  }
 
   // For lists over the threshold, use combined search in a single tab
   if (uncheckedItems.length > combinedSearchThreshold) {
