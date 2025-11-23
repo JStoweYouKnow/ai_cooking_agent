@@ -42,7 +42,6 @@ export function ModernHeader({
   onMenuClick?: () => void;
 }) {
   const [location] = useLocation();
-  const pathname = location;
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const { data: unreadMessageCount } = trpc.messages.getUnreadCount.useQuery(undefined, {
@@ -51,10 +50,14 @@ export function ModernHeader({
   });
   const [searchFocused, setSearchFocused] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [pathname, setPathname] = useState('/');
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
+    if (typeof window !== 'undefined') {
+      setPathname(location);
+    }
+  }, [location]);
 
   const canShowAuthActions = isMounted && !isLoadingUser;
 

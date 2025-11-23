@@ -1,6 +1,6 @@
 "use client";
 import React from 'react';
-import { Link } from 'wouter';
+import Link from 'next/link';
 import { Bell, Check, CheckCheck, X } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
