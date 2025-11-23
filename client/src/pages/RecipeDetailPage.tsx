@@ -634,10 +634,10 @@ export default function RecipeDetailPage() {
                     Select a list
                   </label>
                   <Select value={selectedListId} onValueChange={setSelectedListId}>
-                    <SelectTrigger className="border-pc-tan/20">
+                    <SelectTrigger className="border-pc-tan/20 w-full">
                       <SelectValue placeholder="Choose a shopping list" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[100]">
                       {shoppingLists.map((list) => (
                         <SelectItem key={list.id} value={list.id.toString()}>
                           {list.name}
