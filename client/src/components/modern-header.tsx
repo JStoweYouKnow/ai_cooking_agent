@@ -290,13 +290,29 @@ export function ModernHeader({
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href="/" className="cursor-pointer">
+                    <Link 
+                      href="/" 
+                      onClick={() => {
+                        if (setLocation && typeof setLocation === 'function') {
+                          setLocation('/');
+                        }
+                      }}
+                      className="cursor-pointer"
+                    >
                       <User className="mr-2 h-4 w-4" />
                       <span>Profile</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/settings" className="cursor-pointer">
+                    <Link 
+                      href="/settings" 
+                      onClick={() => {
+                        if (setLocation && typeof setLocation === 'function') {
+                          setLocation('/settings');
+                        }
+                      }}
+                      className="cursor-pointer"
+                    >
                       <span>Settings</span>
                     </Link>
                   </DropdownMenuItem>
