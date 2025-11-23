@@ -637,9 +637,13 @@ export default function RecipeDetailPage() {
                     <SelectTrigger className="border-pc-tan/20 w-full">
                       <SelectValue placeholder="Choose a shopping list" />
                     </SelectTrigger>
-                    <SelectContent className="z-[100]">
+                    <SelectContent className="z-[100] bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 shadow-xl max-h-[200px]">
                       {shoppingLists.map((list) => (
-                        <SelectItem key={list.id} value={list.id.toString()}>
+                        <SelectItem 
+                          key={list.id} 
+                          value={list.id.toString()}
+                          className="hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700"
+                        >
                           {list.name}
                         </SelectItem>
                       ))}
