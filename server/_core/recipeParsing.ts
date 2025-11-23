@@ -101,11 +101,28 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 		const name = toText(recipe.name) || "";
 		if (!name) continue;
 		const description = toText(recipe.description) ?? null;
-		const instructions =
-			toText(recipe.recipeInstructions) ||
-			(Array.isArray(recipe.recipeInstructions)
-				? recipe.recipeInstructions.map((s: any) => s?.text || s).filter(Boolean).join("\n")
-				: null);
+		let instructions: string | null = null;
+		if (recipe.recipeInstructions) {
+			if (typeof recipe.recipeInstructions === "string") {
+				instructions = recipe.recipeInstructions;
+			} else if (Array.isArray(recipe.recipeInstructions)) {
+				instructions = recipe.recipeInstructions
+					.map((s: any) => {
+						if (typeof s === "string") return s;
+						if (typeof s === "object" && s !== null) {
+							return s.text || s.name || s.itemListElement || JSON.stringify(s);
+						}
+						return String(s || "");
+					})
+					.filter(Boolean)
+					.join("\n");
+			} else if (typeof recipe.recipeInstructions === "object") {
+				// Handle single object with text property
+				instructions = (recipe.recipeInstructions as any).text || JSON.stringify(recipe.recipeInstructions);
+			} else {
+				instructions = String(recipe.recipeInstructions);
+			}
+		}
 		const image =
 			typeof recipe.image === "string"
 				? recipe.image

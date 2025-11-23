@@ -152,15 +152,37 @@ const recipeRouter = router({
           if (!input.autoSave) {
             return { parsed: fallback as unknown };
           }
+          
+          // Ensure instructions is a string
+          let instructionsStr: string | undefined = undefined;
+          if (fallback.instructions !== undefined && fallback.instructions !== null) {
+            if (typeof fallback.instructions === "string") {
+              instructionsStr = fallback.instructions;
+            } else if (Array.isArray(fallback.instructions)) {
+              instructionsStr = fallback.instructions
+                .map((item: any) => typeof item === "string" ? item : JSON.stringify(item))
+                .join("\n");
+            } else {
+              instructionsStr = String(fallback.instructions);
+            }
+          }
+          
+          // Ensure description is a string
+          const descriptionStr = typeof fallback.description === "string" 
+            ? fallback.description 
+            : fallback.description !== undefined && fallback.description !== null
+            ? String(fallback.description)
+            : undefined;
+          
           await db.createRecipe({
             name: fallback.name,
-            description: fallback.description,
-            instructions: fallback.instructions,
-            imageUrl: fallback.imageUrl,
-            cuisine: fallback.cuisine,
-            category: fallback.category,
-            cookingTime: fallback.cookingTime,
-            servings: fallback.servings,
+            description: descriptionStr,
+            instructions: instructionsStr,
+            imageUrl: typeof fallback.imageUrl === "string" ? fallback.imageUrl : undefined,
+            cuisine: typeof fallback.cuisine === "string" ? fallback.cuisine : undefined,
+            category: typeof fallback.category === "string" ? fallback.category : undefined,
+            cookingTime: typeof fallback.cookingTime === "number" ? fallback.cookingTime : undefined,
+            servings: typeof fallback.servings === "number" ? fallback.servings : undefined,
             sourceUrl: input.url,
             userId: user.id,
             source: "url_import",
@@ -189,18 +211,40 @@ const recipeRouter = router({
         return { parsed };
       }
 
+      // Ensure instructions is a string (handle case where it might be an object)
+      let instructionsStr: string | undefined = undefined;
+      const instructionsValue: unknown = parsed.instructions;
+      if (instructionsValue !== undefined && instructionsValue !== null) {
+        if (typeof instructionsValue === "string") {
+          instructionsStr = instructionsValue;
+        } else if (Array.isArray(instructionsValue)) {
+          instructionsStr = instructionsValue
+            .map((item: any) => typeof item === "string" ? item : JSON.stringify(item))
+            .join("\n");
+        } else {
+          instructionsStr = String(instructionsValue);
+        }
+      }
+      
+      // Ensure description is a string
+      const descriptionStr = typeof parsed.description === "string" 
+        ? parsed.description 
+        : parsed.description !== undefined && parsed.description !== null
+        ? String(parsed.description)
+        : undefined;
+      
       await db.createRecipe({
         name: parsed.name,
-        description: parsed.description ?? undefined,
-        instructions: parsed.instructions ?? undefined,
-        imageUrl: parsed.imageUrl ?? undefined,
-        cuisine: parsed.cuisine ?? undefined,
-        category: parsed.category ?? undefined,
-        cookingTime: parsed.cookingTime ?? undefined,
-        servings: parsed.servings ?? undefined,
-        sourceUrl: parsed.sourceUrl ?? undefined,
+        description: descriptionStr,
+        instructions: instructionsStr,
+        imageUrl: typeof parsed.imageUrl === "string" ? parsed.imageUrl : undefined,
+        cuisine: typeof parsed.cuisine === "string" ? parsed.cuisine : undefined,
+        category: typeof parsed.category === "string" ? parsed.category : undefined,
+        cookingTime: typeof parsed.cookingTime === "number" ? parsed.cookingTime : undefined,
+        servings: typeof parsed.servings === "number" ? parsed.servings : undefined,
+        sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : undefined,
         userId: user.id,
-        source: parsed.source ?? "url_import",
+        source: typeof parsed.source === "string" ? parsed.source : "url_import",
       });
       const recipes = await db.getUserRecipes(user.id);
       const created = recipes[recipes.length - 1];
