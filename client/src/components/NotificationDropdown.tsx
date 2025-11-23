@@ -1,6 +1,6 @@
 "use client";
 import React from 'react';
-import Link from 'next/link';
+import { Link } from 'wouter';
 import { Bell, Check, CheckCheck, X } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
@@ -143,7 +143,7 @@ export function NotificationDropdown() {
                   </div>
                   {notification.actionUrl && (
                     <Link
-                      href={notification.actionUrl}
+                      href={notification.actionUrl as any}
                       className="absolute inset-0"
                       onClick={() => {
                         if (!notification.isRead) {
