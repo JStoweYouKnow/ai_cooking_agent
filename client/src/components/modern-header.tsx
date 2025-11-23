@@ -138,24 +138,27 @@ export function ModernHeader({
               (item.href !== '/' && pathname.startsWith(item.href));
             
             return (
-              <Link
+              <button
                 key={item.name}
-                href={item.href}
+                type="button"
                 onClick={(e) => {
-                  // Let wouter Link handle navigation first, but ensure it works
-                  if (typeof window !== 'undefined' && setLocation) {
-                    try {
-                      setLocation(item.href);
-                      // Prevent default only if setLocation succeeds
-                      e.preventDefault();
-                    } catch (err) {
-                      // If setLocation fails, allow default behavior or use fallback
-                      console.warn('Navigation error:', err);
-                      // Don't prevent default - let browser handle it or use fallback
-                      if (!e.defaultPrevented) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Navigation clicked:', item.name, item.href, 'setLocation:', typeof setLocation);
+                  if (typeof window !== 'undefined') {
+                    if (setLocation && typeof setLocation === 'function') {
+                      try {
+                        console.log('Calling setLocation with:', item.href);
+                        setLocation(item.href);
+                        console.log('setLocation called successfully');
+                      } catch (error) {
+                        console.error('setLocation error:', error);
                         window.location.href = item.href;
-                        e.preventDefault();
                       }
+                    } else {
+                      console.log('setLocation not available, using window.location');
+                      // Fallback to window.location if setLocation is not available
+                      window.location.href = item.href;
                     }
                   }
                 }}
@@ -164,9 +167,10 @@ export function ModernHeader({
                   "transition-colors duration-200 rounded-md",
                   "hover:bg-gray-100 dark:hover:bg-gray-800",
                   "cursor-pointer",
-                  "no-underline",
                   "pointer-events-auto",
                   "select-none",
+                  "bg-transparent border-none outline-none",
+                  "focus:outline-none focus:ring-2 focus:ring-[var(--russet-brown)] focus:ring-offset-2",
                   isActive && "bg-transparent"
                 )}
                 style={{ pointerEvents: 'auto' }}
@@ -189,7 +193,7 @@ export function ModernHeader({
                 >
                   {item.name}
                 </span>
-              </Link>
+              </button>
             );
           })}
         </nav>
