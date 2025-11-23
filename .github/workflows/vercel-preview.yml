@@ -8,6 +8,12 @@ on:
 
 jobs:
   preview:
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    concurrency:
+      group: validate-preview-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
 
     steps:
@@ -17,12 +23,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 10.22.0
+          version: 10.4.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
