@@ -138,14 +138,27 @@ export function ModernHeader({
               (item.href !== '/' && pathname.startsWith(item.href));
             
             return (
-              <button
+              <Link
                 key={item.name}
-                onClick={() => setLocation(item.href)}
+                href={item.href}
+                onClick={(e) => {
+                  // Ensure navigation works even if Link component has issues
+                  if (typeof window !== 'undefined' && setLocation) {
+                    try {
+                      setLocation(item.href);
+                    } catch (err) {
+                      // Fallback to window.location if setLocation fails
+                      window.location.href = item.href;
+                    }
+                  }
+                }}
                 className={cn(
                   "flex flex-col items-center justify-center px-3 lg:px-4 py-1.5 min-w-[64px] lg:min-w-[72px]",
                   "transition-colors duration-200 rounded-md",
                   "hover:bg-gray-100 dark:hover:bg-gray-800",
                   "cursor-pointer",
+                  "no-underline",
+                  "text-inherit",
                   isActive && "bg-transparent"
                 )}
               >
@@ -167,7 +180,7 @@ export function ModernHeader({
                 >
                   {item.name}
                 </span>
-              </button>
+              </Link>
             );
           })}
         </nav>
