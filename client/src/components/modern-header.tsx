@@ -94,9 +94,13 @@ export function ModernHeader({
           {/* Logo */}
           <Link 
             href="/" 
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               if (setLocation && typeof setLocation === 'function') {
                 setLocation('/');
+              } else if (typeof window !== 'undefined') {
+                window.location.href = '/';
               }
             }}
             className="flex items-center group flex-shrink-0"
@@ -145,9 +149,14 @@ export function ModernHeader({
                 key={item.name}
                 href={item.href}
                 onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   // Ensure navigation works by explicitly calling setLocation
                   if (setLocation && typeof setLocation === 'function') {
                     setLocation(item.href);
+                  } else if (typeof window !== 'undefined') {
+                    // Fallback to window.location if setLocation is not available
+                    window.location.href = item.href;
                   }
                 }}
                 className={cn(
@@ -240,9 +249,13 @@ export function ModernHeader({
                 {/* Messages */}
                 <Link 
                   href="/messages"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     if (setLocation && typeof setLocation === 'function') {
                       setLocation('/messages');
+                    } else if (typeof window !== 'undefined') {
+                      window.location.href = '/messages';
                     }
                   }}
                 >
@@ -292,9 +305,13 @@ export function ModernHeader({
                   <DropdownMenuItem asChild>
                     <Link 
                       href="/" 
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         if (setLocation && typeof setLocation === 'function') {
                           setLocation('/');
+                        } else if (typeof window !== 'undefined') {
+                          window.location.href = '/';
                         }
                       }}
                       className="cursor-pointer"
@@ -306,9 +323,13 @@ export function ModernHeader({
                   <DropdownMenuItem asChild>
                     <Link 
                       href="/settings" 
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         if (setLocation && typeof setLocation === 'function') {
                           setLocation('/settings');
+                        } else if (typeof window !== 'undefined') {
+                          window.location.href = '/settings';
                         }
                       }}
                       className="cursor-pointer"
