@@ -1,14 +1,9 @@
 "use client";
 import { useState } from 'react';
-import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { MobileMenuDrawer, BottomNav } from './modern-menu';
 import { AnimatedBackground } from './web3';
-
-// Dynamically import ModernHeader with SSR disabled to avoid wouter SSR issues
-const ModernHeader = dynamic(() => import('./modern-header').then(mod => ({ default: mod.ModernHeader })), {
-  ssr: false,
-});
+import { ModernHeader } from './modern-header';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
