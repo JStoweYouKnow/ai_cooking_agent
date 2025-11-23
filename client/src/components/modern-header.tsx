@@ -130,7 +130,7 @@ export function ModernHeader({
         </div>
 
         {/* Center: Horizontal Navigation (Desktop only) */}
-        <nav className="hidden lg:flex items-center gap-1 flex-1 justify-center mx-8">
+        <nav className="hidden lg:flex items-center gap-1 flex-1 justify-center mx-8 relative z-10">
           {navigation.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -142,25 +142,34 @@ export function ModernHeader({
                 key={item.name}
                 href={item.href}
                 onClick={(e) => {
-                  // Ensure navigation works even if Link component has issues
+                  // Let wouter Link handle navigation first, but ensure it works
                   if (typeof window !== 'undefined' && setLocation) {
                     try {
                       setLocation(item.href);
+                      // Prevent default only if setLocation succeeds
+                      e.preventDefault();
                     } catch (err) {
-                      // Fallback to window.location if setLocation fails
-                      window.location.href = item.href;
+                      // If setLocation fails, allow default behavior or use fallback
+                      console.warn('Navigation error:', err);
+                      // Don't prevent default - let browser handle it or use fallback
+                      if (!e.defaultPrevented) {
+                        window.location.href = item.href;
+                        e.preventDefault();
+                      }
                     }
                   }
                 }}
                 className={cn(
-                  "flex flex-col items-center justify-center px-3 lg:px-4 py-1.5 min-w-[64px] lg:min-w-[72px]",
+                  "relative z-10 flex flex-col items-center justify-center px-3 lg:px-4 py-1.5 min-w-[64px] lg:min-w-[72px]",
                   "transition-colors duration-200 rounded-md",
                   "hover:bg-gray-100 dark:hover:bg-gray-800",
                   "cursor-pointer",
                   "no-underline",
-                  "text-inherit",
+                  "pointer-events-auto",
+                  "select-none",
                   isActive && "bg-transparent"
                 )}
+                style={{ pointerEvents: 'auto' }}
               >
                 <Icon 
                   className={cn(
