@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ShoppingCart, Plus, Trash2, Download, Check, Search, Sparkles, List } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Download, Check, Search, Sparkles, List, Edit2, X } from 'lucide-react';
 import { getIngredientIcon } from '@/lib/ingredientIcons';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
@@ -25,6 +25,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 export default function ShoppingListsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+  const [renamingListId, setRenamingListId] = useState<number | null>(null);
+  const [renameListName, setRenameListName] = useState('');
   const [newListName, setNewListName] = useState('');
   const [newListDescription, setNewListDescription] = useState('');
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
@@ -379,21 +382,42 @@ export default function ShoppingListsPage() {
             ) : shoppingLists && shoppingLists.length > 0 ? (
               <div className="space-y-3">
                 {shoppingLists.map((list) => (
-                  <button
+                  <div
                     key={list.id}
-                    onClick={() => setSelectedListId(list.id)}
                     className={cn(
-                      "w-full text-left p-4 rounded-xl border-2 transition-all duration-200",
+                      "w-full rounded-xl border-2 transition-all duration-200 relative group",
                       selectedListId === list.id
                         ? 'border-pc-navy bg-gradient-to-r from-pc-navy to-pc-navy/90 text-pc-white shadow-lg'
                         : 'border-pc-tan/40 hover:bg-pc-tan/20 hover:border-pc-olive/40 text-pc-navy'
                     )}
                   >
-                    <h3 className="font-bold text-lg">{list.name}</h3>
-                    {list.description && (
-                      <p className="text-sm mt-1 opacity-80">{list.description}</p>
-                    )}
-                  </button>
+                    <button
+                      onClick={() => setSelectedListId(list.id)}
+                      className="w-full text-left p-4 pr-12"
+                    >
+                      <h3 className="font-bold text-lg">{list.name}</h3>
+                      {list.description && (
+                        <p className="text-sm mt-1 opacity-80">{list.description}</p>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenamingListId(list.id);
+                        setRenameListName(list.name);
+                        setIsRenameDialogOpen(true);
+                      }}
+                      className={cn(
+                        "absolute top-2 right-2 p-1.5 rounded-md transition-colors",
+                        selectedListId === list.id
+                          ? 'hover:bg-white/20 text-white'
+                          : 'hover:bg-pc-tan/30 text-pc-navy opacity-0 group-hover:opacity-100'
+                      )}
+                      aria-label="Rename list"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -419,8 +443,23 @@ export default function ShoppingListsPage() {
         {/* List Details */}
         <GlassCard glow={false} className="lg:col-span-2">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-            <div>
-              <GradientText className="text-2xl font-bold">{selectedList?.name || 'Select a List'}</GradientText>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <GradientText className="text-2xl font-bold">{selectedList?.name || 'Select a List'}</GradientText>
+                {selectedList && (
+                  <button
+                    onClick={() => {
+                      setRenamingListId(selectedList.id);
+                      setRenameListName(selectedList.name);
+                      setIsRenameDialogOpen(true);
+                    }}
+                    className="p-1.5 rounded-md hover:bg-pc-tan/20 text-pc-navy transition-colors"
+                    aria-label="Rename list"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
               {selectedList && (
                 <p className="text-base text-pc-text-light mt-1 font-medium">
                   {checkedCount} of {totalCount} items checked
@@ -668,6 +707,69 @@ export default function ShoppingListsPage() {
           </div>
         </GlassCard>
       </div>
+
+      {/* Rename List Dialog */}
+      <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-pc-navy flex items-center gap-2">
+              <Edit2 className="h-5 w-5 text-pc-olive" />
+              Rename Shopping List
+            </DialogTitle>
+            <DialogDescription>
+              Enter a new name for your shopping list
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!renamingListId || !renameListName.trim()) {
+                toast.error('Please enter a list name');
+                return;
+              }
+              updateListMutation.mutate({
+                id: renamingListId,
+                name: renameListName.trim(),
+              });
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <Label htmlFor="renameListName">List Name</Label>
+              <Input
+                id="renameListName"
+                value={renameListName}
+                onChange={(e) => setRenameListName(e.target.value)}
+                placeholder="Enter list name"
+                className="border-pc-tan/20 mt-2"
+                autoFocus
+                disabled={updateListMutation.isPending}
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <PCButton
+                type="button"
+                onClick={() => {
+                  setIsRenameDialogOpen(false);
+                  setRenamingListId(null);
+                  setRenameListName('');
+                }}
+                disabled={updateListMutation.isPending}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800"
+              >
+                Cancel
+              </PCButton>
+              <PCButton
+                type="submit"
+                color="olive"
+                disabled={updateListMutation.isPending || !renameListName.trim()}
+              >
+                {updateListMutation.isPending ? 'Renaming...' : 'Rename'}
+              </PCButton>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

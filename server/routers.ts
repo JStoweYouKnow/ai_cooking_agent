@@ -801,6 +801,38 @@ const shoppingListRouter = router({
       return db.deleteShoppingListItem(input.itemId);
     }),
 
+  update: optionalAuthProcedure
+    .input(z.object({ 
+      id: z.number().int().positive(),
+      name: z.string().min(1).max(255).optional(),
+      description: z.string().max(1000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const shoppingList = await db.getShoppingListById(input.id);
+      if (!shoppingList) {
+        throw new Error("Shopping list not found");
+      }
+      // Verify ownership
+      if (shoppingList.userId !== user.id) {
+        throw new Error("Unauthorized: You can only update your own shopping lists");
+      }
+      
+      const updates: { name?: string; description?: string } = {};
+      if (input.name !== undefined) {
+        updates.name = input.name;
+      }
+      if (input.description !== undefined) {
+        updates.description = input.description;
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        throw new Error("No updates provided");
+      }
+      
+      return db.updateShoppingList(input.id, updates);
+    }),
+
   delete: optionalAuthProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {

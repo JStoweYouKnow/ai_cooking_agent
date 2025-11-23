@@ -339,6 +339,31 @@ export async function updateShoppingListItem(itemId: number, isChecked: boolean)
   return db.update(shoppingListItems).set({ isChecked }).where(eq(shoppingListItems.id, itemId));
 }
 
+export async function updateShoppingList(shoppingListId: number, updates: { name?: string; description?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const updateData: any = {};
+  if (updates.name !== undefined) {
+    updateData.name = updates.name;
+  }
+  if (updates.description !== undefined) {
+    updateData.description = updates.description;
+  }
+  
+  if (Object.keys(updateData).length === 0) {
+    throw new Error("No updates provided");
+  }
+  
+  await db.update(shoppingLists)
+    .set(updateData)
+    .where(eq(shoppingLists.id, shoppingListId));
+  
+  // Return the updated list
+  const updated = await db.select().from(shoppingLists).where(eq(shoppingLists.id, shoppingListId)).limit(1);
+  return updated[0] || null;
+}
+
 export async function deleteShoppingList(shoppingListId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
