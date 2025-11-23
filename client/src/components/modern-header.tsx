@@ -41,7 +41,20 @@ export function ModernHeader({
   onSearchClick?: () => void;
   onMenuClick?: () => void;
 }) {
-  const [location, setLocation] = useLocation();
+  // useLocation hook - will only run on client side due to dynamic import with ssr: false
+  // But we add a safety check just in case
+  let location: string = '/';
+  let setLocation: (path: string) => void = () => {};
+  
+  if (typeof window !== 'undefined') {
+    try {
+      const locationHook = useLocation();
+      location = locationHook[0];
+      setLocation = locationHook[1];
+    } catch (error) {
+      console.warn('useLocation hook error:', error);
+    }
+  }
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const { data: unreadMessageCount } = trpc.messages.getUnreadCount.useQuery(undefined, {
