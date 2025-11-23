@@ -5,7 +5,7 @@
 
 "use client";
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation } from 'wouter';
+import { usePathname } from 'next/navigation';
 import {
   ChefHat,
   Search,
@@ -41,9 +41,7 @@ export function ModernHeader({
   onSearchClick?: () => void;
   onMenuClick?: () => void;
 }) {
-  // useLocation hook - component is dynamically imported with ssr: false
-  // so this will only run on client side
-  const [location, setLocation] = useLocation();
+  const pathname = usePathname();
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const { data: unreadMessageCount } = trpc.messages.getUnreadCount.useQuery(undefined, {
@@ -52,15 +50,10 @@ export function ModernHeader({
   });
   const [searchFocused, setSearchFocused] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [pathname, setPathname] = useState('/');
 
   useEffect(() => {
     setIsMounted(true);
-    // Only set pathname on client side
-    if (typeof window !== 'undefined') {
-      setPathname(location);
-    }
-  }, [location]);
+  }, []);
 
   const canShowAuthActions = isMounted && !isLoadingUser;
 
@@ -140,42 +133,19 @@ export function ModernHeader({
               (item.href !== '/' && pathname.startsWith(item.href));
             
             return (
-              <button
+              <Link
                 key={item.name}
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  console.log('Navigation clicked:', item.name, item.href, 'setLocation:', typeof setLocation);
-                  if (typeof window !== 'undefined') {
-                    if (setLocation && typeof setLocation === 'function') {
-                      try {
-                        console.log('Calling setLocation with:', item.href);
-                        setLocation(item.href);
-                        console.log('setLocation called successfully');
-                      } catch (error) {
-                        console.error('setLocation error:', error);
-                        window.location.href = item.href;
-                      }
-                    } else {
-                      console.log('setLocation not available, using window.location');
-                      // Fallback to window.location if setLocation is not available
-                      window.location.href = item.href;
-                    }
-                  }
-                }}
+                href={item.href}
                 className={cn(
                   "relative z-10 flex flex-col items-center justify-center px-3 lg:px-4 py-1.5 min-w-[64px] lg:min-w-[72px]",
                   "transition-colors duration-200 rounded-md",
                   "hover:bg-gray-100 dark:hover:bg-gray-800",
                   "cursor-pointer",
-                  "pointer-events-auto",
                   "select-none",
                   "bg-transparent border-none outline-none",
                   "focus:outline-none focus:ring-2 focus:ring-[var(--russet-brown)] focus:ring-offset-2",
                   isActive && "bg-transparent"
                 )}
-                style={{ pointerEvents: 'auto' }}
               >
                 <Icon 
                   className={cn(
@@ -195,7 +165,7 @@ export function ModernHeader({
                 >
                   {item.name}
                 </span>
-              </button>
+              </Link>
             );
           })}
         </nav>
