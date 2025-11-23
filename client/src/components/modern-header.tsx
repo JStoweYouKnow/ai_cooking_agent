@@ -54,6 +54,7 @@ export function ModernHeader({
 
   useEffect(() => {
     setIsMounted(true);
+    // Only set pathname on client side
     if (typeof window !== 'undefined') {
       setPathname(location);
     }
