@@ -119,6 +119,7 @@ function generateSearchUrl(store: GroceryStore, searchTerm: string): string {
 /**
  * Send shopping list to a grocery store
  * Opens search pages in new tabs (one per item or combined)
+ * For lists over 10 items, uses a single combined search
  */
 export function sendToGroceryStore(
   items: ShoppingListItem[],
@@ -126,9 +127,10 @@ export function sendToGroceryStore(
   options: {
     openInNewTabs?: boolean;
     maxTabs?: number;
+    combinedSearchThreshold?: number;
   } = {}
 ): void {
-  const { openInNewTabs = true, maxTabs = 10 } = options;
+  const { openInNewTabs = true, maxTabs = 10, combinedSearchThreshold = 10 } = options;
 
   if (store === 'clipboard') {
     copyToClipboard(items);
@@ -140,6 +142,16 @@ export function sendToGroceryStore(
   // Filter out checked items (assuming you might add this later)
   const uncheckedItems = items;
 
+  // For lists over the threshold, use combined search in a single tab
+  if (uncheckedItems.length > combinedSearchThreshold) {
+    // Combine all item names into a single search query
+    const allItemNames = uncheckedItems.map(item => item.name).join(' ');
+    const url = generateSearchUrl(store, allItemNames);
+    window.open(url, openInNewTabs ? '_blank' : '_self');
+    return;
+  }
+
+  // For smaller lists, check if store supports multi-item or use individual tabs
   if (config.supportsMultiItem) {
     // Some stores might support adding multiple items in one URL
     const allItems = uncheckedItems.map(formatItemForSearch).join(', ');

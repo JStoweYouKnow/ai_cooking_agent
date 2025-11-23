@@ -310,10 +310,18 @@ export default function ShoppingListsPage() {
         toast.success('Shopping list copied to clipboard!');
       } else {
         const storeConfig = getAllStores().find(s => s.id === store);
+        const useCombinedSearch = uncheckedItems.length > 10;
         sendToGroceryStore(uncheckedItems, store, { maxTabs: 10 });
-        toast.success(`Opening ${uncheckedItems.length} items in ${storeConfig?.name}...`, {
-          description: 'Check your browser for new tabs',
-        });
+        
+        if (useCombinedSearch) {
+          toast.success(`Opening combined search in ${storeConfig?.name}...`, {
+            description: `${uncheckedItems.length} items in one search`,
+          });
+        } else {
+          toast.success(`Opening ${uncheckedItems.length} items in ${storeConfig?.name}...`, {
+            description: 'Check your browser for new tabs',
+          });
+        }
       }
     } catch (error: any) {
       console.error('Send to store error:', error);
