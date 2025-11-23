@@ -41,7 +41,7 @@ export function ModernHeader({
   onSearchClick?: () => void;
   onMenuClick?: () => void;
 }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const { data: unreadMessageCount } = trpc.messages.getUnreadCount.useQuery(undefined, {
@@ -138,13 +138,14 @@ export function ModernHeader({
               (item.href !== '/' && pathname.startsWith(item.href));
             
             return (
-              <Link
+              <button
                 key={item.name}
-                href={item.href}
+                onClick={() => setLocation(item.href)}
                 className={cn(
                   "flex flex-col items-center justify-center px-3 lg:px-4 py-1.5 min-w-[64px] lg:min-w-[72px]",
                   "transition-colors duration-200 rounded-md",
                   "hover:bg-gray-100 dark:hover:bg-gray-800",
+                  "cursor-pointer",
                   isActive && "bg-transparent"
                 )}
               >
@@ -166,7 +167,7 @@ export function ModernHeader({
                 >
                   {item.name}
                 </span>
-              </Link>
+              </button>
             );
           })}
         </nav>
