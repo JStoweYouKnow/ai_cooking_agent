@@ -1,0 +1,48 @@
+name: Vercel Preview Deployment
+
+# Runs on every PR to test changes before merging
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.22.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # Optional: Deploy to Vercel preview
+      # Uncomment when you have VERCEL_TOKEN set up
+      # - name: Deploy to Vercel Preview
+      #   uses: amondnet/vercel-action@v41.1.4
+      #   with:
+      #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
+      #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+      #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+      #     github-comment: true

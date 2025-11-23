@@ -149,6 +149,12 @@ export async function updateRecipeFavorite(recipeId: number, isFavorite: boolean
   return db.update(recipes).set({ isFavorite }).where(eq(recipes.id, recipeId));
 }
 
+export async function deleteRecipe(recipeId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(recipes).where(eq(recipes.id, recipeId));
+}
+
 // Ingredient queries
 export async function getOrCreateIngredient(name: string, category?: string) {
   const db = await getDb();

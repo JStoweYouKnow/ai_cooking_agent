@@ -11,6 +11,7 @@ import { RecipeCardSkeleton } from "@/components/RecipeCardSkeleton";
 const Dashboard = lazy(() => import("./pages/Dashboard").then(m => ({ default: m.default })));
 const IngredientsPage = lazy(() => import("./pages/IngredientsPage").then(m => ({ default: m.default })));
 const RecipeSearchPage = lazy(() => import("./pages/RecipeSearchPage").then(m => ({ default: m.default })));
+const CreateRecipePage = lazy(() => import("./pages/CreateRecipePage").then(m => ({ default: m.default })));
 const RecipeDetailPage = lazy(() => import("./pages/RecipeDetailPage").then(m => ({ default: m.default })));
 const ShoppingListsPage = lazy(() => import("./pages/ShoppingListsPage").then(m => ({ default: m.default })));
 const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.default })));
@@ -47,6 +48,13 @@ function Router() {
 					{() => (
 						<Suspense fallback={<PageLoader />}>
 							<RecipeSearchPage />
+						</Suspense>
+					)}
+				</Route>
+				<Route path="/recipes/create">
+					{() => (
+						<Suspense fallback={<PageLoader />}>
+							<CreateRecipePage />
 						</Suspense>
 					)}
 				</Route>

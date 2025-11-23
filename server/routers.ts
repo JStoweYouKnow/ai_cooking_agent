@@ -276,6 +276,21 @@ const recipeRouter = router({
       return db.updateRecipeFavorite(input.id, input.isFavorite);
     }),
 
+  delete: optionalAuthProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const recipe = await db.getRecipeById(input.id);
+      if (!recipe) {
+        throw new Error("Recipe not found");
+      }
+      // Verify ownership
+      if (recipe.userId !== user.id) {
+        throw new Error("Unauthorized: You can only delete your own recipes");
+      }
+      return db.deleteRecipe(input.id);
+    }),
+
   searchByIngredients: publicProcedure
     .input(
       z.object({

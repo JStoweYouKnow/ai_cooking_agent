@@ -249,7 +249,18 @@ The project includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that
 
 ### Deployment Platforms
 
-#### Vercel / Netlify
+#### Vercel (Recommended)
+**Deployment Method**: Vercel auto-deploy via Git integration (authoritative)
+
+1. **Connect repository** in Vercel dashboard
+2. **Set environment variables** in Vercel project settings
+3. **Push to `main` branch** - Vercel automatically deploys
+
+The project includes a GitHub Actions workflow (`.github/workflows/vercel-production.yml`) that runs **pre-deployment validation** (typecheck, tests, build) before Vercel's auto-deployment. This ensures code quality without blocking the deployment process.
+
+For detailed setup instructions, see [VERCEL_DEPLOYMENT_GUIDE.md](./VERCEL_DEPLOYMENT_GUIDE.md).
+
+#### Netlify
 ```bash
 # Connect your GitHub repo and deploy
 # Set environment variables in platform dashboard

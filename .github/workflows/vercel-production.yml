@@ -1,0 +1,75 @@
+name: Vercel CI/Pre-Deployment Validation
+
+# Runs when code is merged to main
+# This workflow validates code quality before Vercel's auto-deployment
+# Vercel automatically deploys on push to main via Git integration (see VERCEL_DEPLOYMENT_GUIDE.md)
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    concurrency:
+      group: validate-production-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.23.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: ✅ Validation successful
+        run: echo "✅ All checks passed! Code is ready for deployment. Vercel will auto-deploy this commit via Git integration."
+
+      # ============================================================================
+      # OPTIONAL: Manual Vercel Deployment via GitHub Actions
+      # ============================================================================
+      # If you prefer to deploy via GitHub Actions instead of Vercel auto-deploy:
+      # 1. Uncomment the step below
+      # 2. Add these secrets to GitHub repository settings:
+      #    - VERCEL_TOKEN (get from: https://vercel.com/account/tokens)
+      #    - VERCEL_ORG_ID (get from: .vercel/project.json or Vercel dashboard)
+      #    - VERCEL_PROJECT_ID (get from: .vercel/project.json or Vercel dashboard)
+      # 3. Update permissions above to include: id-token: write
+      # 4. Update job name from "validate" to "deploy"
+      # 5. Note: This will create duplicate deployments if Vercel auto-deploy is enabled
+      #
+      # IMPORTANT: Choose ONE deployment method:
+      #   - Vercel auto-deploy (current): Automatic on push to main (recommended)
+      #   - GitHub Actions deploy: Manual control via workflow (uncomment below)
+      # See VERCEL_DEPLOYMENT_GUIDE.md for details
+      # ============================================================================
+      # - name: Deploy to Vercel Production
+      #   uses: amondnet/vercel-action@v25
+      #   with:
+      #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
+      #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+      #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+      #     vercel-args: '--prod'
