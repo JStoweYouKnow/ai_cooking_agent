@@ -19,6 +19,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Explicitly specify repository to prevent checking wrong repo
+          repository: JStoweYouKnow/ai_cooking_agent
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
