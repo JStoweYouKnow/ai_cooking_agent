@@ -25,12 +25,30 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
   const router = useRouter();
+  const utils = trpc.useUtils();
   const { data: recipes, isLoading: recipesLoading } = trpc.recipes.list.useQuery();
   const { data: ingredients, isLoading: ingredientsLoading } = trpc.ingredients.getUserIngredients.useQuery();
   const { data: shoppingLists, isLoading: listsLoading } = trpc.shoppingLists.list.useQuery();
+
+  const deleteRecipeMutation = trpc.recipes.delete.useMutation({
+    onSuccess: () => {
+      utils.recipes.list.invalidate();
+      toast.success('Recipe deleted successfully');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to delete recipe');
+    },
+  });
+
+  const handleDeleteRecipe = (recipeId: number, recipeName: string) => {
+    if (confirm(`Are you sure you want to delete "${recipeName}"? This action cannot be undone.`)) {
+      deleteRecipeMutation.mutate({ id: recipeId });
+    }
+  };
 
   const favoriteRecipes = recipes?.filter(r => r.isFavorite) || [];
   const recentRecipes = recipes?.slice(0, 3) || [];
@@ -191,6 +209,8 @@ export default function Dashboard() {
                     // Navigate to recipe detail using client-side routing
                     router.push(`/recipes/${recipe.id}` as any);
                   }}
+                  onDelete={(recipeId) => handleDeleteRecipe(recipeId, recipe.name)}
+                  showDeleteButton={true}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {

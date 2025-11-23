@@ -6,7 +6,7 @@
 "use client";
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, Users, ChefHat, Flame, Thermometer, Timer, UtensilsCrossed, Award, Star, Zap } from 'lucide-react';
+import { Clock, Users, ChefHat, Flame, Thermometer, Timer, UtensilsCrossed, Award, Star, Zap, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PCCard } from '@/components/project-comfort-ui';
 
@@ -90,11 +90,13 @@ export function ServingsBadge({ count }: { count: number }) {
 export function RecipeCard({ 
   recipe,
   onClick,
+  onDelete,
   className,
   role,
   tabIndex,
   onKeyDown,
   'aria-label': ariaLabel,
+  showDeleteButton = false,
 }: {
   recipe: {
     id: number;
@@ -107,11 +109,13 @@ export function RecipeCard({
     isFavorite?: boolean;
   };
   onClick?: () => void;
+  onDelete?: (recipeId: number) => void;
   className?: string;
   role?: string;
   tabIndex?: number;
   onKeyDown?: (e: React.KeyboardEvent) => void;
   'aria-label'?: string;
+  showDeleteButton?: boolean;
 }) {
   return (
     <motion.div
@@ -140,14 +144,27 @@ export function RecipeCard({
             </div>
           )}
           
-          {/* Favorite Badge */}
-          {recipe.isFavorite && (
-            <div className="absolute top-3 right-3">
+          {/* Action Buttons */}
+          <div className="absolute top-3 right-3 flex gap-2">
+            {recipe.isFavorite && (
               <div className="bg-white/90 backdrop-blur-sm rounded-full p-2 shadow-lg">
                 <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
               </div>
-            </div>
-          )}
+            )}
+            {showDeleteButton && onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(recipe.id);
+                }}
+                className="bg-red-500/90 hover:bg-red-600 backdrop-blur-sm rounded-full p-2 shadow-lg transition-colors"
+                aria-label={`Delete recipe: ${recipe.name}`}
+                title="Delete recipe"
+              >
+                <Trash2 className="h-4 w-4 text-white" />
+              </button>
+            )}
+          </div>
 
           {/* Gradient Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />

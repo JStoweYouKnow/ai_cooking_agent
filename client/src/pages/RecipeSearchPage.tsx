@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { BookOpen, Search, Star, ChefHat, Clock, Users, ExternalLink, Link2, UtensilsCrossed, Sparkles } from 'lucide-react';
+import { BookOpen, Search, Star, ChefHat, Clock, Users, ExternalLink, Link2, UtensilsCrossed, Sparkles, Plus } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -29,11 +29,28 @@ export default function RecipeSearchPage() {
   const [importUrl, setImportUrl] = useState('');
   const [selectedSources, setSelectedSources] = useState<("TheMealDB" | "Epicurious" | "Delish" | "NYTCooking")[]>(["TheMealDB"]);
   const [urlError, setUrlError] = useState<string>('');
+  const [parsedRecipePreview, setParsedRecipePreview] = useState<any>(null);
 
   const utils = trpc.useUtils();
   const { data: userIngredients, isLoading: userIngredientsLoading } = trpc.ingredients.getUserIngredients.useQuery();
   const { data: allIngredients, isLoading: allIngredientsLoading } = trpc.ingredients.list.useQuery();
   const { data: savedRecipes, isLoading: savedRecipesLoading } = trpc.recipes.list.useQuery();
+
+  const deleteRecipeMutation = trpc.recipes.delete.useMutation({
+    onSuccess: () => {
+      utils.recipes.list.invalidate();
+      toast.success('Recipe deleted successfully');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to delete recipe');
+    },
+  });
+
+  const handleDeleteRecipe = (recipeId: number, recipeName: string) => {
+    if (confirm(`Are you sure you want to delete "${recipeName}"? This action cannot be undone.`)) {
+      deleteRecipeMutation.mutate({ id: recipeId });
+    }
+  };
 
   const importFromTheMealDBMutation = trpc.recipes.importFromTheMealDB.useMutation({
     onSuccess: () => {
@@ -46,17 +63,33 @@ export default function RecipeSearchPage() {
   });
   const parseFromUrlMutation = trpc.recipes.parseFromUrl.useMutation({
     onSuccess: async (res) => {
-      await utils.recipes.list.invalidate();
       if ('id' in res && res.id) {
+        // Recipe was auto-saved
+        await utils.recipes.list.invalidate();
         toast.success('Recipe imported from URL');
+        setImportUrl('');
+        setUrlError('');
       } else {
-        toast.success('Parsed recipe preview ready');
+        // Preview mode - show the parsed recipe
+        setParsedRecipePreview(res.parsed);
+        toast.success('Recipe preview ready - check the image and details!');
       }
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to import recipe');
+    },
+  });
+
+  const saveRecipeMutation = trpc.recipes.create.useMutation({
+    onSuccess: async () => {
+      await utils.recipes.list.invalidate();
+      toast.success('Recipe saved to your collection!');
+      setParsedRecipePreview(null);
       setImportUrl('');
       setUrlError('');
     },
     onError: (error) => {
-      toast.error(error.message || 'Failed to import recipe');
+      toast.error(error.message || 'Failed to save recipe');
     },
   });
 
@@ -123,18 +156,35 @@ export default function RecipeSearchPage() {
     importFromTheMealDBMutation.mutate({ mealId });
   };
 
-  const handleImportFromUrl = (autoSave: boolean) => {
+  const handleImportFromUrl = (autoSave: boolean = false) => {
     const result = recipeUrlSchema.safeParse({ url: importUrl.trim() });
-    
+
     if (!result.success) {
       const errorMessage = result.error.errors[0]?.message || 'Please enter a valid URL';
       setUrlError(errorMessage);
       toast.error(errorMessage);
       return;
     }
-    
+
     setUrlError('');
     parseFromUrlMutation.mutate({ url: importUrl.trim(), autoSave });
+  };
+
+  const handleSavePreviewedRecipe = () => {
+    if (!parsedRecipePreview) return;
+
+    saveRecipeMutation.mutate({
+      name: parsedRecipePreview.name,
+      description: parsedRecipePreview.description || null,
+      instructions: parsedRecipePreview.instructions || null,
+      imageUrl: parsedRecipePreview.imageUrl || null,
+      cuisine: parsedRecipePreview.cuisine || null,
+      category: parsedRecipePreview.category || null,
+      cookingTime: parsedRecipePreview.cookingTime || null,
+      servings: parsedRecipePreview.servings || null,
+      sourceUrl: parsedRecipePreview.sourceUrl || null,
+      source: 'url_import',
+    });
   };
 
   const isRecipeSaved = (mealId: string) => {
@@ -170,46 +220,73 @@ export default function RecipeSearchPage() {
         description="Search for recipes based on ingredients you have, or import from your favorite cooking websites. Discover delicious meals tailored to your pantry."
       />
 
-      {/* Import From URL */}
-      <GlassCard glow={false}>
-        <SectionHeader
-          icon={Link2}
-          title="Import from URL"
-          description="Paste a recipe link. We'll parse schema.org Recipe data or use AI as fallback."
-        />
-        <div className="mt-6">
-          <div className="flex gap-3">
-            <Input
-              placeholder="https://example.com/your-favorite-recipe"
-              value={importUrl}
-              onChange={(e) => {
-                setImportUrl(e.target.value);
-                if (urlError) setUrlError('');
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleImportFromUrl(true);
-              }}
-              className={urlError ? "border-red-500 h-12 text-base" : "border-pc-tan/20 h-12 text-base"}
-              aria-invalid={!!urlError}
-              aria-describedby={urlError ? 'url-error' : undefined}
-            />
+      {/* Quick Actions - Import or Create */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Import From URL */}
+        <GlassCard glow={false}>
+          <SectionHeader
+            icon={Link2}
+            title="Import from URL"
+            description="Paste a recipe link and we'll extract the data."
+          />
+          <div className="mt-6">
+            <div className="flex gap-3">
+              <Input
+                placeholder="https://example.com/your-favorite-recipe"
+                value={importUrl}
+                onChange={(e) => {
+                  setImportUrl(e.target.value);
+                  if (urlError) setUrlError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleImportFromUrl(true);
+                }}
+                className={urlError ? "border-red-500 h-12 text-base" : "border-pc-tan/20 h-12 text-base"}
+                aria-invalid={!!urlError}
+                aria-describedby={urlError ? 'url-error' : undefined}
+              />
+              <PremiumButton
+                onClick={() => handleImportFromUrl(true)}
+                disabled={parseFromUrlMutation.isPending}
+                size="lg"
+                color="navy"
+                className="flex-shrink-0"
+              >
+                <Link2 className="h-4 w-4" />
+                {parseFromUrlMutation.isPending ? 'Importing...' : 'Import'}
+              </PremiumButton>
+            </div>
             {urlError && (
-              <p id="url-error" className="text-sm text-red-600 mt-1" role="alert">
+              <p id="url-error" className="text-sm text-red-600 mt-2" role="alert">
                 {urlError}
               </p>
             )}
-            <PremiumButton
-              onClick={() => handleImportFromUrl(true)}
-              disabled={parseFromUrlMutation.isPending}
-              size="lg"
-              color="navy"
-            >
-              <Link2 className="h-4 w-4" />
-              {parseFromUrlMutation.isPending ? 'Importing...' : 'Import'}
-            </PremiumButton>
           </div>
-        </div>
-      </GlassCard>
+        </GlassCard>
+
+        {/* Create Recipe Manually */}
+        <GlassCard glow className="border-2 border-pc-olive/30 bg-gradient-to-br from-pc-olive/5 to-pc-tan/10">
+          <SectionHeader
+            icon={ChefHat}
+            title="Create Your Own Recipe"
+            description="Add a custom recipe with all the details."
+          />
+          <div className="mt-6">
+            <PremiumButton
+              size="lg"
+              color="olive"
+              className="w-full"
+              onClick={() => router.push('/recipes/create' as any)}
+            >
+              <Plus className="h-5 w-5" />
+              Create Custom Recipe
+            </PremiumButton>
+            <p className="text-sm text-pc-text-light mt-3 text-center">
+              Manually enter or upload from JSON file
+            </p>
+          </div>
+        </GlassCard>
+      </div>
 
       {/* Search Section */}
       <div className="relative">
@@ -416,6 +493,8 @@ export default function RecipeSearchPage() {
                       // Navigate to recipe detail using client-side routing
                       router.push(`/recipes/${recipe.id}` as any);
                     }}
+                    onDelete={(recipeId) => handleDeleteRecipe(recipeId, recipe.name)}
+                    showDeleteButton={true}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
