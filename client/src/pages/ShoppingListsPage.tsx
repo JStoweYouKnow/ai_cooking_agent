@@ -89,6 +89,22 @@ export default function ShoppingListsPage() {
     },
   });
 
+  const updateListMutation = trpc.shoppingLists.update.useMutation({
+    onSuccess: () => {
+      utils.shoppingLists.list.invalidate();
+      if (selectedListId) {
+        utils.shoppingLists.getById.invalidate({ id: selectedListId });
+      }
+      setIsRenameDialogOpen(false);
+      setRenamingListId(null);
+      setRenameListName('');
+      toast.success('Shopping list renamed successfully');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to rename list');
+    },
+  });
+
   const deleteListMutation = trpc.shoppingLists.delete.useMutation({
     onSuccess: () => {
       utils.shoppingLists.list.invalidate();
