@@ -110,10 +110,11 @@ function App() {
 		<ErrorBoundary>
 			<ThemeProvider defaultTheme="light">
 				<TooltipProvider>
-					<Layout>
-						<Toaster />
-						<Router />
-					</Layout>
+					<Router>
+						<Layout>
+							<Toaster />
+						</Layout>
+					</Router>
 				</TooltipProvider>
 			</ThemeProvider>
 		</ErrorBoundary>
