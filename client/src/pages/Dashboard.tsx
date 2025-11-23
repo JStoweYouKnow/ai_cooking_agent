@@ -34,13 +34,13 @@ export default function Dashboard() {
   const { data: ingredients, isLoading: ingredientsLoading } = trpc.ingredients.getUserIngredients.useQuery();
   const { data: shoppingLists, isLoading: listsLoading } = trpc.shoppingLists.list.useQuery();
 
-  const deleteRecipeMutation = trpc.recipes.delete.useMutation({
+  const deleteRecipeMutation = (trpc.recipes as any).delete.useMutation({
     onSuccess: () => {
       utils.recipes.list.invalidate();
       toast.success('Recipe deleted successfully');
     },
-    onError: (error) => {
-      toast.error(error.message || 'Failed to delete recipe');
+    onError: (error: any) => {
+      toast.error(error?.message || 'Failed to delete recipe');
     },
   });
 

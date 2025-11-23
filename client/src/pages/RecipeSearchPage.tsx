@@ -36,13 +36,13 @@ export default function RecipeSearchPage() {
   const { data: allIngredients, isLoading: allIngredientsLoading } = trpc.ingredients.list.useQuery();
   const { data: savedRecipes, isLoading: savedRecipesLoading } = trpc.recipes.list.useQuery();
 
-  const deleteRecipeMutation = trpc.recipes.delete.useMutation({
+  const deleteRecipeMutation = (trpc.recipes as any).delete.useMutation({
     onSuccess: () => {
       utils.recipes.list.invalidate();
       toast.success('Recipe deleted successfully');
     },
-    onError: (error) => {
-      toast.error(error.message || 'Failed to delete recipe');
+    onError: (error: any) => {
+      toast.error(error?.message || 'Failed to delete recipe');
     },
   });
 
