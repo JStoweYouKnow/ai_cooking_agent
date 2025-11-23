@@ -238,7 +238,14 @@ export function ModernHeader({
                 <NotificationDropdown />
 
                 {/* Messages */}
-                <Link href="/messages">
+                <Link 
+                  href="/messages"
+                  onClick={() => {
+                    if (setLocation && typeof setLocation === 'function') {
+                      setLocation('/messages');
+                    }
+                  }}
+                >
                   <button 
                     className="relative flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
                     aria-label="Messages"
