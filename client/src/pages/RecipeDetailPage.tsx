@@ -3,7 +3,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   ArrowLeft, Star, Clock, Users, ChefHat, ShoppingCart,
   ExternalLink, Plus, UtensilsCrossed, Play, BookOpen,
-  ChevronLeft, ChevronRight, X
+  ChevronLeft, ChevronRight, X, Trash2
 } from 'lucide-react';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc';
@@ -29,6 +29,7 @@ export default function RecipeDetailPage() {
   const [selectedListId, setSelectedListId] = useState<string>('');
   const [isCookingMode, setIsCookingMode] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: recipe, isLoading } = trpc.recipes.getById.useQuery(
@@ -47,6 +48,17 @@ export default function RecipeDetailPage() {
       utils.recipes.getById.invalidate();
       utils.recipes.list.invalidate();
       toast.success(recipe?.isFavorite ? 'Removed from favorites' : 'Added to favorites');
+    },
+  });
+
+  const deleteRecipeMutation = trpc.recipes.delete.useMutation({
+    onSuccess: () => {
+      utils.recipes.list.invalidate();
+      toast.success('Recipe deleted successfully');
+      router.push('/recipes' as any);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to delete recipe');
     },
   });
 
@@ -127,6 +139,12 @@ export default function RecipeDetailPage() {
   const handleCreateNewList = () => {
     const listName = `Shopping list for ${recipe.name}`;
     createListMutation.mutate({ name: listName });
+  };
+
+  const handleDeleteRecipe = () => {
+    if (recipeId) {
+      deleteRecipeMutation.mutate({ id: recipeId });
+    }
   };
 
   const ingredientsWithDetails = recipeIngredients?.map((ri: any) => {
@@ -212,24 +230,37 @@ export default function RecipeDetailPage() {
               )}
             </div>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() =>
-              toggleFavoriteMutation.mutate({
-                id: recipe.id,
-                isFavorite: !recipe.isFavorite,
-              })
-            }
-            disabled={toggleFavoriteMutation.isPending}
-            className={`p-3 rounded-xl transition-all ${
-              recipe.isFavorite
-                ? 'bg-gradient-to-br from-yellow-100 to-yellow-200 text-yellow-600'
-                : 'bg-pc-tan/30 text-pc-text-light hover:bg-pc-tan/50'
-            }`}
-          >
-            <Star className={`h-6 w-6 ${recipe.isFavorite ? 'fill-current' : ''}`} />
-          </motion.button>
+          <div className="flex gap-2">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() =>
+                toggleFavoriteMutation.mutate({
+                  id: recipe.id,
+                  isFavorite: !recipe.isFavorite,
+                })
+              }
+              disabled={toggleFavoriteMutation.isPending}
+              className={`p-3 rounded-xl transition-all ${
+                recipe.isFavorite
+                  ? 'bg-gradient-to-br from-yellow-100 to-yellow-200 text-yellow-600'
+                  : 'bg-pc-tan/30 text-pc-text-light hover:bg-pc-tan/50'
+              }`}
+              aria-label={recipe.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <Star className={`h-6 w-6 ${recipe.isFavorite ? 'fill-current' : ''}`} />
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={deleteRecipeMutation.isPending}
+              className="p-3 rounded-xl bg-pc-tan/30 text-pc-text-light hover:bg-red-100 hover:text-red-600 transition-all"
+              aria-label="Delete recipe"
+            >
+              <Trash2 className="h-6 w-6" />
+            </motion.button>
+          </div>
         </div>
       </PCCard>
 
@@ -632,6 +663,37 @@ export default function RecipeDetailPage() {
             >
               <Plus className="h-4 w-4" />
               {createListMutation.isPending ? 'Creating...' : 'Create New List for This Recipe'}
+            </PCButton>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-pc-navy flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Delete Recipe
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{recipe?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <PCButton
+              className="flex-1"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={deleteRecipeMutation.isPending}
+            >
+              Cancel
+            </PCButton>
+            <PCButton
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleDeleteRecipe}
+              disabled={deleteRecipeMutation.isPending}
+            >
+              {deleteRecipeMutation.isPending ? 'Deleting...' : 'Delete'}
             </PCButton>
           </div>
         </DialogContent>
