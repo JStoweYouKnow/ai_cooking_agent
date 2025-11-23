@@ -90,11 +90,96 @@ function toText(value: unknown): string | null {
 	return null;
 }
 
+/**
+ * Extract image URL from HTML meta tags (og:image, twitter:image, etc.)
+ */
+function extractImageFromMetaTags(html: string, baseUrl: string): string | null {
+	// Try Open Graph image first (most common)
+	const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+		html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+	if (ogImageMatch && ogImageMatch[1]) {
+		return resolveUrl(ogImageMatch[1], baseUrl);
+	}
+
+	// Try Twitter Card image
+	const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
+		html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+	if (twitterImageMatch && twitterImageMatch[1]) {
+		return resolveUrl(twitterImageMatch[1], baseUrl);
+	}
+
+	// Try standard meta image
+	const metaImageMatch = html.match(/<meta[^>]+name=["']image["'][^>]+content=["']([^"']+)["']/i) ||
+		html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']image["']/i);
+	if (metaImageMatch && metaImageMatch[1]) {
+		return resolveUrl(metaImageMatch[1], baseUrl);
+	}
+
+	return null;
+}
+
+/**
+ * Extract the largest image from HTML (hero image fallback)
+ */
+function extractLargestImageFromHtml(html: string, baseUrl: string): string | null {
+	const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+	const images: Array<{ url: string; size: number }> = [];
+	let match: RegExpExecArray | null;
+
+	while ((match = imgRegex.exec(html)) !== null) {
+		const src = match[1];
+		if (!src || src.startsWith('data:') || src.startsWith('#')) continue;
+
+		// Try to extract width/height attributes to estimate size
+		const imgTag = match[0];
+		const widthMatch = imgTag.match(/width=["']?(\d+)["']?/i);
+		const heightMatch = imgTag.match(/height=["']?(\d+)["']?/i);
+		
+		let size = 0;
+		if (widthMatch && heightMatch) {
+			size = parseInt(widthMatch[1], 10) * parseInt(heightMatch[1], 10);
+		} else {
+			// If no dimensions, prioritize images with common hero image class names
+			const hasHeroClass = /class=["'][^"']*(hero|feature|main|primary|banner|cover)[^"']*["']/i.test(imgTag);
+			size = hasHeroClass ? 1000000 : 1000; // Give hero images priority
+		}
+
+		images.push({
+			url: resolveUrl(src, baseUrl),
+			size,
+		});
+	}
+
+	if (images.length === 0) return null;
+
+	// Sort by size (largest first) and return the first one
+	images.sort((a, b) => b.size - a.size);
+	return images[0].url;
+}
+
+/**
+ * Resolve relative URLs to absolute URLs
+ */
+function resolveUrl(url: string, baseUrl: string): string {
+	try {
+		return new URL(url, baseUrl).toString();
+	} catch {
+		return url;
+	}
+}
+
 export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | null> {
 	const res = await fetch(url, { redirect: "follow" });
 	if (!res.ok) return null;
 	const html = await res.text();
+	const baseUrl = res.url || url;
+	
+	// Extract image from meta tags first (most reliable)
+	let extractedImage: string | null = extractImageFromMetaTags(html, baseUrl);
+	
 	const blocks = extractJsonLdBlocks(html);
+	let parsedRecipe: ParsedRecipe | null = null;
+	
 	for (const block of blocks) {
 		const recipe = findRecipeNode(block);
 		if (!recipe) continue;
@@ -123,14 +208,20 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 				instructions = String(recipe.recipeInstructions);
 			}
 		}
-		const image =
+		
+		// Extract image from JSON-LD (preferred if available)
+		const jsonLdImage =
 			typeof recipe.image === "string"
 				? recipe.image
-				: Array.isArray(recipe.image)
-				? recipe.image[0]
+				: Array.isArray(recipe.image) && recipe.image.length > 0
+				? (typeof recipe.image[0] === "string" ? recipe.image[0] : recipe.image[0]?.url || null)
 				: typeof recipe.image?.url === "string"
 				? recipe.image.url
 				: null;
+		
+		// Use JSON-LD image if available, otherwise use extracted meta tag image
+		const imageUrl = jsonLdImage ? resolveUrl(jsonLdImage, baseUrl) : extractedImage;
+		
 		const category = toText(recipe.recipeCategory) ?? null;
 		const cuisine = toText(recipe.recipeCuisine) ?? null;
 		const cookingTime =
@@ -154,11 +245,12 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 					return { name: parts.join(" "), quantity, unit };
 			  })
 			: undefined;
-		return {
+		
+		parsedRecipe = {
 			name,
 			description,
 			instructions,
-			imageUrl: image,
+			imageUrl: imageUrl || null,
 			cuisine,
 			category,
 			cookingTime,
@@ -167,8 +259,43 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 			ingredients,
 			source: "url_import",
 		};
+		break; // Use first valid recipe found
 	}
-	return null;
+	
+	// If no JSON-LD recipe found but we have an image, try to extract basic info from HTML
+	if (!parsedRecipe && extractedImage) {
+		// Try to find title from HTML
+		const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i) ||
+			html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+			html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+		const title = titleMatch ? titleMatch[1].trim() : null;
+		
+		if (title) {
+			parsedRecipe = {
+				name: title,
+				description: null,
+				instructions: null,
+				imageUrl: extractedImage,
+				cuisine: null,
+				category: null,
+				cookingTime: null,
+				servings: null,
+				sourceUrl: url,
+				ingredients: undefined,
+				source: "url_import",
+			};
+		}
+	}
+	
+	// Final fallback: if we still don't have an image, try to find the largest image on the page
+	if (parsedRecipe && !parsedRecipe.imageUrl) {
+		const largestImage = extractLargestImageFromHtml(html, baseUrl);
+		if (largestImage) {
+			parsedRecipe.imageUrl = largestImage;
+		}
+	}
+	
+	return parsedRecipe;
 }
 
 
