@@ -5,7 +5,7 @@
 
 "use client";
 import React, { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { Link, useLocation } from 'wouter';
 import {
   ChefHat,
   Search,
@@ -41,7 +41,7 @@ export function ModernHeader({
   onSearchClick?: () => void;
   onMenuClick?: () => void;
 }) {
-  const pathname = usePathname();
+  const [location, setLocation] = useLocation();
   const { data: user, isLoading: isLoadingUser } = trpc.auth.me.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
   const { data: unreadMessageCount } = trpc.messages.getUnreadCount.useQuery(undefined, {
@@ -129,8 +129,8 @@ export function ModernHeader({
           {navigation.map((item) => {
             const Icon = item.icon;
             const isActive =
-              (item.href === '/' && pathname === '/') ||
-              (item.href !== '/' && pathname.startsWith(item.href));
+              (item.href === '/' && location === '/') ||
+              (item.href !== '/' && location.startsWith(item.href));
             
             return (
               <Link
