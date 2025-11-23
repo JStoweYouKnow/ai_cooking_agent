@@ -17,7 +17,8 @@
     "**/*.test.tsx",
     "**/*.integration.test.ts",
     "**/*.spec.ts",
-    "**/*.spec.tsx"
+    "**/*.spec.tsx",
+    "e2e/**/*"
   ],
   "compilerOptions": {
     "incremental": true,
