@@ -27,79 +27,94 @@ const PageLoader = () => (
   </div>
 );
 
-function Router({ children }: { children: React.ReactNode }) {
+function Router() {
 	return (
-		<>
-			{children}
-			<Suspense fallback={<PageLoader />}>
-				<Switch>
-					<Route path="/">
-						{() => (
+		<Suspense fallback={<PageLoader />}>
+			<Switch>
+				<Route path="/">
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<Dashboard />
 							</Suspense>
-						)}
-					</Route>
-					<Route path="/ingredients">
-						{() => (
+						</Layout>
+					)}
+				</Route>
+				<Route path="/ingredients">
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<IngredientsPage />
 							</Suspense>
-						)}
-					</Route>
-					<Route path="/recipes">
-						{() => (
+						</Layout>
+					)}
+				</Route>
+				<Route path="/recipes">
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<RecipeSearchPage />
 							</Suspense>
-						)}
-					</Route>
-					<Route path="/recipes/create">
-						{() => (
+						</Layout>
+					)}
+				</Route>
+				<Route path="/recipes/create">
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<CreateRecipePage />
 							</Suspense>
-						)}
-					</Route>
-					<Route path="/recipes/:id">
-						{() => (
+						</Layout>
+					)}
+				</Route>
+				<Route path="/recipes/:id">
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<RecipeDetailPage />
 							</Suspense>
-						)}
-					</Route>
-					<Route path="/shopping-lists">
-						{() => (
+						</Layout>
+					)}
+				</Route>
+				<Route path="/shopping-lists">
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<ShoppingListsPage />
 							</Suspense>
-						)}
-					</Route>
-					<Route path="/messages">
-						{() => (
+						</Layout>
+					)}
+				</Route>
+				<Route path="/messages">
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<MessagesPage />
 							</Suspense>
-						)}
-					</Route>
-					<Route path="/404">
-						{() => (
+						</Layout>
+					)}
+				</Route>
+				<Route path="/404">
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<NotFound />
 							</Suspense>
-						)}
-					</Route>
-					{/* Final fallback route */}
-					<Route>
-						{() => (
+						</Layout>
+					)}
+				</Route>
+				{/* Final fallback route */}
+				<Route>
+					{() => (
+						<Layout>
 							<Suspense fallback={<PageLoader />}>
 								<NotFound />
 							</Suspense>
-						)}
-					</Route>
-				</Switch>
-			</Suspense>
-		</>
+						</Layout>
+					)}
+				</Route>
+			</Switch>
+		</Suspense>
 	);
 }
 
@@ -113,11 +128,8 @@ function App() {
 		<ErrorBoundary>
 			<ThemeProvider defaultTheme="light">
 				<TooltipProvider>
-					<Router>
-						<Layout>
-							<Toaster />
-						</Layout>
-					</Router>
+					<Toaster />
+					<Router />
 				</TooltipProvider>
 			</ThemeProvider>
 		</ErrorBoundary>
