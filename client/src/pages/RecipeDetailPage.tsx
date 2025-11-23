@@ -1,14 +1,15 @@
-import { useRoute } from 'wouter';
+import { useParams, useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
 import {
   ArrowLeft, Star, Clock, Users, ChefHat, ShoppingCart,
-  ExternalLink, Plus, UtensilsCrossed
+  ExternalLink, Plus, UtensilsCrossed, Play, BookOpen,
+  ChevronLeft, ChevronRight, X
 } from 'lucide-react';
-import { Link } from 'wouter';
+import Link from 'next/link';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
@@ -21,10 +22,13 @@ import { PCCard, PCButton } from '@/components/project-comfort-ui';
 import { CookingBadge, CookingTimeBadge, ServingsBadge } from '@/components/cooking-theme';
 
 export default function RecipeDetailPage() {
-  const [, params] = useRoute('/recipes/:id');
-  const recipeId = params?.id ? parseInt(params.id) : null;
+  const params = useParams();
+  const router = useRouter();
+  const recipeId = params?.id ? parseInt(String(params.id)) : null;
   const [isAddToListDialogOpen, setIsAddToListDialogOpen] = useState(false);
   const [selectedListId, setSelectedListId] = useState<string>('');
+  const [isCookingMode, setIsCookingMode] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
   const utils = trpc.useUtils();
   const { data: recipe, isLoading } = trpc.recipes.getById.useQuery(
@@ -132,6 +136,36 @@ export default function RecipeDetailPage() {
       ingredientName: ingredient?.name || 'Unknown',
     };
   });
+
+  // Parse recipe steps
+  const recipeSteps = recipe?.instructions
+    ? recipe.instructions.split('\n').filter(Boolean).map((step, index) => {
+        const isNumbered = /^\d+[\.\)]\s/.test(step.trim());
+        return isNumbered ? step.trim() : step;
+      })
+    : [];
+
+  const handleNextStep = () => {
+    if (currentStep < recipeSteps.length - 1) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handlePrevStep = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleStartCookingMode = () => {
+    setCurrentStep(0);
+    setIsCookingMode(true);
+  };
+
+  const handleExitCookingMode = () => {
+    setIsCookingMode(false);
+    setCurrentStep(0);
+  };
 
   return (
     <motion.div
@@ -243,6 +277,197 @@ export default function RecipeDetailPage() {
           </a>
         </PCCard>
       )}
+
+      {/* Cooking Mode Toggle */}
+      {recipeSteps.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <PCCard className="bg-gradient-to-r from-pc-olive/10 to-pc-navy/10 border-2 border-pc-olive/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-pc-olive/20">
+                  <Play className="h-6 w-6 text-pc-olive" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-pc-navy text-lg">Step-by-Step Cooking Mode</h3>
+                  <p className="text-sm text-pc-text-light">
+                    Follow along with interactive slides
+                  </p>
+                </div>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleStartCookingMode}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-pc-olive to-pc-olive/90 text-white font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+              >
+                <Play className="h-5 w-5" />
+                Start Cooking
+              </motion.button>
+            </div>
+          </PCCard>
+        </motion.div>
+      )}
+
+      {/* Cooking Mode Slide Viewer - Full Screen Overlay */}
+      <AnimatePresence>
+        {isCookingMode && recipeSteps.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
+          >
+            <div className="w-full max-w-4xl h-full max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-pc-olive/20">
+                    <ChefHat className="h-6 w-6 text-pc-olive" />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-semibold text-xl">{recipe.name}</h2>
+                    <p className="text-white/60 text-sm">
+                      Step {currentStep + 1} of {recipeSteps.length}
+                    </p>
+                  </div>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleExitCookingMode}
+                  className="p-3 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                  aria-label="Exit cooking mode"
+                >
+                  <X className="h-6 w-6" />
+                </motion.button>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-white/10 rounded-full h-2 mb-8">
+                <motion.div
+                  className="bg-gradient-to-r from-pc-olive to-pc-navy h-full rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${((currentStep + 1) / recipeSteps.length) * 100}%` }}
+                  transition={{ duration: 0.3 }}
+                />
+              </div>
+
+              {/* Slide Content */}
+              <div className="flex-1 flex items-center justify-center mb-8 overflow-hidden">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentStep}
+                    initial={{ opacity: 0, x: 100 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -100 }}
+                    transition={{ duration: 0.3 }}
+                    className="w-full"
+                  >
+                    <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 md:p-12 border border-white/10">
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pc-olive to-pc-navy text-white flex items-center justify-center font-bold text-2xl flex-shrink-0">
+                          {currentStep + 1}
+                        </div>
+                        <h3 className="text-white/40 text-sm font-medium uppercase tracking-wider">
+                          Current Step
+                        </h3>
+                      </div>
+                      <p className="text-white text-2xl md:text-3xl lg:text-4xl leading-relaxed font-medium">
+                        {recipeSteps[currentStep]}
+                      </p>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* Navigation Controls */}
+              <div className="flex items-center justify-between gap-4">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handlePrevStep}
+                  disabled={currentStep === 0}
+                  className={`px-6 py-4 rounded-xl font-semibold flex items-center gap-2 transition-all ${
+                    currentStep === 0
+                      ? 'bg-white/5 text-white/30 cursor-not-allowed'
+                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                  Previous
+                </motion.button>
+
+                <div className="flex gap-2">
+                  {recipeSteps.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setCurrentStep(index)}
+                      className={`w-2 h-2 rounded-full transition-all ${
+                        index === currentStep
+                          ? 'bg-pc-olive w-8'
+                          : index < currentStep
+                          ? 'bg-pc-olive/50'
+                          : 'bg-white/20'
+                      }`}
+                      aria-label={`Go to step ${index + 1}`}
+                    />
+                  ))}
+                </div>
+
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={currentStep === recipeSteps.length - 1 ? handleExitCookingMode : handleNextStep}
+                  className="px-6 py-4 rounded-xl bg-gradient-to-r from-pc-olive to-pc-navy text-white font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all"
+                >
+                  {currentStep === recipeSteps.length - 1 ? (
+                    <>
+                      Finish
+                      <ChefHat className="h-5 w-5" />
+                    </>
+                  ) : (
+                    <>
+                      Next
+                      <ChevronRight className="h-5 w-5" />
+                    </>
+                  )}
+                </motion.button>
+              </div>
+
+              {/* Ingredients Quick Reference */}
+              {ingredientsWithDetails && ingredientsWithDetails.length > 0 && (
+                <div className="mt-6">
+                  <details className="bg-white/5 rounded-xl border border-white/10">
+                    <summary className="px-4 py-3 cursor-pointer text-white font-medium flex items-center gap-2 hover:bg-white/10 transition-colors rounded-xl">
+                      <UtensilsCrossed className="h-4 w-4" />
+                      Quick Ingredients Reference
+                    </summary>
+                    <div className="px-4 pb-4 pt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {ingredientsWithDetails.map((item: any) => {
+                        const quantityDisplay = [item.quantity, item.unit]
+                          .filter(Boolean)
+                          .join(' ');
+                        return (
+                          <div key={item.id} className="text-white/80 text-sm">
+                            <span className="font-medium">{item.ingredientName}</span>
+                            {quantityDisplay && (
+                              <span className="text-white/50 ml-1">({quantityDisplay})</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Ingredients */}
