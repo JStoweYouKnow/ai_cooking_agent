@@ -154,10 +154,16 @@ export function RecipeCard({
             {showDeleteButton && onDelete && (
               <button
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   onDelete(recipe.id);
                 }}
-                className="bg-red-500/90 hover:bg-red-600 backdrop-blur-sm rounded-full p-2 shadow-lg transition-colors"
+                onMouseDown={(e) => {
+                  // Also stop propagation on mousedown to prevent any navigation
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                className="bg-red-500/90 hover:bg-red-600 backdrop-blur-sm rounded-full p-2 shadow-lg transition-colors z-10 relative"
                 aria-label={`Delete recipe: ${recipe.name}`}
                 title="Delete recipe"
               >
