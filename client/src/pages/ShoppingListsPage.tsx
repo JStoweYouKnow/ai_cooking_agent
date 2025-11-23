@@ -14,13 +14,14 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ShoppingCart, Plus, Trash2, Download, Check, Search, Sparkles, List, Edit2, X } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Download, Check, Search, Sparkles, List, Edit2, X, Store } from 'lucide-react';
 import { getIngredientIcon } from '@/lib/ingredientIcons';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { shoppingListSchema, shoppingListItemSchema, type ShoppingListFormData, type ShoppingListItemFormData } from '@/lib/validation';
 import { Skeleton } from '@/components/ui/skeleton';
+import { sendToGroceryStore, copyToClipboard, getAllStores, type GroceryStore } from '@/lib/groceryStores';
 
 export default function ShoppingListsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -238,7 +239,7 @@ export default function ShoppingListsPage() {
     ing.name.toLowerCase().includes(ingredientSearch.toLowerCase())
   ) || [];
 
-  const handleExport = async (format: 'csv' | 'txt' | 'md' | 'json') => {
+  const handleExport = async (format: 'csv' | 'txt' | 'md' | 'json' | 'pdf') => {
     if (!selectedListId) {
       toast.error('Please select a shopping list');
       return;
@@ -251,7 +252,19 @@ export default function ShoppingListsPage() {
       });
 
       // Create download
-      const blob = new Blob([result.content], { type: result.mimeType });
+      let blob: Blob;
+      if (format === 'pdf') {
+        // PDF content is base64 encoded
+        const binaryString = atob(result.content as string);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        blob = new Blob([bytes], { type: result.mimeType });
+      } else {
+        blob = new Blob([result.content as string], { type: result.mimeType });
+      }
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -265,6 +278,46 @@ export default function ShoppingListsPage() {
     } catch (error: any) {
       console.error('Export error:', error);
       toast.error(error.message || 'Failed to export list');
+    }
+  };
+
+  const handleSendToStore = async (store: GroceryStore) => {
+    if (!selectedListId || !listItems || listItems.length === 0) {
+      toast.error('Please select a shopping list with items');
+      return;
+    }
+
+    try {
+      // Get unchecked items only
+      const uncheckedItems = listItems
+        .filter(item => !item.isChecked)
+        .map(item => {
+          const ingredient = allIngredients?.find(i => i.id === item.ingredientId);
+          return {
+            name: ingredient?.name || 'Unknown',
+            quantity: item.quantity,
+            unit: item.unit,
+          };
+        });
+
+      if (uncheckedItems.length === 0) {
+        toast.error('All items are already checked off!');
+        return;
+      }
+
+      if (store === 'clipboard') {
+        await copyToClipboard(uncheckedItems, 'withQuantity');
+        toast.success('Shopping list copied to clipboard!');
+      } else {
+        const storeConfig = getAllStores().find(s => s.id === store);
+        sendToGroceryStore(uncheckedItems, store, { maxTabs: 10 });
+        toast.success(`Opening ${uncheckedItems.length} items in ${storeConfig?.name}...`, {
+          description: 'Check your browser for new tabs',
+        });
+      }
+    } catch (error: any) {
+      console.error('Send to store error:', error);
+      toast.error(error.message || 'Failed to send to store');
     }
   };
 
@@ -588,10 +641,24 @@ export default function ShoppingListsPage() {
                     <SelectValue placeholder="Export" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="pdf">📕 PDF (.pdf)</SelectItem>
                     <SelectItem value="txt">📄 Text (.txt)</SelectItem>
                     <SelectItem value="csv">📊 CSV (.csv)</SelectItem>
                     <SelectItem value="md">📝 Markdown (.md)</SelectItem>
                     <SelectItem value="json">💾 JSON (.json)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select onValueChange={(value) => handleSendToStore(value as GroceryStore)}>
+                  <SelectTrigger className="w-44 bg-pc-olive/20 border-pc-olive/40 hover:bg-pc-olive/30">
+                    <Store className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Send to Store" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAllStores().map((store) => (
+                      <SelectItem key={store.id} value={store.id}>
+                        {store.icon} {store.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <PremiumButton

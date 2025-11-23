@@ -887,7 +887,7 @@ const shoppingListRouter = router({
   export: optionalAuthProcedure
     .input(z.object({
       id: z.number().int().positive(),
-      format: z.enum(['csv', 'txt', 'md', 'json'])
+      format: z.enum(['csv', 'txt', 'md', 'json', 'pdf'])
     }))
     .query(async ({ ctx, input }) => {
       const user = ctx.user || await db.getOrCreateAnonymousUser();
@@ -922,12 +922,14 @@ const shoppingListRouter = router({
         createdAt: shoppingList.createdAt,
       };
 
-      const content = exportShoppingList(exportData, input.format);
+      const contentOrPromise = exportShoppingList(exportData, input.format);
+      // Handle async PDF generation
+      const content = contentOrPromise instanceof Promise ? await contentOrPromise : contentOrPromise;
       const mimeType = getMimeType(input.format);
       const extension = getFileExtension(input.format);
 
       return {
-        content,
+        content: input.format === 'pdf' ? content.toString('base64') : content,
         mimeType,
         filename: `${shoppingList.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${extension}`,
       };
