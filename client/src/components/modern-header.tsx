@@ -147,7 +147,6 @@ export function ModernHeader({
                   "hover:bg-gray-100 dark:hover:bg-gray-800",
                   isActive && "bg-transparent"
                 )}
-                suppressHydrationWarning
               >
                 <Icon 
                   className={cn(
