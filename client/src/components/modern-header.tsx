@@ -92,7 +92,15 @@ export function ModernHeader({
         {/* Left: Logo + Search Bar (LinkedIn Style) */}
         <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
           {/* Logo */}
-          <Link href="/" className="flex items-center group flex-shrink-0">
+          <Link 
+            href="/" 
+            onClick={() => {
+              if (setLocation && typeof setLocation === 'function') {
+                setLocation('/');
+              }
+            }}
+            className="flex items-center group flex-shrink-0"
+          >
             <div className="bg-pc-olive p-2 md:p-2.5 rounded transition-transform group-hover:scale-105">
               <ChefHat className="h-5 w-5 md:h-6 md:w-6 text-white" />
             </div>
@@ -136,6 +144,12 @@ export function ModernHeader({
               <Link
                 key={item.name}
                 href={item.href}
+                onClick={(e) => {
+                  // Ensure navigation works by explicitly calling setLocation
+                  if (setLocation && typeof setLocation === 'function') {
+                    setLocation(item.href);
+                  }
+                }}
                 className={cn(
                   "relative z-10 flex flex-col items-center justify-center px-3 lg:px-4 py-1.5 min-w-[64px] lg:min-w-[72px]",
                   "transition-colors duration-200 rounded-md",
