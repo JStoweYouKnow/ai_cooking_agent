@@ -167,6 +167,100 @@ export async function deleteRecipe(recipeId: number) {
   return db.delete(recipes).where(eq(recipes.id, recipeId));
 }
 
+/**
+ * Get daily recipe recommendations with seasonal filtering
+ * Returns one recipe per category (Breakfast, Lunch, Dinner, Dessert)
+ */
+export async function getDailyRecommendations(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Import seasonal utilities
+  const { getCurrentSeason, getSeasonalScore } = await import('./utils/seasonal.js');
+  const season = getCurrentSeason();
+  
+  // Get all user recipes
+  const allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
+  
+  if (allRecipes.length === 0) {
+    return {
+      breakfast: null,
+      lunch: null,
+      dinner: null,
+      dessert: null,
+      season,
+    };
+  }
+  
+  // Helper function to get a random recipe from a filtered list
+  const getRandomRecipe = (filtered: typeof allRecipes): typeof allRecipes[0] | null => {
+    if (filtered.length === 0) return null;
+    const randomIndex = Math.floor(Math.random() * filtered.length);
+    return filtered[randomIndex];
+  };
+  
+  // Helper function to get best seasonal recipe from a filtered list
+  const getBestSeasonalRecipe = (filtered: typeof allRecipes): typeof allRecipes[0] | null => {
+    if (filtered.length === 0) return null;
+    
+    // Score all recipes by seasonality
+    const scored = filtered.map(recipe => ({
+      recipe,
+      score: getSeasonalScore(recipe, season),
+    }));
+    
+    // Sort by score (highest first)
+    scored.sort((a, b) => b.score - a.score);
+    
+    // Return the top seasonal recipe, or random if scores are similar
+    const topScore = scored[0]?.score || 0;
+    const topRecipes = scored.filter(s => s.score >= topScore * 0.7); // Within 30% of top score
+    
+    const randomIndex = Math.floor(Math.random() * topRecipes.length);
+    return topRecipes[randomIndex]?.recipe || null;
+  };
+  
+  // Get recipes by category
+  const breakfastRecipes = allRecipes.filter(r => 
+    r.category?.toLowerCase().includes('breakfast') || 
+    r.category?.toLowerCase().includes('morning')
+  );
+  const lunchRecipes = allRecipes.filter(r => 
+    r.category?.toLowerCase().includes('lunch') || 
+    r.category?.toLowerCase().includes('midday')
+  );
+  const dinnerRecipes = allRecipes.filter(r => 
+    r.category?.toLowerCase().includes('dinner') || 
+    r.category?.toLowerCase().includes('main') ||
+    (!r.category && !breakfastRecipes.includes(r) && !lunchRecipes.includes(r)) // Default to dinner if no category
+  );
+  const dessertRecipes = allRecipes.filter(r => 
+    r.category?.toLowerCase().includes('dessert') || 
+    r.category?.toLowerCase().includes('sweet') ||
+    r.category?.toLowerCase().includes('treat')
+  );
+  
+  // Select recommendations (prefer seasonal, fallback to any)
+  const breakfast = getBestSeasonalRecipe(breakfastRecipes) || getRandomRecipe(breakfastRecipes);
+  const lunch = getBestSeasonalRecipe(lunchRecipes) || getRandomRecipe(lunchRecipes);
+  const dinner = getBestSeasonalRecipe(dinnerRecipes) || getRandomRecipe(dinnerRecipes);
+  const dessert = getBestSeasonalRecipe(dessertRecipes) || getRandomRecipe(dessertRecipes);
+  
+  // If no category-specific recipes found, use any recipe as fallback
+  const fallbackBreakfast = breakfast || getRandomRecipe(allRecipes);
+  const fallbackLunch = lunch || (fallbackBreakfast && allRecipes.length > 1 ? getRandomRecipe(allRecipes.filter(r => r.id !== fallbackBreakfast.id)) : fallbackBreakfast);
+  const fallbackDinner = dinner || (fallbackLunch && allRecipes.length > 2 ? getRandomRecipe(allRecipes.filter(r => r.id !== fallbackBreakfast?.id && r.id !== fallbackLunch?.id)) : fallbackLunch);
+  const fallbackDessert = dessert || (fallbackDinner && allRecipes.length > 3 ? getRandomRecipe(allRecipes.filter(r => r.id !== fallbackBreakfast?.id && r.id !== fallbackLunch?.id && r.id !== fallbackDinner?.id)) : null);
+  
+  return {
+    breakfast: fallbackBreakfast,
+    lunch: fallbackLunch,
+    dinner: fallbackDinner,
+    dessert: fallbackDessert,
+    season,
+  };
+}
+
 // Ingredient queries
 export async function getOrCreateIngredient(name: string, category?: string) {
   const db = await getDb();

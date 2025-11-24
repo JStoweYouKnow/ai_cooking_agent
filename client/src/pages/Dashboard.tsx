@@ -26,6 +26,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
+import { DailyRecommendations } from '@/components/DailyRecommendations';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -157,6 +158,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Daily Recommendations */}
+      <DailyRecommendations />
 
       {/* Recent Recipes */}
       <GlassCard glow={false}>

@@ -494,6 +494,11 @@ const recipeRouter = router({
       }
       return db.getRecipeIngredients(input.recipeId);
     }),
+
+  getDailyRecommendations: optionalAuthProcedure.query(async ({ ctx }) => {
+    const user = ctx.user || await db.getOrCreateAnonymousUser();
+    return db.getDailyRecommendations(user.id);
+  }),
 });
 
 // Ingredient router
