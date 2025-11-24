@@ -25,7 +25,7 @@ export function getCurrentSeason(date: Date = new Date()): Season {
 /**
  * Seasonal ingredient keywords that indicate a recipe is seasonal
  */
-const SEASONAL_KEYWORDS: Record<Season, string[]> = {
+export const SEASONAL_KEYWORDS: Record<Season, string[]> = {
   spring: [
     'asparagus', 'peas', 'artichoke', 'radish', 'spinach', 'lettuce', 'strawberry',
     'rhubarb', 'lemon', 'mint', 'basil', 'chive', 'dill', 'fennel', 'carrot',

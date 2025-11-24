@@ -227,8 +227,263 @@ export async function deleteRecipe(recipeId: number) {
 }
 
 /**
+ * Fetch and import recipes from external sources when user doesn't have enough recipes
+ */
+async function fetchAndImportRecipes(userId: number, season: string, neededCategories: string[]): Promise<void> {
+  const db = await getDb();
+  if (!db) return; // Can't fetch if no database
+  
+  try {
+    // Get user ingredients for search queries
+    const userIngredients = await getUserIngredients(userId);
+    const ingredientNames: string[] = [];
+    for (const ui of userIngredients.slice(0, 3)) {
+      const ingredient = await getIngredientById(ui.ingredientId);
+      if (ingredient?.name) {
+        ingredientNames.push(ingredient.name);
+      }
+    }
+    
+    // Get seasonal ingredients as fallback
+    const { SEASONAL_KEYWORDS } = await import('./utils/seasonal');
+    const seasonalIngredients = SEASONAL_KEYWORDS[season as keyof typeof SEASONAL_KEYWORDS] || [];
+    let searchIngredients = ingredientNames.length > 0 
+      ? ingredientNames 
+      : seasonalIngredients.slice(0, 3);
+    
+    if (searchIngredients.length === 0) {
+      // Use generic popular ingredients if no user/seasonal ingredients
+      searchIngredients = ['chicken', 'tomato', 'pasta'];
+    }
+    
+    // Search for recipes from TheMealDB (most reliable)
+    // Prioritize category-based searches, then ingredient-based
+    const categoryMap: Record<string, string> = {
+      'breakfast': 'Breakfast',
+      'lunch': 'Lunch',
+      'dinner': 'Dinner',
+      'dessert': 'Dessert',
+    };
+    
+    // First, try to fetch by category for missing categories
+    for (const category of neededCategories.slice(0, 2)) {
+      try {
+        const categoryName = categoryMap[category.toLowerCase()];
+        if (!categoryName) continue;
+        
+        const searchUrl = `https://www.themealdb.com/api/json/v1/1/filter.php?c=${encodeURIComponent(categoryName)}`;
+        const response = await fetch(searchUrl);
+        if (!response.ok) continue;
+        
+        const data = (await response.json()) as {
+          meals: Array<{ idMeal: string; strMeal: string; strMealThumb: string }> | null;
+        };
+        
+        if (!data.meals || data.meals.length === 0) continue;
+        
+        // Import up to 2 recipes per category
+        const mealsToImport = data.meals.slice(0, 2);
+        
+        for (const meal of mealsToImport) {
+          try {
+            // Check if recipe already exists
+            const existing = await db.select()
+              .from(recipes as any)
+              .where(and(
+                eq(recipes.userId, userId),
+                eq(recipes.externalId, meal.idMeal)
+              ))
+              .limit(1);
+            
+            if (existing.length > 0) continue; // Already imported
+            
+            // Fetch full recipe details
+            const detailResponse = await fetch(
+              `https://www.themealdb.com/api/json/v1/1/lookup.php?i=${encodeURIComponent(meal.idMeal)}`
+            );
+            if (!detailResponse.ok) continue;
+            
+            const detailData = (await detailResponse.json()) as {
+              meals: Array<{
+                idMeal: string;
+                strMeal: string;
+                strInstructions: string;
+                strMealThumb: string;
+                strCategory: string;
+                strArea: string;
+                [key: string]: unknown;
+              }> | null;
+            };
+            
+            if (!detailData.meals || detailData.meals.length === 0) continue;
+            
+            const mealDetail = detailData.meals[0];
+            
+            // Extract ingredients
+            const ingredients = [];
+            for (let i = 1; i <= 20; i++) {
+              const ingredientKey = `strIngredient${i}`;
+              const measureKey = `strMeasure${i}`;
+              const ingredientName = mealDetail[ingredientKey] as string | undefined;
+              const measure = mealDetail[measureKey] as string | undefined;
+              
+              if (ingredientName && ingredientName.trim()) {
+                ingredients.push({
+                  name: ingredientName.trim(),
+                  quantity: measure?.split(" ")[0] || "",
+                  unit: measure?.split(" ").slice(1).join(" ") || "",
+                });
+              }
+            }
+            
+            // Create recipe
+            await createRecipe({
+              name: mealDetail.strMeal,
+              instructions: mealDetail.strInstructions,
+              imageUrl: mealDetail.strMealThumb,
+              category: mealDetail.strCategory,
+              cuisine: mealDetail.strArea,
+              userId: userId,
+              externalId: mealDetail.idMeal,
+              source: "TheMealDB",
+            });
+            
+            // Get the created recipe and add ingredients
+            const userRecipes = await getUserRecipes(userId);
+            const created = userRecipes[userRecipes.length - 1];
+            
+            if (created && ingredients.length > 0) {
+              for (const ing of ingredients) {
+                const ingredient = await getOrCreateIngredient(ing.name);
+                await addRecipeIngredient({
+                  recipeId: created.id,
+                  ingredientId: ingredient.id,
+                  quantity: ing.quantity,
+                  unit: ing.unit,
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`[Recommendations] Error importing recipe ${meal.idMeal}:`, error);
+            // Continue with next recipe
+          }
+        }
+      } catch (error) {
+        console.error(`[Recommendations] Error fetching recipes for category ${category}:`, error);
+        // Continue with next category
+      }
+    }
+    
+    // If still need more recipes, search by ingredient
+    if (neededCategories.length > 0) {
+      for (const ingredient of searchIngredients.slice(0, 2)) {
+        try {
+          const searchUrl = `https://www.themealdb.com/api/json/v1/1/filter.php?i=${encodeURIComponent(ingredient)}`;
+          const response = await fetch(searchUrl);
+          if (!response.ok) continue;
+          
+          const data = (await response.json()) as {
+            meals: Array<{ idMeal: string; strMeal: string; strMealThumb: string }> | null;
+          };
+          
+          if (!data.meals || data.meals.length === 0) continue;
+          
+          // Import up to 1 recipe per ingredient (to avoid too many)
+          const meal = data.meals[0];
+          
+          // Check if recipe already exists
+          const existing = await db.select()
+            .from(recipes as any)
+            .where(and(
+              eq(recipes.userId, userId),
+              eq(recipes.externalId, meal.idMeal)
+            ))
+            .limit(1);
+          
+          if (existing.length > 0) continue; // Already imported
+          
+          // Fetch full recipe details
+          const detailResponse = await fetch(
+            `https://www.themealdb.com/api/json/v1/1/lookup.php?i=${encodeURIComponent(meal.idMeal)}`
+          );
+          if (!detailResponse.ok) continue;
+          
+          const detailData = (await detailResponse.json()) as {
+            meals: Array<{
+              idMeal: string;
+              strMeal: string;
+              strInstructions: string;
+              strMealThumb: string;
+              strCategory: string;
+              strArea: string;
+              [key: string]: unknown;
+            }> | null;
+          };
+          
+          if (!detailData.meals || detailData.meals.length === 0) continue;
+          
+          const mealDetail = detailData.meals[0];
+          
+          // Extract ingredients
+          const ingredients = [];
+          for (let i = 1; i <= 20; i++) {
+            const ingredientKey = `strIngredient${i}`;
+            const measureKey = `strMeasure${i}`;
+            const ingredientName = mealDetail[ingredientKey] as string | undefined;
+            const measure = mealDetail[measureKey] as string | undefined;
+            
+            if (ingredientName && ingredientName.trim()) {
+              ingredients.push({
+                name: ingredientName.trim(),
+                quantity: measure?.split(" ")[0] || "",
+                unit: measure?.split(" ").slice(1).join(" ") || "",
+              });
+            }
+          }
+          
+          // Create recipe
+          await createRecipe({
+            name: mealDetail.strMeal,
+            instructions: mealDetail.strInstructions,
+            imageUrl: mealDetail.strMealThumb,
+            category: mealDetail.strCategory,
+            cuisine: mealDetail.strArea,
+            userId: userId,
+            externalId: mealDetail.idMeal,
+            source: "TheMealDB",
+          });
+          
+          // Get the created recipe and add ingredients
+          const userRecipes = await getUserRecipes(userId);
+          const created = userRecipes[userRecipes.length - 1];
+          
+          if (created && ingredients.length > 0) {
+            for (const ing of ingredients) {
+              const ingredient = await getOrCreateIngredient(ing.name);
+              await addRecipeIngredient({
+                recipeId: created.id,
+                ingredientId: ingredient.id,
+                quantity: ing.quantity,
+                unit: ing.unit,
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`[Recommendations] Error fetching recipes for ingredient ${ingredient}:`, error);
+          // Continue with next ingredient
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[Recommendations] Error in fetchAndImportRecipes:", error);
+    // Don't throw - allow recommendations to continue with existing recipes
+  }
+}
+
+/**
  * Get daily recipe recommendations with seasonal filtering and calorie budget
  * Returns one recipe per category (Breakfast, Lunch, Dinner, Dessert)
+ * Automatically fetches recipes from external sources if user doesn't have enough
  */
 export async function getDailyRecommendations(userId: number) {
   const db = await getDb();
@@ -253,7 +508,46 @@ export async function getDailyRecommendations(userId: number) {
   const effectiveCalorieBudget = calorieBudget || goals?.targetCalories || null;
   
   // Get all user recipes
-  const allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
+  let allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
+  
+  // If user has very few recipes (< 4), try to fetch some from external sources
+  if (allRecipes.length < 4) {
+    // Determine which categories are missing
+    const hasBreakfast = allRecipes.some(r => 
+      r.category?.toLowerCase().includes('breakfast') || 
+      r.category?.toLowerCase().includes('morning')
+    );
+    const hasLunch = allRecipes.some(r => 
+      r.category?.toLowerCase().includes('lunch') || 
+      r.category?.toLowerCase().includes('midday')
+    );
+    const hasDinner = allRecipes.some(r => 
+      r.category?.toLowerCase().includes('dinner') || 
+      r.category?.toLowerCase().includes('main')
+    );
+    const hasDessert = allRecipes.some(r => 
+      r.category?.toLowerCase().includes('dessert') || 
+      r.category?.toLowerCase().includes('sweet')
+    );
+    
+    const neededCategories: string[] = [];
+    if (!hasBreakfast) neededCategories.push('breakfast');
+    if (!hasLunch) neededCategories.push('lunch');
+    if (!hasDinner) neededCategories.push('dinner');
+    if (!hasDessert && allRecipes.length < 3) neededCategories.push('dessert');
+    
+    // Fetch and import recipes (don't await - run in background)
+    if (neededCategories.length > 0 || allRecipes.length === 0) {
+      fetchAndImportRecipes(userId, season, neededCategories).catch(err => {
+        console.error("[Recommendations] Background recipe import failed:", err);
+      });
+      
+      // Wait a bit for imports, then refresh recipes
+      // In production, you might want to make this async or use a queue
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
+    }
+  }
   
   if (allRecipes.length === 0) {
     return {
