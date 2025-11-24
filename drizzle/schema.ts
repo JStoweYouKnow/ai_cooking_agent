@@ -21,6 +21,8 @@ export const users = mysqlTable("users", {
   dietaryPreferences: text("dietaryPreferences"),
   /** Allergies as JSON array (e.g., ["peanuts", "shellfish", "dairy"]) */
   allergies: text("allergies"),
+  /** Goals as JSON object (e.g., {"type": "weight_loss", "targetCalories": 2000, "targetWeightLossPerWeek": 1}) */
+  goals: text("goals"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

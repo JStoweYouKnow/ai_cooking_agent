@@ -35,7 +35,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     };
     const updateSet: Record<string, unknown> = {};
 
-    const textFields = ["name", "email", "loginMethod", "dietaryPreferences", "allergies"] as const;
+    const textFields = ["name", "email", "loginMethod", "dietaryPreferences", "allergies", "goals"] as const;
     type TextField = (typeof textFields)[number];
 
     const assignNullable = (field: TextField) => {
@@ -109,6 +109,7 @@ export async function updateUserPreferences(
   preferences: {
     dietaryPreferences?: string[] | null;
     allergies?: string[] | null;
+    goals?: Record<string, unknown> | null;
   }
 ) {
   const db = await getDb();
@@ -125,6 +126,12 @@ export async function updateUserPreferences(
   if (preferences.allergies !== undefined) {
     updateData.allergies = preferences.allergies 
       ? JSON.stringify(preferences.allergies) 
+      : null;
+  }
+  
+  if (preferences.goals !== undefined) {
+    updateData.goals = preferences.goals 
+      ? JSON.stringify(preferences.goals) 
       : null;
   }
   

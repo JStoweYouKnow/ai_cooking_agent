@@ -1098,6 +1098,9 @@ const userRouter = router({
       allergies: userData.allergies 
         ? JSON.parse(userData.allergies) as string[]
         : [],
+      goals: userData.goals 
+        ? JSON.parse(userData.goals) as Record<string, unknown>
+        : null,
     };
   }),
 
@@ -1106,6 +1109,7 @@ const userRouter = router({
       z.object({
         dietaryPreferences: z.array(z.string()).optional(),
         allergies: z.array(z.string()).optional(),
+        goals: z.record(z.unknown()).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1113,6 +1117,7 @@ const userRouter = router({
       const updated = await db.updateUserPreferences(user.id, {
         dietaryPreferences: input.dietaryPreferences,
         allergies: input.allergies,
+        goals: input.goals,
       });
       
       if (!updated) {
@@ -1126,6 +1131,9 @@ const userRouter = router({
         allergies: updated.allergies 
           ? JSON.parse(updated.allergies) as string[]
           : [],
+        goals: updated.goals 
+          ? JSON.parse(updated.goals) as Record<string, unknown>
+          : null,
       };
     }),
 });

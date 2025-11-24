@@ -43,6 +43,13 @@
       "when": 1763945332313,
       "tag": "0005_add_user_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1763955125718,
+      "tag": "0006_add_user_goals",
+      "breakpoints": true
     }
   ]
 }

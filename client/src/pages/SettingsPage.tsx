@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Settings, Plus, X, AlertCircle, Leaf } from 'lucide-react';
+import { Settings, Plus, X, AlertCircle, Leaf, Target, TrendingUp, TrendingDown, Scale, Baby } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -49,11 +50,22 @@ const COMMON_ALLERGIES = [
   'Mustard',
 ];
 
+type GoalType = 'bulking' | 'weight_loss' | 'maintenance' | 'pregnancy' | null;
+
+interface GoalData {
+  type: GoalType;
+  targetCalories?: number;
+  targetProtein?: number; // for bulking
+  targetWeightLossPerWeek?: number; // for weight_loss (in lbs)
+  trimester?: number; // for pregnancy (1, 2, or 3)
+}
+
 export default function SettingsPage() {
   const [dietaryPreferences, setDietaryPreferences] = useState<string[]>([]);
   const [allergies, setAllergies] = useState<string[]>([]);
   const [customPreference, setCustomPreference] = useState('');
   const [customAllergy, setCustomAllergy] = useState('');
+  const [goal, setGoal] = useState<GoalData>({ type: null });
 
   const { data: preferences, isLoading } = trpc.user.getPreferences.useQuery();
   const updatePreferencesMutation = trpc.user.updatePreferences.useMutation({
@@ -69,6 +81,9 @@ export default function SettingsPage() {
     if (preferences) {
       setDietaryPreferences(preferences.dietaryPreferences || []);
       setAllergies(preferences.allergies || []);
+      if (preferences.goals) {
+        setGoal(preferences.goals as GoalData);
+      }
     }
   }, [preferences]);
 
@@ -111,10 +126,26 @@ export default function SettingsPage() {
   };
 
   const handleSave = () => {
+    const goalsData = goal.type ? goal : null;
     updatePreferencesMutation.mutate({
       dietaryPreferences,
       allergies,
+      goals: goalsData,
     });
+  };
+
+  const handleGoalTypeChange = (type: string) => {
+    if (type === 'none') {
+      setGoal({ type: null });
+    } else {
+      setGoal({
+        type: type as GoalType,
+        targetCalories: goal.targetCalories,
+        targetProtein: goal.targetProtein,
+        targetWeightLossPerWeek: goal.targetWeightLossPerWeek,
+        trimester: goal.trimester,
+      });
+    }
   };
 
   if (isLoading) {
@@ -321,6 +352,194 @@ export default function SettingsPage() {
                     </button>
                   </Badge>
                 ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </GlassCard>
+
+      {/* Goals Section */}
+      <GlassCard glow={false}>
+        <SectionHeader
+          icon={Target}
+          title="Health & Fitness Goals"
+          description="Set your nutrition goals to get personalized recipe recommendations"
+        />
+        <div className="mt-6 space-y-6">
+          {/* Goal Type Selection */}
+          <div>
+            <Label className="text-base font-semibold mb-3 block">Select Your Goal</Label>
+            <Select
+              value={goal.type || 'none'}
+              onValueChange={handleGoalTypeChange}
+            >
+              <SelectTrigger className="w-full md:w-96">
+                <SelectValue placeholder="No specific goal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No specific goal</SelectItem>
+                <SelectItem value="bulking">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" />
+                    <span>Bulking (Muscle Gain)</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="weight_loss">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="h-4 w-4" />
+                    <span>Weight Loss</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="maintenance">
+                  <div className="flex items-center gap-2">
+                    <Scale className="h-4 w-4" />
+                    <span>Weight Maintenance</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="pregnancy">
+                  <div className="flex items-center gap-2">
+                    <Baby className="h-4 w-4" />
+                    <span>Pregnancy</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Goal-Specific Fields */}
+          {goal.type && (
+            <div className="space-y-4 p-6 rounded-xl border-2 border-pc-olive/30 bg-gradient-to-br from-pc-olive/5 to-white">
+              {/* Target Calories (for all goals) */}
+              <div>
+                <Label htmlFor="targetCalories" className="text-base font-semibold mb-2 block">
+                  Target Daily Calories
+                </Label>
+                <Input
+                  id="targetCalories"
+                  type="number"
+                  min="800"
+                  max="5000"
+                  step="50"
+                  placeholder="e.g., 2000"
+                  value={goal.targetCalories || ''}
+                  onChange={(e) => setGoal({
+                    ...goal,
+                    targetCalories: e.target.value ? parseInt(e.target.value) : undefined,
+                  })}
+                  className="w-full md:w-64"
+                />
+                <p className="text-sm text-pc-text-light mt-1">
+                  Recommended: 1,800-2,500 calories per day (varies by individual)
+                </p>
+              </div>
+
+              {/* Bulking-specific: Target Protein */}
+              {goal.type === 'bulking' && (
+                <div>
+                  <Label htmlFor="targetProtein" className="text-base font-semibold mb-2 block">
+                    Target Daily Protein (grams)
+                  </Label>
+                  <Input
+                    id="targetProtein"
+                    type="number"
+                    min="50"
+                    max="300"
+                    step="10"
+                    placeholder="e.g., 150"
+                    value={goal.targetProtein || ''}
+                    onChange={(e) => setGoal({
+                      ...goal,
+                      targetProtein: e.target.value ? parseInt(e.target.value) : undefined,
+                    })}
+                    className="w-full md:w-64"
+                  />
+                  <p className="text-sm text-pc-text-light mt-1">
+                    Recommended: 1.6-2.2g per kg of body weight for muscle gain
+                  </p>
+                </div>
+              )}
+
+              {/* Weight Loss-specific: Target Weight Loss Per Week */}
+              {goal.type === 'weight_loss' && (
+                <div>
+                  <Label htmlFor="targetWeightLoss" className="text-base font-semibold mb-2 block">
+                    Target Weight Loss Per Week (lbs)
+                  </Label>
+                  <Input
+                    id="targetWeightLoss"
+                    type="number"
+                    min="0.5"
+                    max="3"
+                    step="0.5"
+                    placeholder="e.g., 1.5"
+                    value={goal.targetWeightLossPerWeek || ''}
+                    onChange={(e) => setGoal({
+                      ...goal,
+                      targetWeightLossPerWeek: e.target.value ? parseFloat(e.target.value) : undefined,
+                    })}
+                    className="w-full md:w-64"
+                  />
+                  <p className="text-sm text-pc-text-light mt-1">
+                    Recommended: 1-2 lbs per week for sustainable weight loss
+                  </p>
+                </div>
+              )}
+
+              {/* Pregnancy-specific: Trimester */}
+              {goal.type === 'pregnancy' && (
+                <div>
+                  <Label htmlFor="trimester" className="text-base font-semibold mb-2 block">
+                    Current Trimester
+                  </Label>
+                  <Select
+                    value={goal.trimester?.toString() || ''}
+                    onValueChange={(value) => setGoal({
+                      ...goal,
+                      trimester: parseInt(value),
+                    })}
+                  >
+                    <SelectTrigger className="w-full md:w-64">
+                      <SelectValue placeholder="Select trimester" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">First Trimester (0-13 weeks)</SelectItem>
+                      <SelectItem value="2">Second Trimester (14-27 weeks)</SelectItem>
+                      <SelectItem value="3">Third Trimester (28+ weeks)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-pc-text-light mt-1">
+                    Calorie needs increase by ~300-500 calories per day during pregnancy
+                  </p>
+                </div>
+              )}
+
+              {/* Goal Summary */}
+              <div className="pt-4 border-t border-pc-tan/20">
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-pc-olive/10 border border-pc-olive/20">
+                  <Target className="h-5 w-5 text-pc-olive mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-pc-navy mb-1">
+                      {goal.type === 'bulking' && 'Bulking Goal'}
+                      {goal.type === 'weight_loss' && 'Weight Loss Goal'}
+                      {goal.type === 'maintenance' && 'Maintenance Goal'}
+                      {goal.type === 'pregnancy' && 'Pregnancy Goal'}
+                    </p>
+                    <div className="text-sm text-pc-text-light space-y-1">
+                      {goal.targetCalories && (
+                        <p>Target Calories: <span className="font-medium">{goal.targetCalories} kcal/day</span></p>
+                      )}
+                      {goal.type === 'bulking' && goal.targetProtein && (
+                        <p>Target Protein: <span className="font-medium">{goal.targetProtein}g/day</span></p>
+                      )}
+                      {goal.type === 'weight_loss' && goal.targetWeightLossPerWeek && (
+                        <p>Target Weight Loss: <span className="font-medium">{goal.targetWeightLossPerWeek} lbs/week</span></p>
+                      )}
+                      {goal.type === 'pregnancy' && goal.trimester && (
+                        <p>Trimester: <span className="font-medium">{goal.trimester === 1 ? 'First' : goal.trimester === 2 ? 'Second' : 'Third'}</span></p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
