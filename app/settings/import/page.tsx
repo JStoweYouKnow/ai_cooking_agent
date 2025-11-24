@@ -4,27 +4,19 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 export default function ImportRecipesPage() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const { toast } = useToast();
   const importMutation = trpc.recipes.importFromZip.useMutation({
     onSuccess: (data) => {
-      toast({
-        title: "Import Complete",
-        description: `${data.imported} recipes have been imported.`,
-      });
+      toast.success(`Import Complete: ${data.imported} recipes have been imported.`);
       setIsUploading(false);
     },
     onError: (error) => {
-      toast({
-        title: "Import Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error(error.message || "Import Failed");
       setIsUploading(false);
     },
   });
@@ -38,11 +30,7 @@ export default function ImportRecipesPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!file) {
-      toast({
-        title: "No file selected",
-        description: "Please select a zip file to upload.",
-        variant: "destructive",
-      });
+      toast.error("No file selected. Please select a zip file to upload.");
       return;
     }
 
@@ -64,11 +52,7 @@ export default function ImportRecipesPage() {
       const result = await response.json();
       importMutation.mutate({ path: result.path });
     } catch (error) {
-      toast({
-        title: "Upload Failed",
-        description: "An error occurred while uploading the file.",
-        variant: "destructive",
-      });
+      toast.error("An error occurred while uploading the file.");
       setIsUploading(false);
     }
   };

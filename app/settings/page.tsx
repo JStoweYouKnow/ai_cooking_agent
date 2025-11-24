@@ -1,8 +1,15 @@
+"use client";
 
 import { User, Bell, Shield, Palette, Database, LogOut, Upload } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { PCCard } from '@/components/pc-card';
+import { PCButton } from '@/components/pc-button';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function SettingsPage() {
   const { data: user } = trpc.auth.me.useQuery();
