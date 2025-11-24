@@ -159,6 +159,7 @@ export function DailyRecommendations() {
                     category: recipe.category,
                     cookingTime: recipe.cookingTime,
                     servings: recipe.servings,
+                    caloriesPerServing: recipe.caloriesPerServing ?? undefined,
                     isFavorite: recipe.isFavorite ?? undefined,
                   }}
                   onClick={() => {

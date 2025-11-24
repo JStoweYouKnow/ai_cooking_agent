@@ -23,6 +23,8 @@ export const users = mysqlTable("users", {
   allergies: text("allergies"),
   /** Goals as JSON object (e.g., {"type": "weight_loss", "targetCalories": 2000, "targetWeightLossPerWeek": 1}) */
   goals: text("goals"),
+  /** Daily calorie budget (can be set independently or derived from goals) */
+  calorieBudget: int("calorieBudget"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -51,6 +53,8 @@ export const recipes = mysqlTable("recipes", {
   cookingTime: int("cookingTime"),
   /** Number of servings */
   servings: int("servings"),
+  /** Calories per serving */
+  caloriesPerServing: int("caloriesPerServing"),
   /** Source URL if imported */
   sourceUrl: text("sourceUrl"),
   /** Source name (e.g., 'TheMealDB', 'User Import') */

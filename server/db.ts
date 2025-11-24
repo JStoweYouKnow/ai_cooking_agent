@@ -48,6 +48,12 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
     textFields.forEach(assignNullable);
 
+    // Handle calorieBudget (numeric field)
+    if (user.calorieBudget !== undefined) {
+      values.calorieBudget = user.calorieBudget;
+      updateSet.calorieBudget = user.calorieBudget;
+    }
+
     if (user.lastSignedIn !== undefined) {
       values.lastSignedIn = user.lastSignedIn;
       updateSet.lastSignedIn = user.lastSignedIn;
@@ -110,6 +116,7 @@ export async function updateUserPreferences(
     dietaryPreferences?: string[] | null;
     allergies?: string[] | null;
     goals?: Record<string, unknown> | null;
+    calorieBudget?: number | null;
   }
 ) {
   const db = await getDb();
@@ -133,6 +140,10 @@ export async function updateUserPreferences(
     updateData.goals = preferences.goals 
       ? JSON.stringify(preferences.goals) 
       : null;
+  }
+  
+  if (preferences.calorieBudget !== undefined) {
+    updateData.calorieBudget = preferences.calorieBudget ?? null;
   }
   
   if (Object.keys(updateData).length === 0) {
@@ -215,7 +226,7 @@ export async function deleteRecipe(recipeId: number) {
 }
 
 /**
- * Get daily recipe recommendations with seasonal filtering
+ * Get daily recipe recommendations with seasonal filtering and calorie budget
  * Returns one recipe per category (Breakfast, Lunch, Dinner, Dessert)
  */
 export async function getDailyRecommendations(userId: number) {
@@ -225,6 +236,21 @@ export async function getDailyRecommendations(userId: number) {
   // Import seasonal utilities
   const { getCurrentSeason, getSeasonalScore } = await import('./utils/seasonal.js');
   const season = getCurrentSeason();
+  
+  // Get user's calorie budget and goals
+  const user = await getUserById(userId);
+  const calorieBudget = user?.calorieBudget || null;
+  let goals: { targetCalories?: number } | null = null;
+  if (user?.goals) {
+    try {
+      goals = JSON.parse(user.goals) as { targetCalories?: number };
+    } catch {
+      goals = null;
+    }
+  }
+  
+  // Use calorie budget from goals if not set directly, or use goal's targetCalories
+  const effectiveCalorieBudget = calorieBudget || goals?.targetCalories || null;
   
   // Get all user recipes
   const allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
@@ -237,6 +263,84 @@ export async function getDailyRecommendations(userId: number) {
       dessert: null,
       season,
     };
+  }
+  
+  // Declare category recipe arrays
+  let breakfastRecipes: typeof allRecipes;
+  let lunchRecipes: typeof allRecipes;
+  let dinnerRecipes: typeof allRecipes;
+  let dessertRecipes: typeof allRecipes;
+  
+  // Filter recipes by calorie budget if set
+  if (effectiveCalorieBudget) {
+    // Calculate meal calorie allocations (rough estimates)
+    const breakfastBudget = Math.floor(effectiveCalorieBudget * 0.25); // 25% for breakfast
+    const lunchBudget = Math.floor(effectiveCalorieBudget * 0.35); // 35% for lunch
+    const dinnerBudget = Math.floor(effectiveCalorieBudget * 0.35); // 35% for dinner
+    const dessertBudget = Math.floor(effectiveCalorieBudget * 0.05); // 5% for dessert
+    
+    // Helper to filter recipes by calorie range (with flexibility)
+    const filterByCalories = (recipes: typeof allRecipes, maxCalories: number) => {
+      const minCalories = Math.floor(maxCalories * 0.5); // Allow recipes up to 50% less
+      const maxCal = Math.floor(maxCalories * 1.2); // Allow up to 20% more
+      return recipes.filter(r => {
+        if (!r.caloriesPerServing) return true; // Include recipes without calorie data
+        return r.caloriesPerServing >= minCalories && r.caloriesPerServing <= maxCal;
+      });
+    };
+    
+    // Get recipes by category first
+    const breakfastAll = allRecipes.filter(r => 
+      r.category?.toLowerCase().includes('breakfast') || 
+      r.category?.toLowerCase().includes('morning')
+    );
+    const lunchAll = allRecipes.filter(r => 
+      r.category?.toLowerCase().includes('lunch') || 
+      r.category?.toLowerCase().includes('midday')
+    );
+    const dinnerAll = allRecipes.filter(r => 
+      r.category?.toLowerCase().includes('dinner') || 
+      r.category?.toLowerCase().includes('main') ||
+      (!r.category && !breakfastAll.includes(r) && !lunchAll.includes(r))
+    );
+    const dessertAll = allRecipes.filter(r => 
+      r.category?.toLowerCase().includes('dessert') || 
+      r.category?.toLowerCase().includes('sweet') ||
+      r.category?.toLowerCase().includes('treat')
+    );
+    
+    // Filter by calories, fallback to all if no matches
+    breakfastRecipes = filterByCalories(breakfastAll, breakfastBudget);
+    if (breakfastRecipes.length === 0) breakfastRecipes = breakfastAll;
+    
+    lunchRecipes = filterByCalories(lunchAll, lunchBudget);
+    if (lunchRecipes.length === 0) lunchRecipes = lunchAll;
+    
+    dinnerRecipes = filterByCalories(dinnerAll, dinnerBudget);
+    if (dinnerRecipes.length === 0) dinnerRecipes = dinnerAll;
+    
+    dessertRecipes = filterByCalories(dessertAll, dessertBudget);
+    if (dessertRecipes.length === 0) dessertRecipes = dessertAll;
+  } else {
+    // No calorie budget - use all recipes
+    breakfastRecipes = allRecipes.filter(r => 
+      r.category?.toLowerCase().includes('breakfast') || 
+      r.category?.toLowerCase().includes('morning')
+    );
+    lunchRecipes = allRecipes.filter(r => 
+      r.category?.toLowerCase().includes('lunch') || 
+      r.category?.toLowerCase().includes('midday')
+    );
+    dinnerRecipes = allRecipes.filter(r => 
+      r.category?.toLowerCase().includes('dinner') || 
+      r.category?.toLowerCase().includes('main') ||
+      (!r.category && !breakfastRecipes.includes(r) && !lunchRecipes.includes(r))
+    );
+    dessertRecipes = allRecipes.filter(r => 
+      r.category?.toLowerCase().includes('dessert') || 
+      r.category?.toLowerCase().includes('sweet') ||
+      r.category?.toLowerCase().includes('treat')
+    );
   }
   
   // Helper function to get a random recipe from a filtered list
@@ -266,26 +370,6 @@ export async function getDailyRecommendations(userId: number) {
     const randomIndex = Math.floor(Math.random() * topRecipes.length);
     return topRecipes[randomIndex]?.recipe || null;
   };
-  
-  // Get recipes by category
-  const breakfastRecipes = allRecipes.filter(r => 
-    r.category?.toLowerCase().includes('breakfast') || 
-    r.category?.toLowerCase().includes('morning')
-  );
-  const lunchRecipes = allRecipes.filter(r => 
-    r.category?.toLowerCase().includes('lunch') || 
-    r.category?.toLowerCase().includes('midday')
-  );
-  const dinnerRecipes = allRecipes.filter(r => 
-    r.category?.toLowerCase().includes('dinner') || 
-    r.category?.toLowerCase().includes('main') ||
-    (!r.category && !breakfastRecipes.includes(r) && !lunchRecipes.includes(r)) // Default to dinner if no category
-  );
-  const dessertRecipes = allRecipes.filter(r => 
-    r.category?.toLowerCase().includes('dessert') || 
-    r.category?.toLowerCase().includes('sweet') ||
-    r.category?.toLowerCase().includes('treat')
-  );
   
   // Select recommendations (prefer seasonal, fallback to any)
   const breakfast = getBestSeasonalRecipe(breakfastRecipes) || getRandomRecipe(breakfastRecipes);

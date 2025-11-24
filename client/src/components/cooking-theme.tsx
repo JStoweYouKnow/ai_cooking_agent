@@ -83,6 +83,15 @@ export function ServingsBadge({ count }: { count: number }) {
   );
 }
 
+export function CaloriesBadge({ calories }: { calories: number }) {
+  return (
+    <CookingBadge variant="time" className="bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-orange-300">
+      <Flame className="h-3 w-3" />
+      <span>{calories} kcal</span>
+    </CookingBadge>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* ------------------------- Recipe Card Component ------------------------- */
 /* -------------------------------------------------------------------------- */
@@ -106,6 +115,7 @@ export function RecipeCard({
     category?: string | null;
     cookingTime?: number | null;
     servings?: number | null;
+    caloriesPerServing?: number | null;
     isFavorite?: boolean;
   };
   onClick?: () => void;
@@ -202,6 +212,9 @@ export function RecipeCard({
             )}
             {recipe.servings && (
               <ServingsBadge count={recipe.servings} />
+            )}
+            {recipe.caloriesPerServing && (
+              <CaloriesBadge calories={recipe.caloriesPerServing} />
             )}
           </div>
         </div>

@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PCCard, PCButton } from '@/components/project-comfort-ui';
-import { CookingBadge, CookingTimeBadge, ServingsBadge } from '@/components/cooking-theme';
+import { CookingBadge, CookingTimeBadge, ServingsBadge, CaloriesBadge } from '@/components/cooking-theme';
 
 export default function RecipeDetailPage() {
   const params = useParams();
@@ -223,6 +223,7 @@ export default function RecipeDetailPage() {
               )}
               {recipe.cookingTime && <CookingTimeBadge minutes={recipe.cookingTime} />}
               {recipe.servings && <ServingsBadge count={recipe.servings} />}
+              {recipe.caloriesPerServing && <CaloriesBadge calories={recipe.caloriesPerServing} />}
               {recipe.source && (
                 <CookingBadge className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300">
                   {recipe.source}

@@ -66,6 +66,7 @@ export default function SettingsPage() {
   const [customPreference, setCustomPreference] = useState('');
   const [customAllergy, setCustomAllergy] = useState('');
   const [goal, setGoal] = useState<GoalData>({ type: null });
+  const [calorieBudget, setCalorieBudget] = useState<number | null>(null);
 
   const { data: preferences, isLoading } = trpc.user.getPreferences.useQuery();
   const updatePreferencesMutation = trpc.user.updatePreferences.useMutation({
@@ -84,6 +85,7 @@ export default function SettingsPage() {
       if (preferences.goals) {
         setGoal(preferences.goals as GoalData);
       }
+      setCalorieBudget(preferences.calorieBudget ?? null);
     }
   }, [preferences]);
 
@@ -131,6 +133,7 @@ export default function SettingsPage() {
       dietaryPreferences,
       allergies,
       goals: goalsData,
+      calorieBudget: calorieBudget,
     });
   };
 
@@ -543,6 +546,70 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </div>
+      </GlassCard>
+
+      {/* Calorie Budget Section */}
+      <GlassCard glow={false}>
+        <SectionHeader
+          icon={Target}
+          title="Daily Calorie Budget"
+          description="Set your daily calorie budget to get meal recommendations that fit your goals"
+        />
+        <div className="mt-6 space-y-4">
+          <div>
+            <Label htmlFor="calorieBudget" className="text-base font-semibold mb-3 block">
+              Daily Calorie Budget (kcal)
+            </Label>
+            <Input
+              id="calorieBudget"
+              type="number"
+              min="800"
+              max="5000"
+              step="50"
+              placeholder="e.g., 2000"
+              value={calorieBudget || ''}
+              onChange={(e) => setCalorieBudget(e.target.value ? parseInt(e.target.value) : null)}
+              className="w-full md:w-96"
+            />
+            <p className="text-sm text-pc-text-light mt-2">
+              This budget will be used to filter recipe recommendations. 
+              {goal.type && goal.targetCalories && (
+                <span className="block mt-1">
+                  Your goal target: <span className="font-semibold">{goal.targetCalories} kcal/day</span>
+                  {calorieBudget && calorieBudget !== goal.targetCalories && (
+                    <span className="text-pc-olive"> (You can override this with a custom budget)</span>
+                  )}
+                </span>
+              )}
+            </p>
+            {calorieBudget && (
+              <div className="mt-4 p-4 rounded-lg bg-pc-olive/10 border border-pc-olive/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="h-5 w-5 text-pc-olive" />
+                  <span className="font-semibold text-pc-navy">Budget Allocation</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <span className="text-pc-text-light">Breakfast:</span>
+                    <span className="font-medium ml-2">{Math.floor(calorieBudget * 0.25)} kcal</span>
+                  </div>
+                  <div>
+                    <span className="text-pc-text-light">Lunch:</span>
+                    <span className="font-medium ml-2">{Math.floor(calorieBudget * 0.35)} kcal</span>
+                  </div>
+                  <div>
+                    <span className="text-pc-text-light">Dinner:</span>
+                    <span className="font-medium ml-2">{Math.floor(calorieBudget * 0.35)} kcal</span>
+                  </div>
+                  <div>
+                    <span className="text-pc-text-light">Dessert:</span>
+                    <span className="font-medium ml-2">{Math.floor(calorieBudget * 0.05)} kcal</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </GlassCard>
 

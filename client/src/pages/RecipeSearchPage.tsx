@@ -487,6 +487,7 @@ export default function RecipeSearchPage() {
                       category: recipe.category,
                       cookingTime: recipe.cookingTime,
                       servings: recipe.servings,
+                      caloriesPerServing: recipe.caloriesPerServing ?? undefined,
                       isFavorite: recipe.isFavorite,
                     }}
                     onClick={() => {

@@ -41,6 +41,7 @@ const recipeRouter = router({
         category: z.string().max(100).optional(),
         cookingTime: z.number().int().positive().max(1440).optional(), // Max 24 hours
         servings: z.number().int().positive().max(100).optional(),
+        caloriesPerServing: z.number().int().positive().max(5000).optional(), // Max 5000 calories per serving
         sourceUrl: z.string().url().max(500).optional(),
         source: z.string().max(100).default("user_import"),
         ingredients: z
@@ -123,6 +124,7 @@ const recipeRouter = router({
                     category: { type: "string" },
                     cookingTime: { type: "number" },
                     servings: { type: "number" },
+                    caloriesPerServing: { type: "number" },
                     ingredients: {
                       type: "array",
                       items: {
@@ -183,6 +185,7 @@ const recipeRouter = router({
             category: typeof fallback.category === "string" ? fallback.category : undefined,
             cookingTime: typeof fallback.cookingTime === "number" ? fallback.cookingTime : undefined,
             servings: typeof fallback.servings === "number" ? fallback.servings : undefined,
+            caloriesPerServing: typeof fallback.caloriesPerServing === "number" ? fallback.caloriesPerServing : undefined,
             sourceUrl: input.url,
             userId: user.id,
             source: "url_import",
@@ -242,6 +245,7 @@ const recipeRouter = router({
         category: typeof parsed.category === "string" ? parsed.category : undefined,
         cookingTime: typeof parsed.cookingTime === "number" ? parsed.cookingTime : undefined,
         servings: typeof parsed.servings === "number" ? parsed.servings : undefined,
+        caloriesPerServing: typeof parsed.caloriesPerServing === "number" ? parsed.caloriesPerServing : undefined,
         sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : undefined,
         userId: user.id,
         source: typeof parsed.source === "string" ? parsed.source : "url_import",
@@ -1101,6 +1105,7 @@ const userRouter = router({
       goals: userData.goals 
         ? JSON.parse(userData.goals) as Record<string, unknown>
         : null,
+      calorieBudget: userData.calorieBudget ?? null,
     };
   }),
 
@@ -1110,6 +1115,7 @@ const userRouter = router({
         dietaryPreferences: z.array(z.string()).optional(),
         allergies: z.array(z.string()).optional(),
         goals: z.record(z.unknown()).nullable().optional(),
+        calorieBudget: z.number().int().positive().max(10000).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1118,6 +1124,7 @@ const userRouter = router({
         dietaryPreferences: input.dietaryPreferences,
         allergies: input.allergies,
         goals: input.goals,
+        calorieBudget: input.calorieBudget,
       });
       
       if (!updated) {
@@ -1134,6 +1141,7 @@ const userRouter = router({
         goals: updated.goals 
           ? JSON.parse(updated.goals) as Record<string, unknown>
           : null,
+        calorieBudget: updated.calorieBudget ?? null,
       };
     }),
 });

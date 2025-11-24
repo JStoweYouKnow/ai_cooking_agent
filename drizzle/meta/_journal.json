@@ -50,6 +50,13 @@
       "when": 1763955125718,
       "tag": "0006_add_user_goals",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1763955601006,
+      "tag": "0007_add_calories_and_budget",
+      "breakpoints": true
     }
   ]
 }
