@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem, notifications, InsertNotification, Notification, conversations, InsertConversation, Conversation, messages, InsertMessage, Message } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
+import { invokeLLM } from './_core/llm';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -224,6 +225,121 @@ export async function deleteRecipe(recipeId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.delete(recipes).where(eq(recipes.id, recipeId));
+}
+
+/**
+ * Generate recipe recommendations using LLM when user has no ingredients/preferences
+ */
+async function generateLLMRecommendations(
+  mealCategory: 'breakfast' | 'lunch' | 'dinner' | 'dessert',
+  season: string,
+  calorieBudget: number | null,
+  dietaryPreferences: string[] | null,
+  allergies: string[] | null,
+  goals: { targetCalories?: number; type?: string } | null
+): Promise<{
+  name: string;
+  description: string;
+  instructions: string;
+  category: string;
+  caloriesPerServing: number | null;
+  ingredients: Array<{ name: string; quantity?: string; unit?: string }>;
+} | null> {
+  try {
+    const categoryBudget = calorieBudget 
+      ? mealCategory === 'breakfast' ? Math.floor(calorieBudget * 0.25)
+        : mealCategory === 'lunch' ? Math.floor(calorieBudget * 0.35)
+        : mealCategory === 'dinner' ? Math.floor(calorieBudget * 0.35)
+        : Math.floor(calorieBudget * 0.05)
+      : null;
+    
+    const seasonLabels: Record<string, string> = {
+      spring: 'Spring',
+      summer: 'Summer',
+      fall: 'Fall',
+      winter: 'Winter'
+    };
+    
+    const mealLabels: Record<string, string> = {
+      breakfast: 'Breakfast',
+      lunch: 'Lunch',
+      dinner: 'Dinner',
+      dessert: 'Dessert'
+    };
+    
+    const prompt = `Generate a ${mealLabels[mealCategory]} recipe recommendation for ${seasonLabels[season] || season} season.
+${categoryBudget ? `Target calories per serving: approximately ${categoryBudget} calories.` : ''}
+${dietaryPreferences && dietaryPreferences.length > 0 ? `Dietary preferences: ${dietaryPreferences.join(', ')}.` : ''}
+${allergies && allergies.length > 0 ? `Allergies to avoid: ${allergies.join(', ')}.` : ''}
+${goals?.type ? `User goal: ${goals.type}.` : ''}
+
+Generate a seasonal recipe that fits these parameters. Return a JSON object with:
+- name: Recipe name
+- description: Brief description (2-3 sentences)
+- instructions: Step-by-step cooking instructions
+- category: Meal category (${mealLabels[mealCategory]})
+- caloriesPerServing: Estimated calories per serving (number or null)
+- ingredients: Array of objects with name, quantity (optional), and unit (optional)
+
+Make it seasonal, appropriate for ${season}, and suitable for ${mealCategory}.`;
+
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "recipe_recommendation",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              description: { type: "string" },
+              instructions: { type: "string" },
+              category: { type: "string" },
+              caloriesPerServing: { type: ["number", "null"] },
+              ingredients: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    quantity: { type: ["string", "null"] },
+                    unit: { type: ["string", "null"] },
+                  },
+                  required: ["name"],
+                },
+              },
+            },
+            required: ["name", "description", "instructions", "category", "ingredients"],
+          },
+        },
+      },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return null;
+    
+    const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+    const parsed = JSON.parse(contentStr);
+    
+    return {
+      name: parsed.name,
+      description: parsed.description,
+      instructions: parsed.instructions,
+      category: parsed.category,
+      caloriesPerServing: parsed.caloriesPerServing || null,
+      ingredients: parsed.ingredients || [],
+    };
+  } catch (error) {
+    console.error(`[LLM Recommendations] Error generating ${mealCategory} recommendation:`, error);
+    return null;
+  }
 }
 
 /**
@@ -507,11 +623,82 @@ export async function getDailyRecommendations(userId: number) {
   // Use calorie budget from goals if not set directly, or use goal's targetCalories
   const effectiveCalorieBudget = calorieBudget || goals?.targetCalories || null;
   
+  // Get user preferences
+  const dietaryPreferences = user?.dietaryPreferences 
+    ? (user.dietaryPreferences.includes(',') 
+        ? user.dietaryPreferences.split(',').map(p => p.trim())
+        : [user.dietaryPreferences])
+    : null;
+  const allergies = user?.allergies
+    ? (user.allergies.includes(',')
+        ? user.allergies.split(',').map(a => a.trim())
+        : [user.allergies])
+    : null;
+  
+  // Get user ingredients
+  const userIngredients = await getUserIngredients(userId);
+  const hasUserIngredients = userIngredients.length > 0;
+  
   // Get all user recipes
   let allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
   
-  // If user has very few recipes (< 4), try to fetch some from external sources
-  if (allRecipes.length < 4) {
+  // If user has no ingredients/preferences and no recipes, use LLM to generate recommendations
+  if (!hasUserIngredients && allRecipes.length === 0) {
+    try {
+      const [breakfastLLM, lunchLLM, dinnerLLM, dessertLLM] = await Promise.all([
+        generateLLMRecommendations('breakfast', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
+        generateLLMRecommendations('lunch', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
+        generateLLMRecommendations('dinner', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
+        generateLLMRecommendations('dessert', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
+      ]);
+      
+      // Convert LLM recommendations to recipe-like objects that can be displayed
+      const llmToRecipe = (llm: typeof breakfastLLM): typeof allRecipes[0] | null => {
+        if (!llm) return null;
+        // Return a recipe-like object that can be displayed (without saving to DB)
+        return {
+          id: -1, // Temporary ID to indicate it's an LLM-generated recipe
+          userId,
+          name: llm.name,
+          description: llm.description,
+          instructions: llm.instructions,
+          category: llm.category,
+          caloriesPerServing: llm.caloriesPerServing,
+          imageUrl: null,
+          cuisine: null,
+          cookingTime: null,
+          servings: null,
+          isFavorite: false,
+          source: 'LLM',
+          sourceUrl: null,
+          externalId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as typeof allRecipes[0];
+      };
+      
+      return {
+        breakfast: llmToRecipe(breakfastLLM),
+        lunch: llmToRecipe(lunchLLM),
+        dinner: llmToRecipe(dinnerLLM),
+        dessert: llmToRecipe(dessertLLM),
+        season,
+      };
+    } catch (error) {
+      console.error("[Recommendations] Error generating LLM recommendations:", error);
+      // Fall through to return empty recommendations
+      return {
+        breakfast: null,
+        lunch: null,
+        dinner: null,
+        dessert: null,
+        season,
+      };
+    }
+  }
+  
+  // If user has very few recipes (< 4) but has ingredients, try to fetch some from external sources
+  if (allRecipes.length < 4 && hasUserIngredients) {
     // Determine which categories are missing
     const hasBreakfast = allRecipes.some(r => 
       r.category?.toLowerCase().includes('breakfast') || 
@@ -549,14 +736,56 @@ export async function getDailyRecommendations(userId: number) {
     }
   }
   
+  // If still no recipes after trying to fetch, use LLM as fallback
   if (allRecipes.length === 0) {
-    return {
-      breakfast: null,
-      lunch: null,
-      dinner: null,
-      dessert: null,
-      season,
-    };
+    try {
+      const [breakfastLLM, lunchLLM, dinnerLLM, dessertLLM] = await Promise.all([
+        generateLLMRecommendations('breakfast', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
+        generateLLMRecommendations('lunch', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
+        generateLLMRecommendations('dinner', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
+        generateLLMRecommendations('dessert', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
+      ]);
+      
+      const llmToRecipe = (llm: typeof breakfastLLM): typeof allRecipes[0] | null => {
+        if (!llm) return null;
+        return {
+          id: -1,
+          userId,
+          name: llm.name,
+          description: llm.description,
+          instructions: llm.instructions,
+          category: llm.category,
+          caloriesPerServing: llm.caloriesPerServing,
+          imageUrl: null,
+          cuisine: null,
+          cookingTime: null,
+          servings: null,
+          isFavorite: false,
+          source: 'LLM',
+          sourceUrl: null,
+          externalId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as typeof allRecipes[0];
+      };
+      
+      return {
+        breakfast: llmToRecipe(breakfastLLM),
+        lunch: llmToRecipe(lunchLLM),
+        dinner: llmToRecipe(dinnerLLM),
+        dessert: llmToRecipe(dessertLLM),
+        season,
+      };
+    } catch (error) {
+      console.error("[Recommendations] Error generating LLM recommendations:", error);
+      return {
+        breakfast: null,
+        lunch: null,
+        dinner: null,
+        dessert: null,
+        season,
+      };
+    }
   }
   
   // Helper function to check if a recipe matches a category (more flexible matching)

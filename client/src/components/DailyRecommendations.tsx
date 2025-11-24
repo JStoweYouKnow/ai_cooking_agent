@@ -156,6 +156,11 @@ export function DailyRecommendations() {
                     isFavorite: recipe.isFavorite ?? undefined,
                   }}
                   onClick={() => {
+                    // LLM-generated recipes (id: -1) can't be viewed yet
+                    if (recipe.id === -1) {
+                      // Could show a toast or modal here
+                      return;
+                    }
                     router.push(`/recipes/${recipe.id}` as any);
                   }}
                   showDeleteButton={false}
@@ -164,11 +169,22 @@ export function DailyRecommendations() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
+                      if (recipe.id === -1) {
+                        return;
+                      }
                       router.push(`/recipes/${recipe.id}` as any);
                     }
                   }}
                   aria-label={`View ${label.toLowerCase()} recipe: ${recipe.name}`}
                 />
+                {recipe.id === -1 && (
+                  <div className="absolute top-3 right-3 z-10">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/90 backdrop-blur-sm text-white text-xs font-semibold shadow-lg">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>AI Generated</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           );
