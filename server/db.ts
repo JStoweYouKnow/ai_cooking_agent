@@ -265,82 +265,84 @@ export async function getDailyRecommendations(userId: number) {
     };
   }
   
-  // Declare category recipe arrays
-  let breakfastRecipes: typeof allRecipes;
-  let lunchRecipes: typeof allRecipes;
-  let dinnerRecipes: typeof allRecipes;
-  let dessertRecipes: typeof allRecipes;
+  // Helper function to check if a recipe matches a category (more flexible matching)
+  const matchesCategory = (recipe: typeof allRecipes[0], keywords: string[]): boolean => {
+    if (!recipe.category) return false;
+    const categoryLower = recipe.category.toLowerCase();
+    return keywords.some(keyword => categoryLower.includes(keyword));
+  };
   
-  // Filter recipes by calorie budget if set
+  // Helper to filter recipes by calorie range (with flexibility)
+  const filterByCalories = (recipes: typeof allRecipes, maxCalories: number) => {
+    const minCalories = Math.floor(maxCalories * 0.5); // Allow recipes up to 50% less
+    const maxCal = Math.floor(maxCalories * 1.2); // Allow up to 20% more
+    return recipes.filter(r => {
+      if (!r.caloriesPerServing) return true; // Include recipes without calorie data
+      return r.caloriesPerServing >= minCalories && r.caloriesPerServing <= maxCal;
+    });
+  };
+  
+  // Get recipes by category (more flexible matching)
+  const breakfastAll = allRecipes.filter(r => 
+    matchesCategory(r, ['breakfast', 'morning', 'brunch', 'pancake', 'waffle', 'cereal', 'oatmeal'])
+  );
+  const lunchAll = allRecipes.filter(r => 
+    matchesCategory(r, ['lunch', 'midday', 'sandwich', 'salad', 'soup'])
+  );
+  const dinnerAll = allRecipes.filter(r => 
+    matchesCategory(r, ['dinner', 'main', 'entree', 'supper', 'evening']) ||
+    (!r.category) // Default uncategorized recipes to dinner
+  );
+  const dessertAll = allRecipes.filter(r => 
+    matchesCategory(r, ['dessert', 'sweet', 'treat', 'cake', 'cookie', 'pie', 'ice cream'])
+  );
+  
+  // Remove duplicates (a recipe can only be in one category)
+  const usedIds = new Set<number>();
+  const breakfastRecipes = breakfastAll.filter(r => {
+    if (usedIds.has(r.id)) return false;
+    usedIds.add(r.id);
+    return true;
+  });
+  const lunchRecipes = lunchAll.filter(r => {
+    if (usedIds.has(r.id)) return false;
+    usedIds.add(r.id);
+    return true;
+  });
+  const dinnerRecipes = dinnerAll.filter(r => {
+    if (usedIds.has(r.id)) return false;
+    usedIds.add(r.id);
+    return true;
+  });
+  const dessertRecipes = dessertAll.filter(r => {
+    if (usedIds.has(r.id)) return false;
+    usedIds.add(r.id);
+    return true;
+  });
+  
+  // Apply calorie filtering if budget is set
+  let filteredBreakfast = breakfastRecipes;
+  let filteredLunch = lunchRecipes;
+  let filteredDinner = dinnerRecipes;
+  let filteredDessert = dessertRecipes;
+  
   if (effectiveCalorieBudget) {
-    // Calculate meal calorie allocations (rough estimates)
-    const breakfastBudget = Math.floor(effectiveCalorieBudget * 0.25); // 25% for breakfast
-    const lunchBudget = Math.floor(effectiveCalorieBudget * 0.35); // 35% for lunch
-    const dinnerBudget = Math.floor(effectiveCalorieBudget * 0.35); // 35% for dinner
-    const dessertBudget = Math.floor(effectiveCalorieBudget * 0.05); // 5% for dessert
+    const breakfastBudget = Math.floor(effectiveCalorieBudget * 0.25);
+    const lunchBudget = Math.floor(effectiveCalorieBudget * 0.35);
+    const dinnerBudget = Math.floor(effectiveCalorieBudget * 0.35);
+    const dessertBudget = Math.floor(effectiveCalorieBudget * 0.05);
     
-    // Helper to filter recipes by calorie range (with flexibility)
-    const filterByCalories = (recipes: typeof allRecipes, maxCalories: number) => {
-      const minCalories = Math.floor(maxCalories * 0.5); // Allow recipes up to 50% less
-      const maxCal = Math.floor(maxCalories * 1.2); // Allow up to 20% more
-      return recipes.filter(r => {
-        if (!r.caloriesPerServing) return true; // Include recipes without calorie data
-        return r.caloriesPerServing >= minCalories && r.caloriesPerServing <= maxCal;
-      });
-    };
+    filteredBreakfast = filterByCalories(breakfastRecipes, breakfastBudget);
+    if (filteredBreakfast.length === 0) filteredBreakfast = breakfastRecipes;
     
-    // Get recipes by category first
-    const breakfastAll = allRecipes.filter(r => 
-      r.category?.toLowerCase().includes('breakfast') || 
-      r.category?.toLowerCase().includes('morning')
-    );
-    const lunchAll = allRecipes.filter(r => 
-      r.category?.toLowerCase().includes('lunch') || 
-      r.category?.toLowerCase().includes('midday')
-    );
-    const dinnerAll = allRecipes.filter(r => 
-      r.category?.toLowerCase().includes('dinner') || 
-      r.category?.toLowerCase().includes('main') ||
-      (!r.category && !breakfastAll.includes(r) && !lunchAll.includes(r))
-    );
-    const dessertAll = allRecipes.filter(r => 
-      r.category?.toLowerCase().includes('dessert') || 
-      r.category?.toLowerCase().includes('sweet') ||
-      r.category?.toLowerCase().includes('treat')
-    );
+    filteredLunch = filterByCalories(lunchRecipes, lunchBudget);
+    if (filteredLunch.length === 0) filteredLunch = lunchRecipes;
     
-    // Filter by calories, fallback to all if no matches
-    breakfastRecipes = filterByCalories(breakfastAll, breakfastBudget);
-    if (breakfastRecipes.length === 0) breakfastRecipes = breakfastAll;
+    filteredDinner = filterByCalories(dinnerRecipes, dinnerBudget);
+    if (filteredDinner.length === 0) filteredDinner = dinnerRecipes;
     
-    lunchRecipes = filterByCalories(lunchAll, lunchBudget);
-    if (lunchRecipes.length === 0) lunchRecipes = lunchAll;
-    
-    dinnerRecipes = filterByCalories(dinnerAll, dinnerBudget);
-    if (dinnerRecipes.length === 0) dinnerRecipes = dinnerAll;
-    
-    dessertRecipes = filterByCalories(dessertAll, dessertBudget);
-    if (dessertRecipes.length === 0) dessertRecipes = dessertAll;
-  } else {
-    // No calorie budget - use all recipes
-    breakfastRecipes = allRecipes.filter(r => 
-      r.category?.toLowerCase().includes('breakfast') || 
-      r.category?.toLowerCase().includes('morning')
-    );
-    lunchRecipes = allRecipes.filter(r => 
-      r.category?.toLowerCase().includes('lunch') || 
-      r.category?.toLowerCase().includes('midday')
-    );
-    dinnerRecipes = allRecipes.filter(r => 
-      r.category?.toLowerCase().includes('dinner') || 
-      r.category?.toLowerCase().includes('main') ||
-      (!r.category && !breakfastRecipes.includes(r) && !lunchRecipes.includes(r))
-    );
-    dessertRecipes = allRecipes.filter(r => 
-      r.category?.toLowerCase().includes('dessert') || 
-      r.category?.toLowerCase().includes('sweet') ||
-      r.category?.toLowerCase().includes('treat')
-    );
+    filteredDessert = filterByCalories(dessertRecipes, dessertBudget);
+    if (filteredDessert.length === 0) filteredDessert = dessertRecipes;
   }
   
   // Helper function to get a random recipe from a filtered list
@@ -372,16 +374,34 @@ export async function getDailyRecommendations(userId: number) {
   };
   
   // Select recommendations (prefer seasonal, fallback to any)
-  const breakfast = getBestSeasonalRecipe(breakfastRecipes) || getRandomRecipe(breakfastRecipes);
-  const lunch = getBestSeasonalRecipe(lunchRecipes) || getRandomRecipe(lunchRecipes);
-  const dinner = getBestSeasonalRecipe(dinnerRecipes) || getRandomRecipe(dinnerRecipes);
-  const dessert = getBestSeasonalRecipe(dessertRecipes) || getRandomRecipe(dessertRecipes);
+  const breakfast = getBestSeasonalRecipe(filteredBreakfast) || getRandomRecipe(filteredBreakfast);
+  const lunch = getBestSeasonalRecipe(filteredLunch) || getRandomRecipe(filteredLunch);
+  const dinner = getBestSeasonalRecipe(filteredDinner) || getRandomRecipe(filteredDinner);
+  const dessert = getBestSeasonalRecipe(filteredDessert) || getRandomRecipe(filteredDessert);
   
-  // If no category-specific recipes found, use any recipe as fallback
-  const fallbackBreakfast = breakfast || getRandomRecipe(allRecipes);
-  const fallbackLunch = lunch || (fallbackBreakfast && allRecipes.length > 1 ? getRandomRecipe(allRecipes.filter(r => r.id !== fallbackBreakfast.id)) : fallbackBreakfast);
-  const fallbackDinner = dinner || (fallbackLunch && allRecipes.length > 2 ? getRandomRecipe(allRecipes.filter(r => r.id !== fallbackBreakfast?.id && r.id !== fallbackLunch?.id)) : fallbackLunch);
-  const fallbackDessert = dessert || (fallbackDinner && allRecipes.length > 3 ? getRandomRecipe(allRecipes.filter(r => r.id !== fallbackBreakfast?.id && r.id !== fallbackLunch?.id && r.id !== fallbackDinner?.id)) : null);
+  // Smart fallback: if we don't have enough recipes for all categories, intelligently distribute them
+  const selectedIds = new Set<number>();
+  if (breakfast) selectedIds.add(breakfast.id);
+  if (lunch) selectedIds.add(lunch.id);
+  if (dinner) selectedIds.add(dinner.id);
+  if (dessert) selectedIds.add(dessert.id);
+  
+  const availableRecipes = allRecipes.filter(r => !selectedIds.has(r.id));
+  
+  // Fill missing slots with any available recipe (prioritize seasonal)
+  const fallbackBreakfast = breakfast || (availableRecipes.length > 0 ? getBestSeasonalRecipe(availableRecipes) || getRandomRecipe(availableRecipes) : null);
+  if (fallbackBreakfast) selectedIds.add(fallbackBreakfast.id);
+  
+  const remainingForLunch = allRecipes.filter(r => !selectedIds.has(r.id));
+  const fallbackLunch = lunch || (remainingForLunch.length > 0 ? getBestSeasonalRecipe(remainingForLunch) || getRandomRecipe(remainingForLunch) : null);
+  if (fallbackLunch) selectedIds.add(fallbackLunch.id);
+  
+  const remainingForDinner = allRecipes.filter(r => !selectedIds.has(r.id));
+  const fallbackDinner = dinner || (remainingForDinner.length > 0 ? getBestSeasonalRecipe(remainingForDinner) || getRandomRecipe(remainingForDinner) : null);
+  if (fallbackDinner) selectedIds.add(fallbackDinner.id);
+  
+  const remainingForDessert = allRecipes.filter(r => !selectedIds.has(r.id));
+  const fallbackDessert = dessert || (remainingForDessert.length > 0 ? getBestSeasonalRecipe(remainingForDessert) || getRandomRecipe(remainingForDessert) : null);
   
   return {
     breakfast: fallbackBreakfast,
