@@ -635,9 +635,15 @@ export async function getDailyRecommendations(userId: number) {
         : [user.allergies])
     : null;
   
-  // Get user ingredients
-  const userIngredients = await getUserIngredients(userId);
-  const hasUserIngredients = userIngredients.length > 0;
+  // Get user ingredients (gracefully handle cases where table/migration isn't available yet)
+  let hasUserIngredients = false;
+  try {
+    const userIngredients = await getUserIngredients(userId);
+    hasUserIngredients = userIngredients.length > 0;
+  } catch (error) {
+    console.warn("[Recommendations] Unable to load user ingredients, falling back to LLM-only flow:", error);
+    hasUserIngredients = false;
+  }
   
   // Get all user recipes
   let allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
