@@ -7,6 +7,10 @@ import { invokeLLM } from './_core/llm';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+function isSchemaMismatchError(error: unknown) {
+  return typeof error === "object" && error !== null && (error as any).code === "ER_BAD_FIELD_ERROR";
+}
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -92,9 +96,16 @@ export async function getUserByOpenId(openId: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
+  try {
+    const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      console.warn("[Database] User query failed due to missing columns; returning undefined user.", error);
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 export async function getUserById(userId: number) {
@@ -104,9 +115,16 @@ export async function getUserById(userId: number) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
+  try {
+    const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      console.warn("[Database] User query failed due to missing columns; returning undefined user.", error);
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 /**
