@@ -1082,6 +1082,54 @@ const messageRouter = router({
   }),
 });
 
+// User router
+const userRouter = router({
+  getPreferences: optionalAuthProcedure.query(async ({ ctx }) => {
+    const user = ctx.user || await db.getOrCreateAnonymousUser();
+    const userData = await db.getUserById(user.id);
+    if (!userData) {
+      throw new Error("User not found");
+    }
+    
+    return {
+      dietaryPreferences: userData.dietaryPreferences 
+        ? JSON.parse(userData.dietaryPreferences) as string[]
+        : [],
+      allergies: userData.allergies 
+        ? JSON.parse(userData.allergies) as string[]
+        : [],
+    };
+  }),
+
+  updatePreferences: optionalAuthProcedure
+    .input(
+      z.object({
+        dietaryPreferences: z.array(z.string()).optional(),
+        allergies: z.array(z.string()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const updated = await db.updateUserPreferences(user.id, {
+        dietaryPreferences: input.dietaryPreferences,
+        allergies: input.allergies,
+      });
+      
+      if (!updated) {
+        throw new Error("Failed to update preferences");
+      }
+      
+      return {
+        dietaryPreferences: updated.dietaryPreferences 
+          ? JSON.parse(updated.dietaryPreferences) as string[]
+          : [],
+        allergies: updated.allergies 
+          ? JSON.parse(updated.allergies) as string[]
+          : [],
+      };
+    }),
+});
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -1099,6 +1147,7 @@ export const appRouter = router({
   shoppingLists: shoppingListRouter,
   notifications: notificationRouter,
   messages: messageRouter,
+  user: userRouter,
 });
 
 export type AppRouter = typeof appRouter;

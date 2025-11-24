@@ -15,6 +15,7 @@ const CreateRecipePage = lazy(() => import("./pages/CreateRecipePage").then(m =>
 const RecipeDetailPage = lazy(() => import("./pages/RecipeDetailPage").then(m => ({ default: m.default })));
 const ShoppingListsPage = lazy(() => import("./pages/ShoppingListsPage").then(m => ({ default: m.default })));
 const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ default: m.default })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then(m => ({ default: m.default })));
 const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.default })));
 
 // Loading fallback component
@@ -78,6 +79,13 @@ function Router() {
 						{() => (
 							<Suspense fallback={<PageLoader />}>
 								<MessagesPage />
+							</Suspense>
+						)}
+					</Route>
+					<Route path="/settings">
+						{() => (
+							<Suspense fallback={<PageLoader />}>
+								<SettingsPage />
 							</Suspense>
 						)}
 					</Route>

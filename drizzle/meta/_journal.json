@@ -36,6 +36,13 @@
       "when": 1763428889006,
       "tag": "0004_useful_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1763945332313,
+      "tag": "0005_add_user_preferences",
+      "breakpoints": true
     }
   ]
 }

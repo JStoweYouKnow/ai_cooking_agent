@@ -35,7 +35,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     };
     const updateSet: Record<string, unknown> = {};
 
-    const textFields = ["name", "email", "loginMethod"] as const;
+    const textFields = ["name", "email", "loginMethod", "dietaryPreferences", "allergies"] as const;
     type TextField = (typeof textFields)[number];
 
     const assignNullable = (field: TextField) => {
@@ -99,6 +99,46 @@ export async function getUserById(userId: number) {
   const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Update user dietary preferences and allergies
+ */
+export async function updateUserPreferences(
+  userId: number,
+  preferences: {
+    dietaryPreferences?: string[] | null;
+    allergies?: string[] | null;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const updateData: Record<string, unknown> = {};
+  
+  if (preferences.dietaryPreferences !== undefined) {
+    updateData.dietaryPreferences = preferences.dietaryPreferences 
+      ? JSON.stringify(preferences.dietaryPreferences) 
+      : null;
+  }
+  
+  if (preferences.allergies !== undefined) {
+    updateData.allergies = preferences.allergies 
+      ? JSON.stringify(preferences.allergies) 
+      : null;
+  }
+  
+  if (Object.keys(updateData).length === 0) {
+    throw new Error("No preferences provided to update");
+  }
+  
+  await db.update(users)
+    .set(updateData)
+    .where(eq(users.id, userId));
+  
+  // Return updated user
+  const updated = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return updated[0] || null;
 }
 
 // Get or create an anonymous user for unauthenticated sessions
