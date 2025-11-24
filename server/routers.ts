@@ -1,3 +1,4 @@
+
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -7,6 +8,9 @@ import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
 import { parseRecipeFromUrl } from "./_core/recipeParsing";
 import { exportShoppingList, getMimeType, getFileExtension } from "./services/export";
+import fs from "fs";
+import unzipper from "unzipper";
+import path from "path";
 
 // Recipe router
 const recipeRouter = router({
@@ -85,6 +89,58 @@ const recipeRouter = router({
       }
 
       return { id: created?.id || 0 };
+    }),
+
+  importFromZip: optionalAuthProcedure
+    .input(z.object({ path: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const zipFilePath = input.path;
+
+      const unzippedFiles: any[] = [];
+      await new Promise((resolve, reject) => {
+        fs.createReadStream(zipFilePath)
+          .pipe(unzipper.Parse())
+          .on("entry", async function (entry) {
+            if (entry.path.endsWith(".json")) {
+              const content = await entry.buffer();
+              unzippedFiles.push(JSON.parse(content.toString()));
+            } else {
+              entry.autodrain();
+            }
+          })
+          .on("finish", resolve)
+          .on("error", reject);
+      });
+
+      for (const recipe of unzippedFiles) {
+        const { ingredients: ingredientsList, ...recipeData } = recipe;
+
+        // Create recipe
+        await db.createRecipe({
+          ...recipeData,
+          userId: user.id,
+        });
+
+        // Get the created recipe
+        const recipes = await db.getUserRecipes(user.id);
+        const created = recipes[recipes.length - 1];
+
+        // Add ingredients if provided
+        if (ingredientsList && ingredientsList.length > 0 && created) {
+          for (const ing of ingredientsList) {
+            const ingredient = await db.getOrCreateIngredient(ing.name, ing.category);
+            await db.addRecipeIngredient({
+              recipeId: created.id,
+              ingredientId: ingredient.id,
+              quantity: ing.quantity,
+              unit: ing.unit,
+            });
+          }
+        }
+      }
+
+      return { success: true, imported: unzippedFiles.length };
     }),
 
   parseFromUrl: optionalAuthProcedure
@@ -504,6 +560,7 @@ const recipeRouter = router({
     return db.getDailyRecommendations(user.id);
   }),
 });
+
 
 // Ingredient router
 const ingredientRouter = router({

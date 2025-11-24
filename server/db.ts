@@ -215,19 +215,54 @@ export async function getOrCreateAnonymousUser(): Promise<User> {
   const ANONYMOUS_OPENID = "anonymous_session";
   
   try {
-    // Try to get existing anonymous user
-    let user = await getUserByOpenId(ANONYMOUS_OPENID);
+    // Try to get existing anonymous user - call database directly to catch schema-mismatch errors
+    let user: User | undefined;
+    try {
+      const result = await db.select().from(users).where(eq(users.openId, ANONYMOUS_OPENID)).limit(1);
+      user = result.length > 0 ? result[0] : undefined;
+    } catch (error) {
+      if (isSchemaMismatchError(error)) {
+        throw error; // Re-throw schema-mismatch errors to outer catch
+      }
+      throw error;
+    }
     
     if (!user) {
-      // Create anonymous user
-      await upsertUser({
-        openId: ANONYMOUS_OPENID,
-        name: "Guest User",
-        email: null,
-        loginMethod: "anonymous",
-        lastSignedIn: new Date(),
-      });
-      user = await getUserByOpenId(ANONYMOUS_OPENID);
+      // Create anonymous user - call database directly to catch schema-mismatch errors
+      try {
+        const values: InsertUser = {
+          openId: ANONYMOUS_OPENID,
+          name: "Guest User",
+          email: null,
+          loginMethod: "anonymous",
+          lastSignedIn: new Date(),
+        };
+        const updateSet: Record<string, unknown> = {
+          name: "Guest User",
+          email: null,
+          loginMethod: "anonymous",
+          lastSignedIn: new Date(),
+        };
+        await db.insert(users).values(values).onDuplicateKeyUpdate({
+          set: updateSet,
+        });
+      } catch (error) {
+        if (isSchemaMismatchError(error)) {
+          throw error; // Re-throw schema-mismatch errors to outer catch
+        }
+        throw error;
+      }
+      
+      // Try to get the user again after creation
+      try {
+        const result = await db.select().from(users).where(eq(users.openId, ANONYMOUS_OPENID)).limit(1);
+        user = result.length > 0 ? result[0] : undefined;
+      } catch (error) {
+        if (isSchemaMismatchError(error)) {
+          throw error; // Re-throw schema-mismatch errors to outer catch
+        }
+        throw error;
+      }
     }
     
     if (!user) {

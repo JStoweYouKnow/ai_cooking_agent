@@ -1,12 +1,8 @@
-"use client";
-import { PCCard, PCButton } from '@/components/project-comfort-ui';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Bell, Shield, Palette, Database, LogOut } from 'lucide-react';
+
+import { User, Bell, Shield, Palette, Database, LogOut, Upload } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
+import Link from 'next/link';
 
 export default function SettingsPage() {
   const { data: user } = trpc.auth.me.useQuery();
@@ -134,6 +130,32 @@ export default function SettingsPage() {
         </div>
       </PCCard>
 
+      {/* Data Management */}
+      <PCCard>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 rounded-lg bg-green-100">
+            <Database className="h-5 w-5 text-green-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-pc-navy">Data Management</h2>
+            <p className="text-sm text-pc-text-light">Import and export your data</p>
+          </div>
+        </div>
+        
+        <div className="space-y-4">
+          <Link href="/settings/import" passHref>
+            <PCButton className="gap-2">
+              <Upload className="h-4 w-4" />
+              Import Recipes
+            </PCButton>
+          </Link>
+          <PCButton className="gap-2 bg-white text-blue-600 border border-blue-200 hover:bg-blue-50">
+            <Database className="h-4 w-4" />
+            Export My Data
+          </PCButton>
+        </div>
+      </PCCard>
+
       {/* Privacy & Security */}
       <PCCard>
         <div className="flex items-center gap-3 mb-6">
@@ -154,10 +176,6 @@ export default function SettingsPage() {
             </div>
             <Switch />
           </div>
-          <PCButton className="gap-2 bg-white text-red-600 border border-red-200 hover:bg-red-50">
-            <Database className="h-4 w-4" />
-            Export My Data
-          </PCButton>
         </div>
       </PCCard>
 
@@ -187,4 +205,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
 
