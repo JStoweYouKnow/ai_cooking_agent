@@ -13,6 +13,7 @@ export type ParsedRecipe = {
 	category?: string | null;
 	cookingTime?: number | null;
 	servings?: number | null;
+	caloriesPerServing?: number | null;
 	sourceUrl?: string | null;
 	ingredients?: ParsedIngredient[];
 	source?: string;

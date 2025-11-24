@@ -245,7 +245,7 @@ const recipeRouter = router({
         category: typeof parsed.category === "string" ? parsed.category : undefined,
         cookingTime: typeof parsed.cookingTime === "number" ? parsed.cookingTime : undefined,
         servings: typeof parsed.servings === "number" ? parsed.servings : undefined,
-        caloriesPerServing: typeof parsed.caloriesPerServing === "number" ? parsed.caloriesPerServing : undefined,
+        caloriesPerServing: (parsed as any).caloriesPerServing && typeof (parsed as any).caloriesPerServing === "number" ? (parsed as any).caloriesPerServing : undefined,
         sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : undefined,
         userId: user.id,
         source: typeof parsed.source === "string" ? parsed.source : "url_import",

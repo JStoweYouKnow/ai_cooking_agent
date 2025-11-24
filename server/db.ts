@@ -2,6 +2,7 @@ import { eq, desc, and, or, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem, notifications, InsertNotification, Notification, conversations, InsertConversation, Conversation, messages, InsertMessage, Message } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -233,8 +234,7 @@ export async function getDailyRecommendations(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  // Import seasonal utilities
-  const { getCurrentSeason, getSeasonalScore } = await import('./utils/seasonal.js');
+  // Get current season for recommendations
   const season = getCurrentSeason();
   
   // Get user's calorie budget and goals

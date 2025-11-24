@@ -105,14 +105,7 @@ export function DailyRecommendations() {
       <SectionHeader
         icon={Sparkles}
         title="Today's Recommendations"
-        description={
-          <div className="flex items-center gap-2">
-            <span>Seasonal recipes curated for</span>
-            <span className="font-semibold text-pc-olive capitalize">
-              {seasonLabels[season] || season}
-            </span>
-          </div>
-        }
+        description={`Seasonal recipes curated for ${seasonLabels[season] || season}`}
       />
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {categories.map(({ key, recipe }) => {

@@ -82,8 +82,11 @@ export default function SettingsPage() {
     if (preferences) {
       setDietaryPreferences(preferences.dietaryPreferences || []);
       setAllergies(preferences.allergies || []);
-      if (preferences.goals) {
-        setGoal(preferences.goals as GoalData);
+      if (preferences.goals && typeof preferences.goals === 'object') {
+        const goalsData = preferences.goals as unknown as GoalData;
+        if (goalsData.type) {
+          setGoal(goalsData);
+        }
       }
       setCalorieBudget(preferences.calorieBudget ?? null);
     }
@@ -132,7 +135,7 @@ export default function SettingsPage() {
     updatePreferencesMutation.mutate({
       dietaryPreferences,
       allergies,
-      goals: goalsData,
+      goals: goalsData as Record<string, unknown> | null,
       calorieBudget: calorieBudget,
     });
   };
