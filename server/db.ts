@@ -24,6 +24,25 @@ export async function getDb() {
   return _db;
 }
 
+function createGuestUserStub(): User {
+  const now = new Date();
+  return {
+    id: -1,
+    openId: "anonymous_session",
+    name: "Guest User",
+    email: null,
+    loginMethod: "anonymous",
+    role: "user",
+    dietaryPreferences: null,
+    allergies: null,
+    goals: null,
+    calorieBudget: null,
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
+  };
+}
+
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
@@ -84,6 +103,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       set: updateSet,
     });
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      console.warn("[Database] Skipping user upsert because schema is missing new columns. Run migrations to enable full functionality.", error);
+      return;
+    }
     console.error("[Database] Failed to upsert user:", error);
     throw error;
   }
@@ -191,26 +214,34 @@ export async function getOrCreateAnonymousUser(): Promise<User> {
   
   const ANONYMOUS_OPENID = "anonymous_session";
   
-  // Try to get existing anonymous user
-  let user = await getUserByOpenId(ANONYMOUS_OPENID);
-  
-  if (!user) {
-    // Create anonymous user
-    await upsertUser({
-      openId: ANONYMOUS_OPENID,
-      name: "Guest User",
-      email: null,
-      loginMethod: "anonymous",
-      lastSignedIn: new Date(),
-    });
-    user = await getUserByOpenId(ANONYMOUS_OPENID);
+  try {
+    // Try to get existing anonymous user
+    let user = await getUserByOpenId(ANONYMOUS_OPENID);
+    
+    if (!user) {
+      // Create anonymous user
+      await upsertUser({
+        openId: ANONYMOUS_OPENID,
+        name: "Guest User",
+        email: null,
+        loginMethod: "anonymous",
+        lastSignedIn: new Date(),
+      });
+      user = await getUserByOpenId(ANONYMOUS_OPENID);
+    }
+    
+    if (!user) {
+      throw new Error("Failed to create anonymous user");
+    }
+    
+    return user;
+  } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      console.warn("[Database] Falling back to in-memory guest user because the users table schema is outdated. Please run the latest migrations.", error);
+      return createGuestUserStub();
+    }
+    throw error;
   }
-  
-  if (!user) {
-    throw new Error("Failed to create anonymous user");
-  }
-  
-  return user;
 }
 
 // Recipe queries
