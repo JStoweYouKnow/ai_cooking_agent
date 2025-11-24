@@ -602,11 +602,23 @@ async function fetchAndImportRecipes(userId: number, season: string, neededCateg
  * Automatically fetches recipes from external sources if user doesn't have enough
  */
 export async function getDailyRecommendations(userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
+  const safeEmpty = () => ({
+    breakfast: null,
+    lunch: null,
+    dinner: null,
+    dessert: null,
+    season: getCurrentSeason(),
+  });
   
-  // Get current season for recommendations
-  const season = getCurrentSeason();
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.error("[Recommendations] Database not available, returning empty payload");
+      return safeEmpty();
+    }
+    
+    // Get current season for recommendations
+    const season = getCurrentSeason();
   
   // Get user's calorie budget and goals
   const user = await getUserById(userId);
@@ -635,21 +647,21 @@ export async function getDailyRecommendations(userId: number) {
         : [user.allergies])
     : null;
   
-  // Get user ingredients (gracefully handle cases where table/migration isn't available yet)
-  let hasUserIngredients = false;
-  try {
-    const userIngredients = await getUserIngredients(userId);
-    hasUserIngredients = userIngredients.length > 0;
-  } catch (error) {
-    console.warn("[Recommendations] Unable to load user ingredients, falling back to LLM-only flow:", error);
-    hasUserIngredients = false;
-  }
+    // Get user ingredients (gracefully handle cases where table/migration isn't available yet)
+    let hasUserIngredients = false;
+    try {
+      const userIngredients = await getUserIngredients(userId);
+      hasUserIngredients = userIngredients.length > 0;
+    } catch (error) {
+      console.warn("[Recommendations] Unable to load user ingredients, falling back to LLM-only flow:", error);
+      hasUserIngredients = false;
+    }
   
-  // Get all user recipes
-  let allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
+    // Get all user recipes
+    let allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
   
   // If user has no ingredients/preferences and no recipes, use LLM to generate recommendations
-  if (!hasUserIngredients && allRecipes.length === 0) {
+    if (!hasUserIngredients && allRecipes.length === 0) {
     try {
       const [breakfastLLM, lunchLLM, dinnerLLM, dessertLLM] = await Promise.all([
         generateLLMRecommendations('breakfast', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
@@ -704,7 +716,7 @@ export async function getDailyRecommendations(userId: number) {
   }
   
   // If user has very few recipes (< 4) but has ingredients, try to fetch some from external sources
-  if (allRecipes.length < 4 && hasUserIngredients) {
+    if (allRecipes.length < 4 && hasUserIngredients) {
     // Determine which categories are missing
     const hasBreakfast = allRecipes.some(r => 
       r.category?.toLowerCase().includes('breakfast') || 
@@ -743,8 +755,8 @@ export async function getDailyRecommendations(userId: number) {
   }
   
   // If still no recipes after trying to fetch, use LLM as fallback
-  if (allRecipes.length === 0) {
-    try {
+    if (allRecipes.length === 0) {
+      try {
       const [breakfastLLM, lunchLLM, dinnerLLM, dessertLLM] = await Promise.all([
         generateLLMRecommendations('breakfast', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
         generateLLMRecommendations('lunch', season, effectiveCalorieBudget, dietaryPreferences, allergies, goals),
@@ -782,17 +794,17 @@ export async function getDailyRecommendations(userId: number) {
         dessert: llmToRecipe(dessertLLM),
         season,
       };
-    } catch (error) {
-      console.error("[Recommendations] Error generating LLM recommendations:", error);
-      return {
-        breakfast: null,
-        lunch: null,
-        dinner: null,
-        dessert: null,
-        season,
-      };
+      } catch (error) {
+        console.error("[Recommendations] Error generating LLM recommendations:", error);
+        return {
+          breakfast: null,
+          lunch: null,
+          dinner: null,
+          dessert: null,
+          season,
+        };
+      }
     }
-  }
   
   // Helper function to check if a recipe matches a category (more flexible matching)
   const matchesCategory = (recipe: typeof allRecipes[0], keywords: string[]): boolean => {
@@ -932,13 +944,17 @@ export async function getDailyRecommendations(userId: number) {
   const remainingForDessert = allRecipes.filter(r => !selectedIds.has(r.id));
   const fallbackDessert = dessert || (remainingForDessert.length > 0 ? getBestSeasonalRecipe(remainingForDessert) || getRandomRecipe(remainingForDessert) : null);
   
-  return {
-    breakfast: fallbackBreakfast,
-    lunch: fallbackLunch,
-    dinner: fallbackDinner,
-    dessert: fallbackDessert,
-    season,
-  };
+    return {
+      breakfast: fallbackBreakfast,
+      lunch: fallbackLunch,
+      dinner: fallbackDinner,
+      dessert: fallbackDessert,
+      season,
+    };
+  } catch (error) {
+    console.error("[Recommendations] Unexpected error:", error);
+    return safeEmpty();
+  }
 }
 
 // Ingredient queries
