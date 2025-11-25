@@ -4,7 +4,7 @@
  */
 
 import PDFDocument from 'pdfkit';
-import type { ShoppingListItem, Ingredient } from '../../drizzle/schema';
+import type { ShoppingListItem, Ingredient } from '../../drizzle/schema-postgres';
 
 interface ShoppingListExportData {
   listName: string;

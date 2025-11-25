@@ -1,6 +1,6 @@
 import { eq, desc, and, or, ne } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem, notifications, InsertNotification, Notification, conversations, InsertConversation, Conversation, messages, InsertMessage, Message } from "../drizzle/schema";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem, notifications, InsertNotification, Notification, conversations, InsertConversation, Conversation, messages, InsertMessage, Message } from "../drizzle/schema-postgres";
 import { ENV } from './_core/env';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
 import { invokeLLM } from './_core/llm';
@@ -8,7 +8,8 @@ import { invokeLLM } from './_core/llm';
 let _db: ReturnType<typeof drizzle> | null = null;
 
 function isSchemaMismatchError(error: unknown) {
-  return typeof error === "object" && error !== null && (error as any).code === "ER_BAD_FIELD_ERROR";
+  // Postgres error code 42703 = undefined_column (similar to MySQL ER_BAD_FIELD_ERROR)
+  return typeof error === "object" && error !== null && ((error as any).code === "42703" || (error as any).code === "ER_BAD_FIELD_ERROR");
 }
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
@@ -99,7 +100,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
       set: updateSet,
     });
   } catch (error) {
@@ -243,7 +245,8 @@ export async function getOrCreateAnonymousUser(): Promise<User> {
           loginMethod: "anonymous",
           lastSignedIn: new Date(),
         };
-        await db.insert(users).values(values).onDuplicateKeyUpdate({
+        await db.insert(users).values(values).onConflictDoUpdate({
+          target: users.openId,
           set: updateSet,
         });
       } catch (error) {
