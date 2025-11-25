@@ -63,3 +63,4 @@ The endpoint will:
 - The `userId` column is still required - you may need to set a default or adjust the schema if importing recipes without user association
 - Duplicate detection uses both vector similarity (threshold: 0.12) and exact title matching
 
+

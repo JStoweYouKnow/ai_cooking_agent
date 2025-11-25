@@ -27,3 +27,4 @@ ALTER TABLE recipes
 -- For better performance with smaller datasets, you can use HNSW index instead:
 -- CREATE INDEX IF NOT EXISTS recipes_embedding_idx ON recipes USING hnsw (embedding vector_cosine_ops);
 
+

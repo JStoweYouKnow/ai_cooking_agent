@@ -74,3 +74,4 @@ Your app stays on Railway, just connects to Neon instead of MySQL.
 - Users re-register
 - Everything else works immediately
 
+

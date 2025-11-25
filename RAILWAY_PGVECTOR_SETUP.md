@@ -79,3 +79,4 @@ You can use the database without the embedding column for now:
 3. Contact Railway support about pgvector template
 4. Or proceed without embeddings for now (everything else works)
 
+

@@ -114,3 +114,4 @@ After migration:
 3. Import some recipes to test the embedding functionality
 4. Create the vector index once you have data
 
+

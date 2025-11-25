@@ -117,3 +117,4 @@ Both Supabase and Neon have pgvector built-in and easier to enable:
    ON recipes USING ivfflat (embedding) WITH (lists = 100);
    ```
 
+

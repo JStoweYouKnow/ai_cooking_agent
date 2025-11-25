@@ -81,3 +81,4 @@ async function addEmbeddingColumn() {
 
 addEmbeddingColumn();
 
+

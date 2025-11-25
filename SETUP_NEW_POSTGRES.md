@@ -102,3 +102,4 @@ After running the script, you should see:
 - **Case sensitivity**: Postgres is case-sensitive, so column names are quoted
 - **JSON**: MySQL TEXT becomes JSONB in Postgres (better performance)
 
+

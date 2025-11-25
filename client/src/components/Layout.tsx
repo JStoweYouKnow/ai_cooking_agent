@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { MobileMenuDrawer, BottomNav } from './modern-menu';
 import { AnimatedBackground } from './web3';
+import { GlobalSearch } from './GlobalSearch';
 
 // Dynamically import ModernHeader with SSR disabled to avoid wouter SSR issues
 // This prevents the useLocation hook from running during SSR
@@ -69,6 +70,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Bottom Navigation - Vertical icon navigation on mobile */}
       <BottomNav />
+
+      {/* Global Search Dialog */}
+      <GlobalSearch />
     </div>
   );
 }

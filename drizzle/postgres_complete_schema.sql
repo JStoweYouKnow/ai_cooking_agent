@@ -200,3 +200,4 @@ CREATE INDEX IF NOT EXISTS messages_createdAt_idx ON messages("createdAt");
 -- Or for better performance with smaller datasets:
 -- CREATE INDEX IF NOT EXISTS recipes_embedding_idx ON recipes USING hnsw (embedding vector_cosine_ops);
 
+
