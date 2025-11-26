@@ -1007,14 +1007,35 @@ export async function getDailyRecommendations(userId: number) {
     });
   }
   
+  // Side dishes and light items that should NOT be dinner mains
+  const sideDishKeywords = ['slaw', 'salad', 'coleslaw', 'side', 'dip', 'appetizer', 'snack', 'dressing', 'sauce', 'garnish'];
+  
+  // Check if recipe is likely a side dish (not a main course)
+  const isSideDish = (recipe: typeof allRecipes[0]): boolean => {
+    const name = (recipe.name || '').toLowerCase();
+    return sideDishKeywords.some(kw => name.includes(kw));
+  };
+  
   const lunchAll = allRecipes.filter(r => 
-    matchesCategory(r, ['lunch', 'midday', 'sandwich', 'salad', 'soup', 'wrap', 'bowl', 'light'])
+    matchesCategory(r, ['lunch', 'midday', 'sandwich', 'salad', 'soup', 'wrap', 'bowl', 'light']) ||
+    // Also include uncategorized salads/slaws in lunch
+    (!r.category && isSideDish(r))
   );
   
-  const dinnerAll = allRecipes.filter(r => 
-    matchesCategory(r, ['dinner', 'main', 'entree', 'supper', 'evening', 'roast', 'steak', 'curry', 'stew']) ||
-    (!r.category && !breakfastKeywords.some(kw => (r.name || '').toLowerCase().includes(kw))) // Default uncategorized non-breakfast recipes to dinner
-  );
+  const dinnerAll = allRecipes.filter(r => {
+    const name = (r.name || '').toLowerCase();
+    // Explicit dinner category match
+    if (matchesCategory(r, ['dinner', 'main', 'entree', 'supper', 'evening', 'roast', 'steak', 'curry', 'stew'])) {
+      return true;
+    }
+    // For uncategorized recipes: only include if NOT breakfast AND NOT a side dish
+    if (!r.category) {
+      const isBreakfast = breakfastKeywords.some(kw => name.includes(kw));
+      const isSide = isSideDish(r);
+      return !isBreakfast && !isSide;
+    }
+    return false;
+  });
   
   const dessertAll = allRecipes.filter(r => 
     matchesCategory(r, ['dessert', 'sweet', 'treat', 'cake', 'cookie', 'pie', 'ice cream', 'chocolate', 'pudding', 'brownie'])
