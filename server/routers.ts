@@ -337,6 +337,24 @@ const recipeRouter = router({
       return db.updateRecipeFavorite(input.id, input.isFavorite);
     }),
 
+  updateTags: optionalAuthProcedure
+    .input(z.object({ 
+      id: z.number().int().positive(), 
+      tags: z.array(z.string().min(1).max(50)).max(20) 
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const recipe = await db.getRecipeById(input.id);
+      if (!recipe) {
+        throw new Error("Recipe not found");
+      }
+      // Verify ownership
+      if (recipe.userId !== user.id) {
+        throw new Error("Unauthorized: You can only modify your own recipes");
+      }
+      return db.updateRecipeTags(input.id, input.tags);
+    }),
+
   delete: optionalAuthProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {

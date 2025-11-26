@@ -3,7 +3,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   ArrowLeft, Star, Clock, Users, ChefHat, ShoppingCart,
   ExternalLink, Plus, UtensilsCrossed, Play, BookOpen,
-  ChevronLeft, ChevronRight, X, Trash2
+  ChevronLeft, ChevronRight, X, Trash2, Tag, Edit2, Check
 } from 'lucide-react';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc';
@@ -18,6 +18,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { PCCard, PCButton } from '@/components/project-comfort-ui';
 import { CookingBadge, CookingTimeBadge, ServingsBadge, CaloriesBadge } from '@/components/cooking-theme';
 
@@ -30,6 +32,8 @@ export default function RecipeDetailPage() {
   const [isCookingMode, setIsCookingMode] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isEditingTags, setIsEditingTags] = useState(false);
+  const [newTag, setNewTag] = useState('');
 
   const utils = trpc.useUtils();
   const { data: recipe, isLoading } = trpc.recipes.getById.useQuery(
@@ -59,6 +63,17 @@ export default function RecipeDetailPage() {
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to delete recipe');
+    },
+  });
+
+  const updateTagsMutation = trpc.recipes.updateTags.useMutation({
+    onSuccess: () => {
+      utils.recipes.getById.invalidate();
+      toast.success('Tags updated');
+      setIsEditingTags(false);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to update tags');
     },
   });
 
@@ -257,6 +272,107 @@ export default function RecipeDetailPage() {
                 <CookingBadge className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300">
                   {recipe.source}
                 </CookingBadge>
+              )}
+            </div>
+
+            {/* Tags Section */}
+            <div className="mt-4 pt-4 border-t border-pc-tan/20">
+              <div className="flex items-center gap-2 mb-2">
+                <Tag className="h-4 w-4 text-pc-olive" />
+                <span className="text-sm font-medium text-pc-navy">Tags</span>
+                <button
+                  onClick={() => setIsEditingTags(!isEditingTags)}
+                  className="ml-auto p-1 rounded hover:bg-pc-tan/20 transition-colors"
+                >
+                  {isEditingTags ? (
+                    <Check className="h-4 w-4 text-pc-olive" />
+                  ) : (
+                    <Edit2 className="h-4 w-4 text-pc-text-light" />
+                  )}
+                </button>
+              </div>
+              
+              {isEditingTags ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {((recipe as any).tags || []).map((tag: string, idx: number) => (
+                      <Badge 
+                        key={idx} 
+                        variant="secondary"
+                        className="bg-pc-olive/10 text-pc-olive border-pc-olive/20 pr-1"
+                      >
+                        {tag}
+                        <button
+                          onClick={() => {
+                            const currentTags = (recipe as any).tags || [];
+                            const newTags = currentTags.filter((_: string, i: number) => i !== idx);
+                            updateTagsMutation.mutate({ id: recipe.id, tags: newTags });
+                          }}
+                          className="ml-1 p-0.5 rounded-full hover:bg-pc-olive/20"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newTag}
+                      onChange={(e) => setNewTag(e.target.value)}
+                      placeholder="Add a tag..."
+                      className="h-8 text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newTag.trim()) {
+                          e.preventDefault();
+                          const currentTags = (recipe as any).tags || [];
+                          if (!currentTags.includes(newTag.trim())) {
+                            updateTagsMutation.mutate({ 
+                              id: recipe.id, 
+                              tags: [...currentTags, newTag.trim()] 
+                            });
+                          }
+                          setNewTag('');
+                        }
+                      }}
+                    />
+                    <PCButton
+                      onClick={() => {
+                        if (newTag.trim()) {
+                          const currentTags = (recipe as any).tags || [];
+                          if (!currentTags.includes(newTag.trim())) {
+                            updateTagsMutation.mutate({ 
+                              id: recipe.id, 
+                              tags: [...currentTags, newTag.trim()] 
+                            });
+                          }
+                          setNewTag('');
+                        }
+                      }}
+                      disabled={!newTag.trim() || updateTagsMutation.isPending}
+                      className="h-8 px-3"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </PCButton>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {((recipe as any).tags && (recipe as any).tags.length > 0) ? (
+                    (recipe as any).tags.map((tag: string, idx: number) => (
+                      <Badge 
+                        key={idx} 
+                        variant="secondary"
+                        className="bg-pc-olive/10 text-pc-olive border-pc-olive/20"
+                      >
+                        {tag}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-sm text-pc-text-light italic">
+                      No tags yet. Click edit to add some.
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>

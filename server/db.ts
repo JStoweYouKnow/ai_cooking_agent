@@ -308,6 +308,12 @@ export async function updateRecipeFavorite(recipeId: number, isFavorite: boolean
   return db.update(recipes).set({ isFavorite }).where(eq(recipes.id, recipeId));
 }
 
+export async function updateRecipeTags(recipeId: number, tags: string[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(recipes).set({ tags }).where(eq(recipes.id, recipeId));
+}
+
 export async function deleteRecipe(recipeId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
