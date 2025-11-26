@@ -899,11 +899,56 @@ export async function getDailyRecommendations(userId: number) {
       }
     }
   
-  // Helper function to check if a recipe matches a category (more flexible matching)
-  const matchesCategory = (recipe: typeof allRecipes[0], keywords: string[]): boolean => {
-    if (!recipe.category) return false;
-    const categoryLower = recipe.category.toLowerCase();
-    return keywords.some(keyword => categoryLower.includes(keyword));
+  // Helper function to check if a recipe matches a category (check category, name, and tags)
+  const matchesCategory = (recipe: typeof allRecipes[0], keywords: string[], strict = false): boolean => {
+    const categoryLower = (recipe.category || '').toLowerCase();
+    const nameLower = (recipe.name || '').toLowerCase();
+    const tagsLower = ((recipe as any).tags || []).map((t: string) => t.toLowerCase());
+    const categoriesLower = ((recipe as any).categories || []).map((c: string) => c.toLowerCase());
+    
+    // Check all text fields for keyword matches
+    const allText = [categoryLower, nameLower, ...tagsLower, ...categoriesLower].join(' ');
+    
+    if (strict) {
+      // For strict matching, require the keyword in category, tags, or categories (not just name)
+      return keywords.some(keyword => 
+        categoryLower.includes(keyword) || 
+        tagsLower.some((t: string) => t.includes(keyword)) ||
+        categoriesLower.some((c: string) => c.includes(keyword))
+      );
+    }
+    
+    return keywords.some(keyword => allText.includes(keyword));
+  };
+
+  // Helper function to check if two recipes are too similar
+  const areSimilar = (a: typeof allRecipes[0] | null, b: typeof allRecipes[0] | null): boolean => {
+    if (!a || !b) return false;
+    
+    const nameA = (a.name || '').toLowerCase();
+    const nameB = (b.name || '').toLowerCase();
+    
+    // Check for similar main ingredients in name
+    const mainIngredients = ['chicken', 'beef', 'pork', 'fish', 'salmon', 'shrimp', 'tofu', 'pasta', 'rice', 'potato', 'egg'];
+    const aIngredients = mainIngredients.filter(ing => nameA.includes(ing));
+    const bIngredients = mainIngredients.filter(ing => nameB.includes(ing));
+    
+    // If both recipes share a main ingredient, they're similar
+    if (aIngredients.some(ing => bIngredients.includes(ing))) return true;
+    
+    // Check for similar cuisine styles
+    const cuisines = ['mexican', 'italian', 'asian', 'indian', 'thai', 'chinese', 'japanese', 'mediterranean'];
+    const aCuisine = (a.cuisine || '').toLowerCase();
+    const bCuisine = (b.cuisine || '').toLowerCase();
+    if (aCuisine && aCuisine === bCuisine) return true;
+    
+    // Check for similar dish types in name
+    const dishTypes = ['soup', 'stew', 'salad', 'sandwich', 'curry', 'stir fry', 'casserole', 'bowl'];
+    const aDishType = dishTypes.find(type => nameA.includes(type));
+    const bDishType = dishTypes.find(type => nameB.includes(type));
+    if (aDishType && aDishType === bDishType) return true;
+    
+    return false;
   };
   
   // Helper to filter recipes by calorie range (with flexibility)
@@ -916,19 +961,43 @@ export async function getDailyRecommendations(userId: number) {
     });
   };
   
-  // Get recipes by category (more flexible matching)
-  const breakfastAll = allRecipes.filter(r => 
-    matchesCategory(r, ['breakfast', 'morning', 'brunch', 'pancake', 'waffle', 'cereal', 'oatmeal'])
+  // Get recipes by category - breakfast is strict, others are more flexible
+  // Breakfast keywords - expanded list with common breakfast foods
+  const breakfastKeywords = [
+    'breakfast', 'morning', 'brunch', 'pancake', 'waffle', 'cereal', 'oatmeal',
+    'egg', 'omelet', 'omelette', 'scramble', 'french toast', 'bagel', 'muffin',
+    'bacon', 'sausage', 'hash', 'smoothie', 'granola', 'yogurt', 'toast'
+  ];
+  
+  // First pass: strict breakfast matching (must have breakfast-related category/tag)
+  let breakfastAll = allRecipes.filter(r => 
+    matchesCategory(r, ['breakfast', 'morning', 'brunch'], true)
   );
+  
+  // If no strict matches, use flexible matching but exclude dinner-like dishes
+  if (breakfastAll.length === 0) {
+    breakfastAll = allRecipes.filter(r => {
+      const name = (r.name || '').toLowerCase();
+      // Must match a breakfast keyword
+      const hasBreakfastWord = breakfastKeywords.some(kw => name.includes(kw));
+      // Must NOT be obviously a dinner dish
+      const dinnerWords = ['dinner', 'supper', 'steak', 'roast', 'curry', 'stew'];
+      const isDinner = dinnerWords.some(kw => name.includes(kw));
+      return hasBreakfastWord && !isDinner;
+    });
+  }
+  
   const lunchAll = allRecipes.filter(r => 
-    matchesCategory(r, ['lunch', 'midday', 'sandwich', 'salad', 'soup'])
+    matchesCategory(r, ['lunch', 'midday', 'sandwich', 'salad', 'soup', 'wrap', 'bowl', 'light'])
   );
+  
   const dinnerAll = allRecipes.filter(r => 
-    matchesCategory(r, ['dinner', 'main', 'entree', 'supper', 'evening']) ||
-    (!r.category) // Default uncategorized recipes to dinner
+    matchesCategory(r, ['dinner', 'main', 'entree', 'supper', 'evening', 'roast', 'steak', 'curry', 'stew']) ||
+    (!r.category && !breakfastKeywords.some(kw => (r.name || '').toLowerCase().includes(kw))) // Default uncategorized non-breakfast recipes to dinner
   );
+  
   const dessertAll = allRecipes.filter(r => 
-    matchesCategory(r, ['dessert', 'sweet', 'treat', 'cake', 'cookie', 'pie', 'ice cream'])
+    matchesCategory(r, ['dessert', 'sweet', 'treat', 'cake', 'cookie', 'pie', 'ice cream', 'chocolate', 'pudding', 'brownie'])
   );
   
   // Remove duplicates (a recipe can only be in one category)
@@ -1007,35 +1076,82 @@ export async function getDailyRecommendations(userId: number) {
     return topRecipes[randomIndex]?.recipe || null;
   };
   
-  // Select recommendations (prefer seasonal, fallback to any)
-  const breakfast = getBestSeasonalRecipe(filteredBreakfast) || getRandomRecipe(filteredBreakfast);
-  const lunch = getBestSeasonalRecipe(filteredLunch) || getRandomRecipe(filteredLunch);
-  const dinner = getBestSeasonalRecipe(filteredDinner) || getRandomRecipe(filteredDinner);
-  const dessert = getBestSeasonalRecipe(filteredDessert) || getRandomRecipe(filteredDessert);
-  
-  // Smart fallback: if we don't have enough recipes for all categories, intelligently distribute them
+  // Helper to get a recipe that's not similar to already selected ones
+  const getNonSimilarRecipe = (
+    pool: typeof allRecipes, 
+    selectedRecipes: (typeof allRecipes[0] | null)[]
+  ): typeof allRecipes[0] | null => {
+    // First try to find a non-similar recipe
+    const nonSimilar = pool.filter(r => 
+      !selectedRecipes.some(selected => areSimilar(r, selected))
+    );
+    
+    if (nonSimilar.length > 0) {
+      return getBestSeasonalRecipe(nonSimilar) || getRandomRecipe(nonSimilar);
+    }
+    
+    // Fall back to any recipe from the pool
+    return getBestSeasonalRecipe(pool) || getRandomRecipe(pool);
+  };
+
+  // Select recommendations sequentially to avoid similar recipes
+  const selectedRecipes: (typeof allRecipes[0] | null)[] = [];
   const selectedIds = new Set<number>();
-  if (breakfast) selectedIds.add(breakfast.id);
-  if (lunch) selectedIds.add(lunch.id);
-  if (dinner) selectedIds.add(dinner.id);
-  if (dessert) selectedIds.add(dessert.id);
   
-  const availableRecipes = allRecipes.filter(r => !selectedIds.has(r.id));
+  // 1. Select breakfast (only from breakfast pool - no fallback to other categories)
+  const breakfast = getNonSimilarRecipe(filteredBreakfast, selectedRecipes);
+  if (breakfast) {
+    selectedRecipes.push(breakfast);
+    selectedIds.add(breakfast.id);
+  }
   
-  // Fill missing slots with any available recipe (prioritize seasonal)
-  const fallbackBreakfast = breakfast || (availableRecipes.length > 0 ? getBestSeasonalRecipe(availableRecipes) || getRandomRecipe(availableRecipes) : null);
-  if (fallbackBreakfast) selectedIds.add(fallbackBreakfast.id);
+  // 2. Select lunch (avoid similar to breakfast)
+  const lunchPool = filteredLunch.filter(r => !selectedIds.has(r.id));
+  const lunch = getNonSimilarRecipe(lunchPool, selectedRecipes);
+  if (lunch) {
+    selectedRecipes.push(lunch);
+    selectedIds.add(lunch.id);
+  }
   
-  const remainingForLunch = allRecipes.filter(r => !selectedIds.has(r.id));
-  const fallbackLunch = lunch || (remainingForLunch.length > 0 ? getBestSeasonalRecipe(remainingForLunch) || getRandomRecipe(remainingForLunch) : null);
-  if (fallbackLunch) selectedIds.add(fallbackLunch.id);
+  // 3. Select dinner (avoid similar to breakfast and lunch)
+  const dinnerPool = filteredDinner.filter(r => !selectedIds.has(r.id));
+  const dinner = getNonSimilarRecipe(dinnerPool, selectedRecipes);
+  if (dinner) {
+    selectedRecipes.push(dinner);
+    selectedIds.add(dinner.id);
+  }
   
-  const remainingForDinner = allRecipes.filter(r => !selectedIds.has(r.id));
-  const fallbackDinner = dinner || (remainingForDinner.length > 0 ? getBestSeasonalRecipe(remainingForDinner) || getRandomRecipe(remainingForDinner) : null);
-  if (fallbackDinner) selectedIds.add(fallbackDinner.id);
+  // 4. Select dessert (usually different enough, but still check)
+  const dessertPool = filteredDessert.filter(r => !selectedIds.has(r.id));
+  const dessert = getNonSimilarRecipe(dessertPool, selectedRecipes);
+  if (dessert) {
+    selectedRecipes.push(dessert);
+    selectedIds.add(dessert.id);
+  }
   
-  const remainingForDessert = allRecipes.filter(r => !selectedIds.has(r.id));
-  const fallbackDessert = dessert || (remainingForDessert.length > 0 ? getBestSeasonalRecipe(remainingForDessert) || getRandomRecipe(remainingForDessert) : null);
+  // Smart fallback for lunch/dinner only (breakfast should stay breakfast-appropriate)
+  // If we're missing lunch, try to find something from dinner pool
+  let fallbackLunch = lunch;
+  if (!lunch && dinnerPool.length > 0) {
+    const remaining = dinnerPool.filter(r => !selectedIds.has(r.id));
+    fallbackLunch = getNonSimilarRecipe(remaining, selectedRecipes);
+    if (fallbackLunch) selectedIds.add(fallbackLunch.id);
+  }
+  
+  // If we're missing dinner, try remaining recipes
+  let fallbackDinner = dinner;
+  if (!dinner) {
+    const remaining = allRecipes.filter(r => 
+      !selectedIds.has(r.id) && 
+      !breakfastKeywords.some(kw => (r.name || '').toLowerCase().includes(kw))
+    );
+    fallbackDinner = getNonSimilarRecipe(remaining, selectedRecipes);
+    if (fallbackDinner) selectedIds.add(fallbackDinner.id);
+  }
+  
+  // Keep breakfast as-is (null if no breakfast recipes found - don't fill with non-breakfast)
+  const fallbackBreakfast = breakfast;
+  const fallbackDessert = dessert;
   
     return {
       breakfast: fallbackBreakfast,
