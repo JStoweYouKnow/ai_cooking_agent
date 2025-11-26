@@ -12,27 +12,17 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    projects: [
-      {
-        name: "server",
-        test: {
-          environment: "node",
-          include: [
-            "server/**/*.test.ts",
-            "server/**/*.spec.ts",
-          ],
-        },
-      },
-      {
-        name: "client",
-        test: {
-          environment: "jsdom",
-          include: [
-            "client/**/*.test.ts",
-            "client/**/*.spec.ts",
-          ],
-        },
-      },
+    setupFiles: ['./test/setup.ts'],
+    // Include only test files in server and client directories
+    include: [
+      "server/**/*.test.ts",
+      "client/**/*.test.ts",
+    ],
+    // Explicitly exclude e2e tests (they use Playwright, not Vitest)
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/e2e/**",
     ],
   },
 });
