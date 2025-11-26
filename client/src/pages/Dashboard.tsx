@@ -45,6 +45,16 @@ export default function Dashboard() {
     },
   });
 
+  const toggleFavoriteMutation = trpc.recipes.toggleFavorite.useMutation({
+    onSuccess: () => {
+      utils.recipes.list.invalidate();
+      toast.success('Recipe saved to favorites!');
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || 'Failed to save recipe');
+    },
+  });
+
   const handleDeleteRecipe = (recipeId: number, recipeName: string) => {
     if (confirm(`Are you sure you want to delete "${recipeName}"? This action cannot be undone.`)) {
       deleteRecipeMutation.mutate({ id: recipeId });
@@ -132,13 +142,26 @@ export default function Dashboard() {
                   {spotlightRecipe.cookingTime && <span className="bg-white/10 px-3 py-1 rounded-full">{spotlightRecipe.cookingTime}m</span>}
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <PremiumButton size="lg" className="bg-white text-pc-navy hover:bg-white/95">
+                  <PremiumButton 
+                    size="lg" 
+                    className="bg-white text-pc-navy hover:bg-white/95"
+                    onClick={() => window.location.href = `/recipes/${spotlightRecipe.id}`}
+                  >
                     <ChefHat className="h-4 w-4" />
                     Start Cooking
                   </PremiumButton>
-                  <PremiumButton size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10">
-                    <Bookmark className="h-4 w-4" />
-                    Save
+                  <PremiumButton 
+                    size="lg" 
+                    variant="outline" 
+                    className="border-white/40 text-white hover:bg-white/10"
+                    onClick={() => toggleFavoriteMutation.mutate({ 
+                      id: spotlightRecipe.id, 
+                      isFavorite: !spotlightRecipe.isFavorite 
+                    })}
+                    disabled={toggleFavoriteMutation.isPending}
+                  >
+                    <Bookmark className={`h-4 w-4 ${spotlightRecipe.isFavorite ? 'fill-current' : ''}`} />
+                    {spotlightRecipe.isFavorite ? 'Saved' : 'Save'}
                   </PremiumButton>
                 </div>
               </>
