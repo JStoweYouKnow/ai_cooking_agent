@@ -17,7 +17,8 @@
     "test:e2e:debug": "playwright test --debug",
     "db:push": "drizzle-kit push",
     "db:migrate": "node scripts/run-migrations.js",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "backfill-cooking-times": "tsx scripts/backfill-cooking-times.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

@@ -85,6 +85,55 @@ function normalizeDurationToMinutes(value: unknown): number | null {
 	return null;
 }
 
+/**
+ * Extract cooking time from recipe instructions text
+ * Looks for patterns like "bake for 30 minutes", "cook 1 hour", etc.
+ */
+export function extractCookingTimeFromInstructions(instructions: string | null | undefined): number | null {
+	if (!instructions) return null;
+
+	const text = instructions.toLowerCase();
+	const timePatterns = [
+		// "bake for 30 minutes", "cook for 1 hour", "simmer for 45 min"
+		/(?:bake|cook|roast|grill|simmer|boil|fry|sauté|steam|microwave|heat|warm)(?:\s+(?:for|about|approximately))?\s+(\d+(?:\.\d+)?)\s*(?:-\s*(\d+(?:\.\d+)?)\s*)?(hour|hr|minute|min)s?/gi,
+		// "30 minutes at 350", "1 hour or until"
+		/(\d+(?:\.\d+)?)\s*(?:-\s*(\d+(?:\.\d+)?)\s*)?(hour|hr|minute|min)s?\s+(?:at|or|until)/gi,
+		// "for 30-45 minutes"
+		/for\s+(\d+(?:\.\d+)?)\s*(?:-\s*(\d+(?:\.\d+)?)\s*)?(hour|hr|minute|min)s?/gi,
+	];
+
+	let totalMinutes = 0;
+	const foundTimes: number[] = [];
+
+	for (const pattern of timePatterns) {
+		let match: RegExpExecArray | null;
+		while ((match = pattern.exec(text)) !== null) {
+			const value1 = parseFloat(match[1]);
+			const value2 = match[2] ? parseFloat(match[2]) : null;
+			const unit = match[3].toLowerCase();
+
+			// Use the higher value if a range is given (e.g., "30-45 minutes" -> 45)
+			const value = value2 || value1;
+
+			let minutes = 0;
+			if (unit.startsWith('hour') || unit === 'hr') {
+				minutes = value * 60;
+			} else {
+				minutes = value;
+			}
+
+			if (minutes > 0 && minutes <= 1440) { // Max 24 hours
+				foundTimes.push(minutes);
+			}
+		}
+	}
+
+	if (foundTimes.length === 0) return null;
+
+	// Return the longest time found (likely the total cooking time)
+	return Math.max(...foundTimes);
+}
+
 function toText(value: unknown): string | null {
 	if (typeof value === "string") return value;
 	if (Array.isArray(value)) return value.map(v => (typeof v === "string" ? v : "")).filter(Boolean).join("\n");
@@ -225,11 +274,18 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 		
 		const category = toText(recipe.recipeCategory) ?? null;
 		const cuisine = toText(recipe.recipeCuisine) ?? null;
-		const cookingTime =
+
+		// Try to get cooking time from structured data first
+		let cookingTime =
 			normalizeDurationToMinutes(recipe.totalTime) ||
 			normalizeDurationToMinutes(recipe.cookTime) ||
 			normalizeDurationToMinutes(recipe.prepTime) ||
 			null;
+
+		// If no cooking time found in structured data, try to extract from instructions
+		if (!cookingTime && instructions) {
+			cookingTime = extractCookingTimeFromInstructions(instructions);
+		}
 		const servings =
 			typeof recipe.recipeYield === "number"
 				? recipe.recipeYield
@@ -300,3 +356,66 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 }
 
 
+
+/**
+ * Extract cooking time from steps array (JSONB format from imported recipes)
+ * Combines all steps into text and extracts the cooking time
+ */
+export function extractCookingTimeFromSteps(steps: unknown): number | null {
+	if (!steps) return null;
+	
+	let stepsText = '';
+	
+	if (Array.isArray(steps)) {
+		// Handle array of strings or objects
+		stepsText = steps.map(step => {
+			if (typeof step === 'string') return step;
+			if (typeof step === 'object' && step !== null) {
+				return (step as any).text || (step as any).raw || JSON.stringify(step);
+			}
+			return String(step || '');
+		}).join('\n');
+	} else if (typeof steps === 'string') {
+		stepsText = steps;
+	}
+	
+	return extractCookingTimeFromInstructions(stepsText);
+}
+
+/**
+ * Get cooking time from any available source:
+ * 1. cookingTime field (if set)
+ * 2. cook_time_minutes field (from imports)
+ * 3. Extract from instructions text
+ * 4. Extract from steps array
+ */
+export function getEffectiveCookingTime(recipe: {
+	cookingTime?: number | null;
+	cook_time_minutes?: number | null;
+	instructions?: string | null;
+	steps?: unknown;
+}): number | null {
+	// 1. Use explicit cooking time if set
+	if (recipe.cookingTime && recipe.cookingTime > 0) {
+		return recipe.cookingTime;
+	}
+	
+	// 2. Use cook_time_minutes from import
+	if ((recipe as any).cook_time_minutes && (recipe as any).cook_time_minutes > 0) {
+		return (recipe as any).cook_time_minutes;
+	}
+	
+	// 3. Try to extract from instructions text
+	if (recipe.instructions) {
+		const extracted = extractCookingTimeFromInstructions(recipe.instructions);
+		if (extracted) return extracted;
+	}
+	
+	// 4. Try to extract from steps array
+	if ((recipe as any).steps) {
+		const extracted = extractCookingTimeFromSteps((recipe as any).steps);
+		if (extracted) return extracted;
+	}
+	
+	return null;
+}

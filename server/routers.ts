@@ -7,7 +7,7 @@ import { publicProcedure, protectedProcedure, optionalAuthProcedure, router } fr
 import { z } from "zod";
 import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
-import { parseRecipeFromUrl } from "./_core/recipeParsing";
+import { parseRecipeFromUrl, extractCookingTimeFromInstructions } from "./_core/recipeParsing";
 import { exportShoppingList, getMimeType, getFileExtension } from "./services/export";
 import fs from "fs";
 import unzipper from "unzipper";
@@ -227,12 +227,19 @@ const recipeRouter = router({
           }
           
           // Ensure description is a string
-          const descriptionStr = typeof fallback.description === "string" 
-            ? fallback.description 
+          const descriptionStr = typeof fallback.description === "string"
+            ? fallback.description
             : fallback.description !== undefined && fallback.description !== null
             ? String(fallback.description)
             : undefined;
-          
+
+          // Try to extract cooking time from instructions if not provided
+          let cookingTime = typeof fallback.cookingTime === "number" ? fallback.cookingTime : undefined;
+          if (!cookingTime && instructionsStr) {
+            const extracted = extractCookingTimeFromInstructions(instructionsStr);
+            cookingTime = extracted ?? undefined;
+          }
+
           await db.createRecipe({
             name: fallback.name,
             description: descriptionStr,
@@ -240,7 +247,7 @@ const recipeRouter = router({
             imageUrl: typeof fallback.imageUrl === "string" ? fallback.imageUrl : undefined,
             cuisine: typeof fallback.cuisine === "string" ? fallback.cuisine : undefined,
             category: typeof fallback.category === "string" ? fallback.category : undefined,
-            cookingTime: typeof fallback.cookingTime === "number" ? fallback.cookingTime : undefined,
+            cookingTime,
             servings: typeof fallback.servings === "number" ? fallback.servings : undefined,
             caloriesPerServing: typeof fallback.caloriesPerServing === "number" ? fallback.caloriesPerServing : undefined,
             sourceUrl: input.url,
@@ -287,12 +294,19 @@ const recipeRouter = router({
       }
       
       // Ensure description is a string
-      const descriptionStr = typeof parsed.description === "string" 
-        ? parsed.description 
+      const descriptionStr = typeof parsed.description === "string"
+        ? parsed.description
         : parsed.description !== undefined && parsed.description !== null
         ? String(parsed.description)
         : undefined;
-      
+
+      // Try to extract cooking time from instructions if not provided by parser
+      let cookingTime = typeof parsed.cookingTime === "number" ? parsed.cookingTime : undefined;
+      if (!cookingTime && instructionsStr) {
+        const extracted = extractCookingTimeFromInstructions(instructionsStr);
+        cookingTime = extracted ?? undefined;
+      }
+
       await db.createRecipe({
         name: parsed.name,
         description: descriptionStr,
@@ -300,7 +314,7 @@ const recipeRouter = router({
         imageUrl: typeof parsed.imageUrl === "string" ? parsed.imageUrl : undefined,
         cuisine: typeof parsed.cuisine === "string" ? parsed.cuisine : undefined,
         category: typeof parsed.category === "string" ? parsed.category : undefined,
-        cookingTime: typeof parsed.cookingTime === "number" ? parsed.cookingTime : undefined,
+        cookingTime,
         servings: typeof parsed.servings === "number" ? parsed.servings : undefined,
         caloriesPerServing: (parsed as any).caloriesPerServing && typeof (parsed as any).caloriesPerServing === "number" ? (parsed as any).caloriesPerServing : undefined,
         sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : undefined,

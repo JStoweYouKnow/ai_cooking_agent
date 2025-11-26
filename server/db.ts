@@ -4,6 +4,7 @@ import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngr
 import { ENV } from './_core/env';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
 import { invokeLLM } from './_core/llm';
+import { getEffectiveCookingTime } from './_core/recipeParsing';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -289,17 +290,36 @@ export async function createRecipe(recipe: InsertRecipe) {
   return db.insert(recipes).values(recipe);
 }
 
+// Helper to enhance recipe with computed cooking time
+function enhanceRecipeWithCookingTime<T extends { cookingTime: number | null }>(recipe: T): T {
+  if (!recipe) return recipe;
+  
+  // If cooking time is already set, return as-is
+  if (recipe.cookingTime && recipe.cookingTime > 0) return recipe;
+  
+  // Try to compute cooking time from various sources
+  const computedTime = getEffectiveCookingTime(recipe as any);
+  if (computedTime) {
+    return { ...recipe, cookingTime: computedTime };
+  }
+  
+  return recipe;
+}
+
 export async function getUserRecipes(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(recipes).where(eq(recipes.userId, userId));
+  const results = await db.select().from(recipes).where(eq(recipes.userId, userId));
+  // Enhance each recipe with computed cooking time
+  return results.map(r => enhanceRecipeWithCookingTime(r));
 }
 
 export async function getRecipeById(recipeId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1);
-  return result[0];
+  // Enhance recipe with computed cooking time
+  return result[0] ? enhanceRecipeWithCookingTime(result[0]) : undefined;
 }
 
 export async function updateRecipeFavorite(recipeId: number, isFavorite: boolean) {
@@ -1135,7 +1155,10 @@ export async function getDailyRecommendations(userId: number) {
   if (!lunch && dinnerPool.length > 0) {
     const remaining = dinnerPool.filter(r => !selectedIds.has(r.id));
     fallbackLunch = getNonSimilarRecipe(remaining, selectedRecipes);
-    if (fallbackLunch) selectedIds.add(fallbackLunch.id);
+    if (fallbackLunch) {
+      selectedIds.add(fallbackLunch.id);
+      selectedRecipes.push(fallbackLunch);
+    }
   }
   
   // If we're missing dinner, try remaining recipes
@@ -1146,7 +1169,10 @@ export async function getDailyRecommendations(userId: number) {
       !breakfastKeywords.some(kw => (r.name || '').toLowerCase().includes(kw))
     );
     fallbackDinner = getNonSimilarRecipe(remaining, selectedRecipes);
-    if (fallbackDinner) selectedIds.add(fallbackDinner.id);
+    if (fallbackDinner) {
+      selectedIds.add(fallbackDinner.id);
+      selectedRecipes.push(fallbackDinner);
+    }
   }
   
   // Keep breakfast as-is (null if no breakfast recipes found - don't fill with non-breakfast)
