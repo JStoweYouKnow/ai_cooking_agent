@@ -139,7 +139,7 @@ export default function Dashboard() {
                 <div className="flex flex-wrap gap-3 text-sm uppercase tracking-wide text-white/70 font-medium">
                   {spotlightRecipe.cuisine && <span className="bg-white/10 px-3 py-1 rounded-full">{spotlightRecipe.cuisine}</span>}
                   {spotlightRecipe.category && <span className="bg-white/10 px-3 py-1 rounded-full">{spotlightRecipe.category}</span>}
-                  {spotlightRecipe.cookingTime && <span className="bg-white/10 px-3 py-1 rounded-full">{spotlightRecipe.cookingTime}m</span>}
+                  {(spotlightRecipe.cookingTime ?? 0) > 0 && <span className="bg-white/10 px-3 py-1 rounded-full">{spotlightRecipe.cookingTime}m</span>}
                 </div>
                 <div className="flex gap-3 pt-2">
                   <PremiumButton 

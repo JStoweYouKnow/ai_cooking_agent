@@ -265,9 +265,9 @@ export default function RecipeDetailPage() {
               {recipe.category && (
                 <CookingBadge variant="category">{recipe.category}</CookingBadge>
               )}
-              {recipe.cookingTime && <CookingTimeBadge minutes={recipe.cookingTime} />}
-              {recipe.servings && <ServingsBadge count={recipe.servings} />}
-              {recipe.caloriesPerServing && <CaloriesBadge calories={recipe.caloriesPerServing} />}
+              {(recipe.cookingTime ?? 0) > 0 && <CookingTimeBadge minutes={recipe.cookingTime!} />}
+              {(recipe.servings ?? 0) > 0 && <ServingsBadge count={recipe.servings!} />}
+              {(recipe.caloriesPerServing ?? 0) > 0 && <CaloriesBadge calories={recipe.caloriesPerServing!} />}
               {recipe.source && (
                 <CookingBadge className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300">
                   {recipe.source}

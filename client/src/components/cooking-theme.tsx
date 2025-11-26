@@ -207,14 +207,15 @@ export function RecipeCard({
                 {recipe.category}
               </CookingBadge>
             )}
-            {recipe.cookingTime && (
-              <CookingTimeBadge minutes={recipe.cookingTime} />
+            {/* Use > 0 checks to avoid rendering "0" when values are 0 */}
+            {(recipe.cookingTime ?? 0) > 0 && (
+              <CookingTimeBadge minutes={recipe.cookingTime!} />
             )}
-            {recipe.servings && (
-              <ServingsBadge count={recipe.servings} />
+            {(recipe.servings ?? 0) > 0 && (
+              <ServingsBadge count={recipe.servings!} />
             )}
-            {recipe.caloriesPerServing && (
-              <CaloriesBadge calories={recipe.caloriesPerServing} />
+            {(recipe.caloriesPerServing ?? 0) > 0 && (
+              <CaloriesBadge calories={recipe.caloriesPerServing!} />
             )}
           </div>
         </div>

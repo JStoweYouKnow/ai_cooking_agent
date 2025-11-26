@@ -141,13 +141,13 @@ export function GlobalSearch() {
                     <p className="font-medium truncate">{recipe.name}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {recipe.cuisine && <span>{recipe.cuisine}</span>}
-                      {recipe.cookingTime && (
+                      {(recipe.cookingTime ?? 0) > 0 && (
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           {recipe.cookingTime}m
                         </span>
                       )}
-                      {recipe.servings && (
+                      {(recipe.servings ?? 0) > 0 && (
                         <span className="flex items-center gap-1">
                           <Users className="h-3 w-3" />
                           {recipe.servings}
