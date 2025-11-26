@@ -969,18 +969,23 @@ const shoppingListRouter = router({
         throw new Error("Unauthorized: You can only add ingredients from your own recipes");
       }
 
-      const recipeIngredients = await db.getRecipeIngredients(input.recipeId);
+      // Get ingredients from both junction table AND JSONB column
+      const allIngredients = await db.getAllRecipeIngredients(input.recipeId);
 
-      for (const ri of recipeIngredients) {
+      if (allIngredients.length === 0) {
+        throw new Error("No ingredients found for this recipe");
+      }
+
+      for (const ing of allIngredients) {
         await db.addShoppingListItem({
           shoppingListId: input.shoppingListId,
-          ingredientId: ri.ingredientId,
-          quantity: ri.quantity,
-          unit: ri.unit,
+          ingredientId: ing.ingredientId,
+          quantity: ing.quantity,
+          unit: ing.unit,
         });
       }
 
-      return { success: true };
+      return { success: true, ingredientsAdded: allIngredients.length };
     }),
 
   export: optionalAuthProcedure

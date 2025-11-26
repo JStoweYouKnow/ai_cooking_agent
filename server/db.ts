@@ -1258,6 +1258,74 @@ export async function getRecipeIngredients(recipeId: number) {
   return db.select().from(recipeIngredients).where(eq(recipeIngredients.recipeId, recipeId));
 }
 
+/**
+ * Get all ingredients for a recipe from both:
+ * 1. The recipe_ingredients junction table (for manually added recipes)
+ * 2. The ingredients JSONB column (for imported recipes)
+ * 
+ * Returns a unified format suitable for adding to shopping lists.
+ */
+export async function getAllRecipeIngredients(recipeId: number): Promise<Array<{
+  ingredientId: number;
+  ingredientName: string;
+  quantity: string | null;
+  unit: string | null;
+}>> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result: Array<{
+    ingredientId: number;
+    ingredientName: string;
+    quantity: string | null;
+    unit: string | null;
+  }> = [];
+  
+  // 1. Get ingredients from junction table
+  const junctionIngredients = await db.select().from(recipeIngredients).where(eq(recipeIngredients.recipeId, recipeId));
+  
+  for (const ri of junctionIngredients) {
+    const ingredient = await getIngredientById(ri.ingredientId);
+    if (ingredient) {
+      result.push({
+        ingredientId: ri.ingredientId,
+        ingredientName: ingredient.name,
+        quantity: ri.quantity,
+        unit: ri.unit,
+      });
+    }
+  }
+  
+  // 2. If no junction ingredients, check the JSONB column
+  if (result.length === 0) {
+    const recipe = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1);
+    if (recipe[0] && recipe[0].ingredients) {
+      const jsonbIngredients = recipe[0].ingredients as Array<{
+        ingredient?: string;
+        raw?: string;
+        quantity?: string | number | null;
+        unit?: string | null;
+      }>;
+      
+      for (const ing of jsonbIngredients) {
+        const ingredientName = ing.ingredient || ing.raw || 'Unknown';
+        if (ingredientName && ingredientName !== 'Unknown') {
+          // Get or create the ingredient in the ingredients table
+          const ingredient = await getOrCreateIngredient(ingredientName);
+          result.push({
+            ingredientId: ingredient.id,
+            ingredientName: ingredient.name,
+            quantity: ing.quantity != null ? String(ing.quantity) : null,
+            unit: ing.unit || null,
+          });
+        }
+      }
+    }
+  }
+  
+  return result;
+}
+
 // User ingredients queries
 export async function addUserIngredient(userIngredient: InsertUserIngredient) {
   const db = await getDb();
