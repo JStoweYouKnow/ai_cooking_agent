@@ -51,8 +51,9 @@ export function GlobalSearch() {
       // Navigation item
       window.location.href = value;
     } else if (value.startsWith('recipe:')) {
-      // Recipe item
-      const recipeId = value.replace('recipe:', '');
+      // Recipe item - extract ID from "recipe:ID:name" format
+      const parts = value.split(':');
+      const recipeId = parts[1];
       window.location.href = `/recipes/${recipeId}`;
     }
   }, []);
@@ -102,8 +103,8 @@ export function GlobalSearch() {
               return (
                 <CommandItem
                   key={item.href}
-                  value={item.href}
-                  onSelect={handleSelect}
+                  value={`${item.href} ${item.name}`}
+                  onSelect={(val) => handleSelect(val.split(' ')[0])}
                   className="cursor-pointer"
                 >
                   <Icon className="mr-2 h-4 w-4" />
@@ -120,7 +121,7 @@ export function GlobalSearch() {
             {filteredRecipes.map((recipe) => (
               <CommandItem
                 key={recipe.id}
-                value={`recipe:${recipe.id}`}
+                value={`recipe:${recipe.id}:${recipe.name} ${recipe.cuisine || ''} ${recipe.category || ''}`}
                 onSelect={handleSelect}
                 className="cursor-pointer"
               >
@@ -164,16 +165,16 @@ export function GlobalSearch() {
         {!search && (
           <CommandGroup heading="Quick Actions">
             <CommandItem
-              value="/recipes"
-              onSelect={handleSelect}
+              value="/recipes browse all recipes"
+              onSelect={() => handleSelect('/recipes')}
               className="cursor-pointer"
             >
               <BookOpen className="mr-2 h-4 w-4" />
               <span>Browse all recipes</span>
             </CommandItem>
             <CommandItem
-              value="/ingredients"
-              onSelect={handleSelect}
+              value="/ingredients manage pantry"
+              onSelect={() => handleSelect('/ingredients')}
               className="cursor-pointer"
             >
               <Apple className="mr-2 h-4 w-4" />
