@@ -147,21 +147,50 @@ export default function RecipeDetailPage() {
     }
   };
 
-  const ingredientsWithDetails = recipeIngredients?.map((ri: any) => {
-    const ingredient = allIngredients?.find(i => i.id === ri.ingredientId);
-    return {
-      ...ri,
-      ingredientName: ingredient?.name || 'Unknown',
-    };
-  });
+  // Get ingredients from either the junction table OR the JSONB column
+  const ingredientsWithDetails = (() => {
+    // First try the junction table (for manually created recipes)
+    if (recipeIngredients && recipeIngredients.length > 0) {
+      return recipeIngredients.map((ri: any) => {
+        const ingredient = allIngredients?.find(i => i.id === ri.ingredientId);
+        return {
+          ...ri,
+          ingredientName: ingredient?.name || 'Unknown',
+        };
+      });
+    }
+    // Fall back to JSONB ingredients column (for imported recipes)
+    const jsonbIngredients = (recipe as any)?.ingredients;
+    if (jsonbIngredients && Array.isArray(jsonbIngredients)) {
+      return jsonbIngredients.map((ing: any, idx: number) => ({
+        id: idx,
+        ingredientName: ing.raw || ing.ingredient || ing.name || String(ing),
+        quantity: ing.quantity || ing.quantity_float || null,
+        unit: ing.unit || null,
+      }));
+    }
+    return [];
+  })();
 
-  // Parse recipe steps
-  const recipeSteps = recipe?.instructions
-    ? recipe.instructions.split('\n').filter(Boolean).map((step, index) => {
+  // Parse recipe steps from instructions TEXT or steps JSONB
+  const recipeSteps = (() => {
+    // First try the instructions text field
+    if (recipe?.instructions) {
+      return recipe.instructions.split('\n').filter(Boolean).map((step) => {
         const isNumbered = /^\d+[\.\)]\s/.test(step.trim());
         return isNumbered ? step.trim() : step;
-      })
-    : [];
+      });
+    }
+    // Fall back to JSONB steps column (for imported recipes)
+    const jsonbSteps = (recipe as any)?.steps;
+    if (jsonbSteps && Array.isArray(jsonbSteps)) {
+      return jsonbSteps.map((step: string) => {
+        if (typeof step === 'string') return step;
+        return String(step);
+      });
+    }
+    return [];
+  })();
 
   const handleNextStep = () => {
     if (currentStep < recipeSteps.length - 1) {
@@ -578,11 +607,11 @@ export default function RecipeDetailPage() {
             </p>
           </div>
 
-          {recipe.instructions ? (
+          {recipeSteps.length > 0 ? (
             <div className="space-y-4">
-              {recipe.instructions.split('\n').filter(Boolean).map((step, index) => {
-                const isNumbered = /^\d+[\.\)]\s/.test(step.trim());
-                const stepText = isNumbered ? step.trim() : step;
+              {recipeSteps.map((step, index) => {
+                // Remove leading step numbers if present (e.g., "1. " or "1) ")
+                const stepText = step.replace(/^\d+[\.\)]\s*/, '').trim();
 
                 return (
                   <motion.div
