@@ -1,20 +1,20 @@
 import { eq, desc, and, or, ne, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-// Import all schema exports - using separate imports for better Next.js resolution
-import type { 
-  InsertUser, User, InsertRecipe, InsertIngredient, Ingredient, 
-  InsertRecipeIngredient, InsertUserIngredient, InsertShoppingList, 
-  InsertShoppingListItem, InsertNotification, Notification, 
-  InsertConversation, Conversation, InsertMessage, Message, 
-  InsertPushToken, PushToken, InsertSubscription, Subscription, 
-  InsertPayment, Payment 
-} from "@drizzle/schema-postgres";
-import { 
-  users, recipes, ingredients, recipeIngredients, 
-  userIngredients, shoppingLists, shoppingListItems, 
+// Import all schema exports - using relative path for deployment compatibility
+import type {
+  InsertUser, User, InsertRecipe, InsertIngredient, Ingredient,
+  InsertRecipeIngredient, InsertUserIngredient, InsertShoppingList,
+  InsertShoppingListItem, InsertNotification, Notification,
+  InsertConversation, Conversation, InsertMessage, Message,
+  InsertPushToken, PushToken, InsertSubscription, Subscription,
+  InsertPayment, Payment
+} from "../drizzle/schema-postgres";
+import {
+  users, recipes, ingredients, recipeIngredients,
+  userIngredients, shoppingLists, shoppingListItems,
   notifications, conversations, messages, pushTokens,
   subscriptions, payments
-} from "@drizzle/schema-postgres";
+} from "../drizzle/schema-postgres";
 import { ENV } from './_core/env';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
 import { invokeLLM } from './_core/llm';
