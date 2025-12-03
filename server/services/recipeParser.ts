@@ -3,7 +3,8 @@
  * Supports schema.org Recipe markup and AI fallback
  */
 
-import { invokeLLM } from '../_core/llm';
+// Dynamic import to avoid module evaluation during build
+import type { InvokeParams, InvokeResult } from '../_core/llm';
 
 interface ParsedRecipe {
   name: string;
@@ -240,6 +241,7 @@ async function parseRecipeWithAI(html: string, url: string): Promise<ParsedRecip
       .trim()
       .slice(0, 8000); // Limit to 8000 chars
 
+    const { invokeLLM } = await import('../_core/llm');
     const response = await invokeLLM({
       messages: [
         {

@@ -8,7 +8,8 @@ import { z } from "zod";
 import * as db from "./db";
 import { users } from "../drizzle/schema-postgres";
 import { and, or, ne, like } from "drizzle-orm";
-import { invokeLLM } from "./_core/llm";
+// Dynamic import to avoid module evaluation during build
+import type { InvokeParams, InvokeResult } from "./_core/llm";
 import { parseRecipeFromUrl, extractCookingTimeFromInstructions } from "./_core/recipeParsing";
 import { exportShoppingList, getMimeType, getFileExtension } from "./services/export";
 import fs from "fs";
@@ -227,6 +228,7 @@ const recipeRouter = router({
       const parsed = await parseRecipeFromUrl(input.url);
       if (!parsed) {
         try {
+          const { invokeLLM } = await import("./_core/llm");
           const llm = await invokeLLM({
             messages: [
               {
@@ -780,6 +782,7 @@ const ingredientRouter = router({
     .input(z.object({ imageUrl: z.string().url().max(500) }))
     .mutation(async ({ input }) => {
       try {
+        const { invokeLLM } = await import("./_core/llm");
         const response = await invokeLLM({
           messages: [
             {
@@ -1599,6 +1602,7 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
         })),
       ];
 
+      const { invokeLLM } = await import("./_core/llm");
       const response = await invokeLLM({
         messages: llmMessages,
         maxTokens: 700,
@@ -1683,6 +1687,7 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
         .filter(Boolean)
         .join("\n");
 
+      const { invokeLLM } = await import("./_core/llm");
       const response = await invokeLLM({
         messages: [
           {
