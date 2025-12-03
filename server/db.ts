@@ -1,6 +1,23 @@
 import { eq, desc, and, or, ne, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem, notifications, InsertNotification, Notification, conversations, InsertConversation, Conversation, messages, InsertMessage, Message, pushTokens, InsertPushToken, PushToken, subscriptions, InsertSubscription, Subscription, payments, InsertPayment, Payment } from "../drizzle/schema-postgres";
+// Split imports to help with Next.js module resolution
+import { 
+  InsertUser, User, users, 
+  recipes, InsertRecipe, 
+  ingredients, InsertIngredient, Ingredient, 
+  recipeIngredients, InsertRecipeIngredient, 
+  userIngredients, InsertUserIngredient, 
+  shoppingLists, InsertShoppingList, 
+  shoppingListItems, InsertShoppingListItem, 
+  notifications, InsertNotification, Notification, 
+  conversations, InsertConversation, Conversation, 
+  messages, InsertMessage, Message, 
+  pushTokens, InsertPushToken, PushToken
+} from "../drizzle/schema-postgres";
+import { 
+  subscriptions, InsertSubscription, Subscription, 
+  payments, InsertPayment, Payment 
+} from "../drizzle/schema-postgres";
 import { ENV } from './_core/env';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
 import { invokeLLM } from './_core/llm';
