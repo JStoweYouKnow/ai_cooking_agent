@@ -8,13 +8,13 @@ import type {
   InsertConversation, Conversation, InsertMessage, Message, 
   InsertPushToken, PushToken, InsertSubscription, Subscription, 
   InsertPayment, Payment 
-} from "../drizzle/schema-postgres";
+} from "@drizzle/schema-postgres";
 import { 
   users, recipes, ingredients, recipeIngredients, 
   userIngredients, shoppingLists, shoppingListItems, 
   notifications, conversations, messages, pushTokens,
   subscriptions, payments
-} from "../drizzle/schema-postgres";
+} from "@drizzle/schema-postgres";
 import { ENV } from './_core/env';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
 import { invokeLLM } from './_core/llm';
