@@ -30,10 +30,10 @@ const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserI
 
 class OAuthService {
   constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
+    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl || "not configured");
     if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
+      console.warn(
+        "[OAuth] WARNING: OAUTH_SERVER_URL is not configured. OAuth login will not be available. Email-based authentication will still work."
       );
     }
   }
@@ -201,7 +201,11 @@ class SDKServer {
     cookieValue: string | undefined | null
   ): Promise<{ openId: string; appId: string; name: string } | null> {
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
+      // This is expected for mobile apps using Bearer token authentication
+      // Only log in debug mode to avoid confusion
+      if (process.env.NODE_ENV === "development") {
+        console.log("[Auth] No session cookie (expected for Bearer token auth)");
+      }
       return null;
     }
 
@@ -257,7 +261,30 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<User> {
-    // Regular authentication flow
+    console.log("[Auth] authenticateRequest called");
+    
+    // Development / mobile flow: allow Authorization header with Bearer token to act as openId
+    console.log("[Auth] Attempting to extract Bearer token...");
+    const bearerToken = this.extractBearerToken(req);
+    
+    if (bearerToken) {
+      console.log("[Auth] Bearer token found! Using Bearer token authentication, token length:", bearerToken.length);
+      try {
+        const user = await this.authenticateWithOpenId(bearerToken);
+        console.log("[Auth] Bearer token authentication successful, user id:", user.id);
+        return user;
+      } catch (error: any) {
+        console.error("[Auth] Bearer token authentication failed:", error?.message || error);
+        console.error("[Auth] Error stack:", error?.stack);
+        throw error; // Re-throw to be caught by context
+      }
+    }
+    
+    // Log if no Bearer token found (for debugging)
+    const authHeader = req.headers.authorization || (req.headers as Record<string, unknown>)["Authorization"];
+    console.log("[Auth] No Bearer token found. Auth header:", authHeader ? "present" : "missing", "type:", typeof authHeader);
+
+    // Regular authentication flow (cookie-based)
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
@@ -297,6 +324,135 @@ class SDKServer {
       lastSignedIn: signedInAt,
     });
 
+    return user;
+  }
+
+  private extractBearerToken(req: Request): string | null {
+    const header = req.headers.authorization || (req.headers as Record<string, unknown>)["Authorization"];
+    console.log("[Auth] extractBearerToken - header type:", typeof header, "header value:", header ? (typeof header === 'string' ? header.substring(0, 50) + '...' : 'not a string') : 'null/undefined');
+    
+    if (typeof header !== "string") {
+      console.log("[Auth] extractBearerToken - header is not a string, returning null");
+      return null;
+    }
+    
+    const match = header.match(/^Bearer\s+(.+)$/i);
+    if (!match) {
+      console.log("[Auth] extractBearerToken - no Bearer match found in header");
+      return null;
+    }
+    
+    const token = match[1].trim();
+    if (token.length > 0) {
+      console.log("[Auth] Bearer token extracted successfully, length:", token.length, "preview:", token.substring(0, 20) + "...");
+      return token;
+    }
+    console.log("[Auth] Bearer token is empty after trim");
+    return null;
+  }
+
+  private async authenticateWithOpenId(tokenOrOpenId: string): Promise<User> {
+    const normalized = tokenOrOpenId.trim();
+    if (!normalized) {
+      throw ForbiddenError("Invalid bearer token");
+    }
+
+    // Try to verify as JWT session token first
+    try {
+      const session = await this.verifySession(normalized);
+      if (session) {
+        // Valid session token - use the openId from the session
+        const signedInAt = new Date();
+        let user = await db.getUserByOpenId(session.openId);
+
+        if (!user) {
+          // User not in DB, but we have valid session - create user
+          await db.upsertUser({
+            openId: session.openId,
+            name: session.name || null,
+            email: null,
+            loginMethod: "oauth",
+            lastSignedIn: signedInAt,
+          });
+          user = await db.getUserByOpenId(session.openId);
+        } else {
+          await db.upsertUser({
+            openId: session.openId,
+            lastSignedIn: signedInAt,
+          });
+        }
+
+        if (!user) {
+          throw ForbiddenError("User not found");
+        }
+
+        return user;
+      }
+    } catch (error) {
+      // Not a valid JWT, fall through to treat as openId
+      console.log("[Auth] Bearer token is not a valid JWT, treating as openId");
+    }
+
+    // Fallback: treat as openId (for backward compatibility with email-based auth)
+    console.log("[Auth] Treating token as openId:", normalized);
+    const signedInAt = new Date();
+    let user = await db.getUserByOpenId(normalized);
+    console.log("[Auth] getUserByOpenId result:", user ? { id: user.id, openId: user.openId } : "null");
+
+    if (!user) {
+      const defaultName = normalized.includes("@")
+        ? normalized.split("@")[0]
+        : normalized;
+
+      console.log("[Auth] Creating new user with openId:", normalized, "name:", defaultName);
+      
+      // Check database connection before attempting user creation
+      const dbInstance = await db.getDb();
+      if (!dbInstance) {
+        console.error("[Auth] Database not available for user creation");
+        throw ForbiddenError("Database connection not available. Please try again later.");
+      }
+      
+      try {
+        await db.upsertUser({
+          openId: normalized,
+          name: defaultName,
+          email: normalized.includes("@") ? normalized : null,
+          loginMethod: "mobile-bearer",
+          lastSignedIn: signedInAt,
+        });
+        console.log("[Auth] upsertUser completed, fetching user...");
+        user = await db.getUserByOpenId(normalized);
+        console.log("[Auth] User after creation:", user ? { id: user.id, openId: user.openId } : "null");
+        
+        if (!user) {
+          console.error("[Auth] User was not created or could not be retrieved after upsertUser");
+          throw ForbiddenError("Failed to create or retrieve user. Please try again.");
+        }
+      } catch (error: any) {
+        console.error("[Auth] Error creating user:", error);
+        console.error("[Auth] Error details:", {
+          message: error?.message,
+          stack: error?.stack,
+          code: error?.code,
+        });
+        throw ForbiddenError(`Failed to create user: ${error?.message || "Unknown error"}`);
+      }
+    } else {
+      console.log("[Auth] Existing user found, updating lastSignedIn");
+      await db.upsertUser({
+        openId: normalized,
+        lastSignedIn: signedInAt,
+      });
+      console.log("[Auth] User updated:", { id: user.id, openId: user.openId });
+    }
+
+    if (!user) {
+      console.error("[Auth] User is still null after upsert/retrieve - this should not happen");
+      throw ForbiddenError("User not found after creation");
+    }
+
+    console.log("[Auth] Returning user:", { id: user.id, openId: user.openId, name: user.name });
     return user;
   }
 }

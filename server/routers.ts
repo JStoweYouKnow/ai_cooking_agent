@@ -6,6 +6,8 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, optionalAuthProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
+import { users } from "../drizzle/schema-postgres";
+import { and, or, ne, like } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { parseRecipeFromUrl, extractCookingTimeFromInstructions } from "./_core/recipeParsing";
 import { exportShoppingList, getMimeType, getFileExtension } from "./services/export";
@@ -13,11 +15,80 @@ import fs from "fs";
 import unzipper from "unzipper";
 import path from "path";
 
+async function sendExpoPushNotification(
+  token: string,
+  payload: { title: string; body: string; data?: Record<string, unknown> }
+) {
+  try {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        to: token,
+        sound: "default",
+        title: payload.title,
+        body: payload.body,
+        data: payload.data ?? {},
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn("[Push] Failed to deliver notification:", text);
+    }
+  } catch (error) {
+    console.error("[Push] Error sending notification:", error);
+  }
+}
+
 // Recipe router
 const recipeRouter = router({
-  list: optionalAuthProcedure.query(async ({ ctx }) => {
+  list: optionalAuthProcedure
+    .input(
+      z.object({
+        limit: z.number().int().positive().optional(),
+        sortBy: z.enum(["recent", "alphabetical", "meal"]).optional(),
+        mealFilter: z.enum(["breakfast", "lunch", "dinner", "dessert"]).optional(),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      return db.getUserRecipes(user.id, {
+        sortBy: input?.sortBy,
+        mealFilter: input?.mealFilter,
+      });
+    }),
+  
+  getRecent: optionalAuthProcedure
+    .input(z.object({ limit: z.number().int().positive().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      // Only return recipes the user has actually added (not preloaded/shared)
+      return db.getUserAddedRecipes(user.id, input?.limit);
+    }),
+
+  getStats: optionalAuthProcedure.query(async ({ ctx }) => {
     const user = ctx.user || await db.getOrCreateAnonymousUser();
-    return db.getUserRecipes(user.id);
+    const recipes = await db.getUserRecipes(user.id);
+    const ingredients = await db.getUserIngredients(user.id);
+    const shoppingLists = await db.getUserShoppingLists(user.id);
+    
+    const recipeCount = recipes.length;
+    const ingredientCount = ingredients.length;
+    const shoppingListCount = shoppingLists.length;
+    const favoriteCount = recipes.filter((r: any) => 
+      r.isFavorite === true || r.isFavorite === "true" || r.isFavorite === 1
+    ).length;
+
+    return {
+      recipeCount,
+      ingredientCount,
+      shoppingListCount,
+      favoriteCount,
+    };
   }),
 
   getById: optionalAuthProcedure
@@ -28,9 +99,9 @@ const recipeRouter = router({
       if (!recipe) {
         throw new Error("Recipe not found");
       }
-      // Verify ownership
-      if (recipe.userId !== user.id) {
-        throw new Error("Unauthorized: You can only view your own recipes");
+      // Allow access if user owns it OR if it's shared
+      if (recipe.userId !== user.id && !recipe.isShared) {
+        throw new Error("Unauthorized: You can only view your own recipes or shared recipes");
       }
       return recipe;
     }),
@@ -240,11 +311,29 @@ const recipeRouter = router({
             cookingTime = extracted ?? undefined;
           }
 
+          // Resolve imageUrl to absolute URL if it's a relative URL
+          let imageUrl: string | undefined = undefined;
+          if (typeof fallback.imageUrl === "string" && fallback.imageUrl.trim()) {
+            try {
+              // If it's already an absolute URL, use it as-is
+              new URL(fallback.imageUrl);
+              imageUrl = fallback.imageUrl;
+            } catch {
+              // If it's a relative URL, resolve it against the source URL
+              try {
+                imageUrl = new URL(fallback.imageUrl, input.url).toString();
+              } catch {
+                // If resolution fails, skip the image
+                console.warn(`[Recipe Import] Failed to resolve image URL: ${fallback.imageUrl}`);
+              }
+            }
+          }
+
           await db.createRecipe({
             name: fallback.name,
             description: descriptionStr,
             instructions: instructionsStr,
-            imageUrl: typeof fallback.imageUrl === "string" ? fallback.imageUrl : undefined,
+            imageUrl,
             cuisine: typeof fallback.cuisine === "string" ? fallback.cuisine : undefined,
             category: typeof fallback.category === "string" ? fallback.category : undefined,
             cookingTime,
@@ -253,6 +342,7 @@ const recipeRouter = router({
             sourceUrl: input.url,
             userId: user.id,
             source: "url_import",
+            isShared: true, // HTML-uploaded recipes are shared with all users
           });
           const recipes = await db.getUserRecipes(user.id);
           const created = recipes[recipes.length - 1];
@@ -307,11 +397,30 @@ const recipeRouter = router({
         cookingTime = extracted ?? undefined;
       }
 
+      // Resolve imageUrl to absolute URL if it's a relative URL
+      let imageUrl: string | undefined = undefined;
+      if (typeof parsed.imageUrl === "string" && parsed.imageUrl.trim()) {
+        try {
+          // If it's already an absolute URL, use it as-is
+          new URL(parsed.imageUrl);
+          imageUrl = parsed.imageUrl;
+        } catch {
+          // If it's a relative URL, resolve it against the source URL
+          const sourceUrl = typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : input.url;
+          try {
+            imageUrl = new URL(parsed.imageUrl, sourceUrl).toString();
+          } catch {
+            // If resolution fails, skip the image
+            console.warn(`[Recipe Import] Failed to resolve image URL: ${parsed.imageUrl}`);
+          }
+        }
+      }
+
       await db.createRecipe({
         name: parsed.name,
         description: descriptionStr,
         instructions: instructionsStr,
-        imageUrl: typeof parsed.imageUrl === "string" ? parsed.imageUrl : undefined,
+        imageUrl,
         cuisine: typeof parsed.cuisine === "string" ? parsed.cuisine : undefined,
         category: typeof parsed.category === "string" ? parsed.category : undefined,
         cookingTime,
@@ -320,6 +429,7 @@ const recipeRouter = router({
         sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : undefined,
         userId: user.id,
         source: typeof parsed.source === "string" ? parsed.source : "url_import",
+        isShared: true, // HTML-uploaded recipes are shared with all users
       });
       const recipes = await db.getUserRecipes(user.id);
       const created = recipes[recipes.length - 1];
@@ -344,9 +454,10 @@ const recipeRouter = router({
       if (!recipe) {
         throw new Error("Recipe not found");
       }
-      // Verify ownership
-      if (recipe.userId !== user.id) {
-        throw new Error("Unauthorized: You can only modify your own recipes");
+      // Users can favorite shared recipes, but favorites are per-user
+      // For now, allow favoriting any accessible recipe (owned or shared)
+      if (recipe.userId !== user.id && !recipe.isShared) {
+        throw new Error("Unauthorized: You can only favorite your own recipes or shared recipes");
       }
       return db.updateRecipeFavorite(input.id, input.isFavorite);
     }),
@@ -581,9 +692,9 @@ const recipeRouter = router({
       if (!recipe) {
         throw new Error("Recipe not found");
       }
-      // Verify ownership
-      if (recipe.userId !== user.id) {
-        throw new Error("Unauthorized: You can only view ingredients from your own recipes");
+      // Allow access if user owns it OR if it's shared
+      if (recipe.userId !== user.id && !recipe.isShared) {
+        throw new Error("Unauthorized: You can only view ingredients from your own recipes or shared recipes");
       }
       return db.getRecipeIngredients(input.recipeId);
     }),
@@ -600,14 +711,59 @@ const ingredientRouter = router({
   list: publicProcedure.query(() => db.getAllIngredients()),
 
   getOrCreate: publicProcedure
-    .input(z.object({ name: z.string().min(1).max(255), category: z.string().max(100).optional(), imageUrl: z.string().url().max(1000).optional() }))
+    .input(
+      z.object({ 
+        name: z.preprocess(
+          (val) => {
+            // Handle case where name might be an object (from mobile app bug)
+            if (typeof val === 'object' && val !== null && 'name' in val) {
+              console.warn('[getOrCreate] Received object for name, extracting name property:', val);
+              return val.name;
+            }
+            return val;
+          },
+          z.string().min(1).max(255)
+        ), 
+        category: z.string().max(100).optional(), 
+        imageUrl: z.string().url().max(1000).optional() 
+      })
+    )
     .mutation(async ({ input }) => {
-      const ingredient = await db.getOrCreateIngredient(input.name, input.category);
+      // Log for debugging
+      console.log('[getOrCreate] Input received:', { 
+        name: input.name, 
+        nameType: typeof input.name,
+        nameLength: input.name?.length,
+        category: input.category,
+        imageUrl: input.imageUrl?.substring(0, 50) 
+      });
+      
+      // Validate and trim name
+      const trimmedName = input.name?.trim();
+      if (!trimmedName || trimmedName.length === 0) {
+        throw new Error('Ingredient name cannot be empty');
+      }
+      if (trimmedName.length > 255) {
+        throw new Error('Ingredient name cannot exceed 255 characters');
+      }
+      
+      const ingredient = await db.getOrCreateIngredient(trimmedName, input.category);
+      
+      console.log('[getOrCreate] Ingredient created/retrieved:', {
+        id: ingredient.id,
+        name: ingredient.name,
+        category: ingredient.category
+      });
+      
       // If imageUrl is provided and ingredient doesn't have one, update it
       if (input.imageUrl && !ingredient.imageUrl) {
         await db.updateIngredientImage(ingredient.id, input.imageUrl);
-        return { ...ingredient, imageUrl: input.imageUrl };
+        const updated = { ...ingredient, imageUrl: input.imageUrl };
+        console.log('[getOrCreate] Updated ingredient with imageUrl:', updated);
+        return updated;
       }
+      
+      console.log('[getOrCreate] Returning ingredient:', ingredient);
       return ingredient;
     }),
 
@@ -638,7 +794,12 @@ const ingredientRouter = router({
                 },
                 {
                   type: "text",
-                  text: "List all the ingredients you can see in this image. Return as a JSON array of ingredient names only, nothing else.",
+                  text: `Analyze this image and identify all ingredients you can see. For each ingredient, provide:
+- The ingredient name (e.g., "tomatoes", "flour", "olive oil")
+- The quantity if visible (e.g., "2", "1.5", "500") - use empty string "" if not visible
+- The unit if visible (e.g., "cups", "tbsp", "g", "ml", "pieces") - use empty string "" if not visible
+
+Return a JSON object with an "ingredients" array. Each ingredient must have name, quantity, and unit fields. Use empty strings for quantity and unit if they are not visible in the image.`,
                 },
               ],
             },
@@ -654,7 +815,23 @@ const ingredientRouter = router({
                   ingredients: {
                     type: "array",
                     items: {
-                      type: "string",
+                      type: "object",
+                      properties: {
+                        name: {
+                          type: "string",
+                          description: "The ingredient name",
+                        },
+                        quantity: {
+                          type: "string",
+                          description: "The quantity if visible, or empty string if not visible",
+                        },
+                        unit: {
+                          type: "string",
+                          description: "The unit of measurement if visible, or empty string if not visible",
+                        },
+                      },
+                      required: ["name", "quantity", "unit"],
+                      additionalProperties: false,
                     },
                   },
                 },
@@ -668,7 +845,82 @@ const ingredientRouter = router({
         const content = response.choices[0].message.content;
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
         const parsed = JSON.parse(contentStr);
-        return parsed.ingredients || [];
+        const ingredients = parsed.ingredients || [];
+        
+        // Filter and normalize ingredients
+        const validIngredients = ingredients
+          .map((ing: any) => {
+            try {
+              // Handle both string format (old) and object format (new)
+              if (typeof ing === 'string') {
+                const trimmed = String(ing).trim();
+                if (trimmed.length === 0 || trimmed.length > 255) return null;
+                return { name: trimmed, quantity: '', unit: '' };
+              }
+              
+              // Normalize object format - ensure name is a string
+              let name = ing?.name;
+              
+              // Convert name to string if it's not already
+              if (name && typeof name !== 'string') {
+                name = String(name);
+              }
+              
+              // Validate name
+              if (!name || typeof name !== 'string' || !name.trim()) {
+                console.warn('[recognizeFromImage] Invalid ingredient name:', ing);
+                return null; // Invalid, will be filtered out
+              }
+              
+              const trimmedName = name.trim();
+              if (trimmedName.length === 0 || trimmedName.length > 255) {
+                console.warn('[recognizeFromImage] Ingredient name out of range:', trimmedName);
+                return null;
+              }
+              
+              // Ensure quantity and unit are strings
+              const quantity = (ing.quantity && typeof ing.quantity === 'string' && ing.quantity.trim()) 
+                ? ing.quantity.trim() 
+                : '';
+              const unit = (ing.unit && typeof ing.unit === 'string' && ing.unit.trim()) 
+                ? ing.unit.trim() 
+                : '';
+              
+              return {
+                name: trimmedName,
+                quantity,
+                unit,
+              };
+            } catch (error) {
+              console.warn('[recognizeFromImage] Error processing ingredient:', ing, error);
+              return null;
+            }
+          })
+          .filter((ing: any) => ing !== null && ing.name && typeof ing.name === 'string' && ing.name.length > 0 && ing.name.length <= 255);
+        
+        console.log(`[recognizeFromImage] Recognized ${validIngredients.length} valid ingredients from ${ingredients.length} total`);
+        if (validIngredients.length > 0) {
+          console.log('[recognizeFromImage] Sample ingredient:', validIngredients[0]);
+          // Final validation - ensure all returned ingredients have string names
+          const finalCheck = validIngredients.every((ing: any) => 
+            ing && 
+            typeof ing === 'object' && 
+            ing.name && 
+            typeof ing.name === 'string'
+          );
+          if (!finalCheck) {
+            console.error('[recognizeFromImage] WARNING: Some ingredients have invalid name types:', validIngredients);
+            // Filter out any that still have invalid names
+            return validIngredients.filter((ing: any) => 
+              ing && 
+              typeof ing === 'object' && 
+              ing.name && 
+              typeof ing.name === 'string'
+            );
+          }
+        }
+        
+        return validIngredients;
       } catch (error) {
         console.error("Error recognizing ingredients from image:", error);
         throw new Error("Failed to recognize ingredients from image");
@@ -705,9 +957,11 @@ const ingredientRouter = router({
         const { uploadImageToS3 } = await import("./_core/storage");
         const url = await uploadImageToS3(input.imageData, input.fileName, input.contentType);
         return { url };
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error uploading image:", error);
-        throw new Error("Failed to upload image. Check S3 configuration.");
+        // Preserve the original error message if it's more specific
+        const errorMessage = error?.message || "Failed to upload image. Check S3 configuration.";
+        throw new Error(errorMessage);
       }
     }),
 
@@ -960,13 +1214,14 @@ const shoppingListRouter = router({
         throw new Error("Unauthorized: You can only add items to your own shopping lists");
       }
 
-      // Verify recipe ownership
+      // Verify recipe exists and is accessible (owned or shared)
       const recipe = await db.getRecipeById(input.recipeId);
       if (!recipe) {
         throw new Error("Recipe not found");
       }
-      if (recipe.userId !== user.id) {
-        throw new Error("Unauthorized: You can only add ingredients from your own recipes");
+      // Allow adding ingredients from owned recipes or shared recipes
+      if (recipe.userId !== user.id && !recipe.isShared) {
+        throw new Error("Unauthorized: Recipe not found or not accessible");
       }
 
       // Get ingredients from both junction table AND JSONB column
@@ -1071,6 +1326,48 @@ const notificationRouter = router({
       await db.deleteNotification(input.id, ctx.user.id);
       return { success: true };
     }),
+
+  listDevices: protectedProcedure.query(async ({ ctx }) => {
+    return db.getPushTokensForUser(ctx.user.id);
+  }),
+
+  registerDevice: protectedProcedure
+    .input(
+      z.object({
+        token: z.string().min(10),
+        platform: z.enum(["ios", "android", "web"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await db.upsertPushToken(ctx.user.id, input.token, input.platform);
+      return { success: true };
+    }),
+
+  unregisterDevice: protectedProcedure
+    .input(z.object({ token: z.string().min(10) }))
+    .mutation(async ({ ctx, input }) => {
+      await db.deletePushToken(ctx.user.id, input.token);
+      return { success: true };
+    }),
+
+  sendTestPush: protectedProcedure.mutation(async ({ ctx }) => {
+    const tokens = await db.getPushTokensForUser(ctx.user.id);
+    if (!tokens.length) {
+      throw new Error("No devices registered. Enable push notifications first.");
+    }
+
+    await Promise.all(
+      tokens.map((entry) =>
+        sendExpoPushNotification(entry.token, {
+          title: "Sous",
+          body: "Push notifications are enabled! We'll keep your kitchen in sync.",
+          data: { type: "test" },
+        })
+      )
+    );
+
+    return { success: true };
+  }),
 });
 
 // Message router
@@ -1139,6 +1436,7 @@ const messageRouter = router({
       conversationId: z.number().int().positive().optional(),
       recipientId: z.number().int().positive().optional(),
       content: z.string().min(1).max(5000),
+      recipeId: z.number().int().positive().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       if (!input.conversationId && !input.recipientId) {
@@ -1166,6 +1464,22 @@ const messageRouter = router({
         throw new Error("Conversation not found");
       }
       
+      // If recipeId is provided, verify recipe exists and user has access
+      if (input.recipeId) {
+        const recipe = await db.getRecipeById(input.recipeId);
+        if (!recipe) {
+          throw new Error("Recipe not found");
+        }
+        // User can share their own recipes or shared recipes
+        if (recipe.userId !== ctx.user.id && !recipe.isShared) {
+          throw new Error("You can only share your own recipes or shared recipes");
+        }
+        // Enhance content with recipe info if not already included
+        if (!input.content.includes(recipe.name)) {
+          input.content = `🍳 Shared recipe: ${recipe.name}\n\n${input.content}`;
+        }
+      }
+      
       const message = await db.createMessage({
         conversationId,
         senderId: ctx.user.id,
@@ -1176,9 +1490,318 @@ const messageRouter = router({
       return message;
     }),
 
+  shareRecipe: protectedProcedure
+    .input(z.object({
+      recipeId: z.number().int().positive(),
+      recipientId: z.number().int().positive(),
+      message: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.recipientId === ctx.user.id) {
+        throw new Error("Cannot share recipe with yourself");
+      }
+      
+      // Verify recipe exists and user has access
+      const recipe = await db.getRecipeById(input.recipeId);
+      if (!recipe) {
+        throw new Error("Recipe not found");
+      }
+      if (recipe.userId !== ctx.user.id && !recipe.isShared) {
+        throw new Error("You can only share your own recipes or shared recipes");
+      }
+      
+      // Get or create conversation
+      const conversation = await db.getOrCreateConversation(ctx.user.id, input.recipientId);
+      
+      // Create message with recipe share
+      const shareMessage = input.message 
+        ? `🍳 Shared recipe: ${recipe.name}\n\n${input.message}`
+        : `🍳 Shared recipe: ${recipe.name}\n\nCheck out this recipe!`;
+      
+      const message = await db.createMessage({
+        conversationId: conversation.id,
+        senderId: ctx.user.id,
+        content: shareMessage,
+        isRead: false,
+      });
+      
+      return { message, conversationId: conversation.id };
+    }),
+
+  searchUsers: protectedProcedure
+    .input(z.object({
+      query: z.string().min(1).max(100),
+    }))
+    .query(async ({ ctx, input }) => {
+      const dbInstance = await db.getDb();
+      if (!dbInstance) throw new Error("Database not available");
+      
+      // Search users by name or email (excluding current user)
+      const results = await dbInstance
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+        })
+        .from(users)
+        .where(
+          and(
+            ne(users.id, ctx.user.id),
+            or(
+              like(users.name, `%${input.query}%`),
+              like(users.email, `%${input.query}%`)
+            )
+          )
+        )
+        .limit(20);
+      
+      return results;
+    }),
+
   getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
     return db.getUnreadMessageCount(ctx.user.id);
   }),
+});
+
+const aiRouter = router({
+  chat: optionalAuthProcedure
+    .input(
+      z.object({
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(["user", "assistant"]),
+              content: z.string().min(1).max(2000),
+            })
+          )
+          .min(1)
+          .max(40),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || (await db.getOrCreateAnonymousUser());
+      const systemPrompt = `
+You are Sous, a friendly AI cooking assistant for the Sous app.
+Provide concise, practical cooking advice rooted in user pantry items, dietary preferences, and goals.
+User context:
+- Name: ${user.name ?? "Chef"}
+- Dietary preferences: ${user.dietaryPreferences ?? "not specified"}
+- Allergies: ${user.allergies ?? "not specified"}
+- Goals: ${user.goals ?? "not specified"}
+Respond with actionable guidance and, when appropriate, bullet lists or short numbered steps.
+`;
+
+      const llmMessages: Parameters<typeof invokeLLM>[0]["messages"] = [
+        { role: "system", content: systemPrompt },
+        ...input.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      ];
+
+      const response = await invokeLLM({
+        messages: llmMessages,
+        maxTokens: 700,
+      });
+
+      const rawContent = response.choices[0]?.message?.content ?? "";
+      const reply =
+        typeof rawContent === "string"
+          ? rawContent
+          : Array.isArray(rawContent)
+          ? rawContent
+              .map((part) => {
+                if (typeof part === "string") return part;
+                if ("text" in part) return part.text;
+                return "";
+              })
+              .join("\n")
+          : "";
+
+      return { reply: reply.trim() };
+    }),
+
+  generateRecipe: optionalAuthProcedure
+    .input(
+      z.object({
+        prompt: z.string().min(10).max(2000),
+        ingredients: z.array(z.string().min(1).max(100)).max(20).optional(),
+        cuisine: z.string().min(2).max(60).optional(),
+        servings: z.number().int().positive().max(16).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || (await db.getOrCreateAnonymousUser());
+      const schema = {
+        name: "generated_recipe",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            description: { type: "string" },
+            servings: { type: "integer" },
+            cookingTime: { type: "integer" },
+            tags: {
+              type: "array",
+              items: { type: "string" },
+            },
+            ingredients: {
+              type: "array",
+              minItems: 4,
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  quantity: { type: "string" },
+                  unit: { type: "string" },
+                },
+                required: ["name"],
+                additionalProperties: false,
+              },
+            },
+            steps: {
+              type: "array",
+              minItems: 3,
+              items: { type: "string" },
+            },
+          },
+          required: ["name", "description", "ingredients", "steps"],
+          additionalProperties: false,
+        },
+      } as const;
+
+      const preferenceSummary = [
+        input.cuisine ? `Preferred cuisine: ${input.cuisine}` : null,
+        input.servings ? `Target servings: ${input.servings}` : null,
+        input.ingredients && input.ingredients.length > 0
+          ? `Focus on these ingredients: ${input.ingredients.join(", ")}`
+          : null,
+        user.dietaryPreferences ? `User dietary preferences: ${user.dietaryPreferences}` : null,
+        user.allergies ? `Allergies to avoid: ${user.allergies}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const response = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are Sous, an expert chef that crafts structured recipes for the Sous AI mobile app. Return flavorful, approachable dishes.",
+          },
+          {
+            role: "user",
+            content: `${input.prompt}\n${preferenceSummary}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: schema,
+        },
+        maxTokens: 900,
+      });
+
+      const rawContent = response.choices[0]?.message?.content;
+      const jsonString =
+        typeof rawContent === "string"
+          ? rawContent
+          : JSON.stringify(rawContent ?? { name: "", description: "", ingredients: [], steps: [] });
+
+      const parsed = JSON.parse(jsonString);
+
+      return {
+        recipe: {
+          name: parsed.name,
+          description: parsed.description,
+          servings: parsed.servings ?? input.servings ?? null,
+          cookingTime: parsed.cookingTime ?? null,
+          tags: parsed.tags ?? [],
+          ingredients: parsed.ingredients ?? [],
+          steps: parsed.steps ?? [],
+        },
+      };
+    }),
+});
+
+// Subscription router
+const subscriptionRouter = router({
+  get: protectedProcedure.query(async ({ ctx }) => {
+    const subscription = await db.getSubscriptionByUserId(ctx.user.id);
+    if (!subscription) {
+      return null;
+    }
+    return {
+      id: subscription.id,
+      status: subscription.status,
+      currentPeriodStart: subscription.currentPeriodStart,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      canceledAt: subscription.canceledAt,
+      trialStart: subscription.trialStart,
+      trialEnd: subscription.trialEnd,
+    };
+  }),
+
+  hasActive: protectedProcedure.query(async ({ ctx }) => {
+    return db.hasActiveSubscription(ctx.user.id);
+  }),
+
+  createCheckoutSession: protectedProcedure
+    .input(
+      z.object({
+        priceId: z.string().optional(),
+        successUrl: z.string().url().optional(),
+        cancelUrl: z.string().url().optional(),
+      }).optional()
+    )
+    .mutation(async ({ ctx, input }) => {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': ctx.req.headers.cookie || '',
+          'Authorization': ctx.req.headers.authorization || '',
+        },
+        body: JSON.stringify({
+          priceId: input?.priceId,
+          successUrl: input?.successUrl,
+          cancelUrl: input?.cancelUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create checkout session');
+      }
+
+      return response.json();
+    }),
+
+  createCustomerPortalSession: protectedProcedure.mutation(async ({ ctx }) => {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/stripe/customer-portal`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': ctx.req.headers.cookie || '',
+        'Authorization': ctx.req.headers.authorization || '',
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create customer portal session');
+    }
+
+    return response.json();
+  }),
+
+  getPayments: protectedProcedure
+    .input(z.object({ limit: z.number().int().positive().max(100).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const limit = input?.limit || 50;
+      return db.getPaymentsByUserId(ctx.user.id, limit);
+    }),
 });
 
 // User router
@@ -1244,7 +1867,31 @@ const userRouter = router({
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
+    me: publicProcedure.query((opts) => {
+      const user = opts.ctx.user;
+      const authHeader = opts.ctx.req.headers.authorization || (opts.ctx.req.headers as Record<string, unknown>)["Authorization"];
+      
+      if (!user) {
+        console.log("[Auth.me] No user in context - authentication may have failed");
+        console.log("[Auth.me] Auth header present:", !!authHeader);
+        if (authHeader && typeof authHeader === 'string') {
+          const isBearer = authHeader.toLowerCase().startsWith('bearer ');
+          console.log("[Auth.me] Is Bearer token:", isBearer);
+          if (isBearer) {
+            const token = authHeader.substring(7).trim();
+            console.log("[Auth.me] Token length:", token.length, "Token preview:", token.substring(0, 20) + "...");
+          }
+        }
+        // Return null explicitly so client knows auth failed
+        return null;
+      }
+      if (!user.id) {
+        console.error("[Auth.me] User object missing id field:", user);
+        throw new Error("Invalid user object: missing id field");
+      }
+      console.log("[Auth.me] Returning user:", { id: user.id, openId: user.openId, name: user.name });
+      return user;
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -1258,7 +1905,9 @@ export const appRouter = router({
   shoppingLists: shoppingListRouter,
   notifications: notificationRouter,
   messages: messageRouter,
+  ai: aiRouter,
   user: userRouter,
+  subscription: subscriptionRouter,
 });
 
 export type AppRouter = typeof appRouter;

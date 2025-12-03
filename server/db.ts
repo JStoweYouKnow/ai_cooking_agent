@@ -1,6 +1,6 @@
-import { eq, desc, and, or, ne } from "drizzle-orm";
+import { eq, desc, and, or, ne, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem, notifications, InsertNotification, Notification, conversations, InsertConversation, Conversation, messages, InsertMessage, Message } from "../drizzle/schema-postgres";
+import { InsertUser, User, users, recipes, InsertRecipe, ingredients, InsertIngredient, Ingredient, recipeIngredients, InsertRecipeIngredient, userIngredients, InsertUserIngredient, shoppingLists, InsertShoppingList, shoppingListItems, InsertShoppingListItem, notifications, InsertNotification, Notification, conversations, InsertConversation, Conversation, messages, InsertMessage, Message, pushTokens, InsertPushToken, PushToken, subscriptions, InsertSubscription, Subscription, payments, InsertPayment, Payment } from "../drizzle/schema-postgres";
 import { ENV } from './_core/env';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
 import { invokeLLM } from './_core/llm';
@@ -52,8 +52,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
+    console.error("[Database] Cannot upsert user: database not available");
+    throw new Error("Database connection not available. Please check your database configuration.");
   }
 
   try {
@@ -306,10 +306,65 @@ function enhanceRecipeWithCookingTime<T extends { cookingTime: number | null }>(
   return recipe;
 }
 
-export async function getUserRecipes(userId: number) {
+export async function getUserRecipes(
+  userId: number,
+  options?: {
+    sortBy?: "recent" | "alphabetical" | "meal";
+    mealFilter?: "breakfast" | "lunch" | "dinner" | "dessert";
+  }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const results = await db.select().from(recipes).where(eq(recipes.userId, userId));
+  
+  // Build where condition
+  const baseCondition = or(eq(recipes.userId, userId), eq(recipes.isShared, true));
+  const whereCondition = options?.mealFilter
+    ? and(baseCondition, eq(recipes.category, options.mealFilter))
+    : baseCondition;
+  
+  // Build query with where condition
+  let query = db
+    .select()
+    .from(recipes)
+    .where(whereCondition);
+  
+  // Apply sorting
+  if (options?.sortBy === "recent") {
+    query = query.orderBy(desc(recipes.createdAt)) as any;
+  } else if (options?.sortBy === "alphabetical") {
+    query = query.orderBy(recipes.name) as any;
+  } else if (options?.sortBy === "meal") {
+    // Sort by category (meal type) first, then alphabetically within each meal
+    query = query.orderBy(recipes.category, recipes.name) as any;
+  } else {
+    // Default: most recent first
+    query = query.orderBy(desc(recipes.createdAt)) as any;
+  }
+  
+  const results = await query;
+  // Enhance each recipe with computed cooking time
+  return results.map(r => enhanceRecipeWithCookingTime(r));
+}
+
+/**
+ * Get only recipes that the user has actually added (not preloaded/shared recipes)
+ * This is used for "recent recipes" to show only user-added content
+ */
+export async function getUserAddedRecipes(userId: number, limit?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Only get recipes created by this specific user (exclude shared/preloaded recipes)
+  let query = db
+    .select()
+    .from(recipes)
+    .where(eq(recipes.userId, userId))
+    .orderBy(desc(recipes.createdAt));
+  
+  if (limit) {
+    query = query.limit(limit) as any;
+  }
+  
+  const results = await query;
   // Enhance each recipe with computed cooking time
   return results.map(r => enhanceRecipeWithCookingTime(r));
 }
@@ -771,7 +826,8 @@ export async function getDailyRecommendations(userId: number) {
     }
   
     // Get all user recipes
-    let allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
+    const recipeAccessFilter = or(eq(recipes.userId, userId), eq(recipes.isShared, true));
+    let allRecipes = await db.select().from(recipes).where(recipeAccessFilter);
   
   // If user has no ingredients/preferences and no recipes, use LLM to generate recommendations
     if (!hasUserIngredients && allRecipes.length === 0) {
@@ -863,7 +919,7 @@ export async function getDailyRecommendations(userId: number) {
       // Wait a bit for imports, then refresh recipes
       // In production, you might want to make this async or use a queue
       await new Promise(resolve => setTimeout(resolve, 1000));
-      allRecipes = await db.select().from(recipes).where(eq(recipes.userId, userId));
+      allRecipes = await db.select().from(recipes).where(recipeAccessFilter);
     }
   }
   
@@ -1555,6 +1611,49 @@ export async function deleteNotification(notificationId: number, userId: number)
     ));
 }
 
+export async function upsertPushToken(userId: number, token: string, platform: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db
+    .select()
+    .from(pushTokens)
+    .where(eq(pushTokens.token, token))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(pushTokens)
+      .set({ userId, platform, updatedAt: new Date() })
+      .where(eq(pushTokens.id, existing[0].id));
+    return existing[0];
+  }
+
+  await db.insert(pushTokens).values({ userId, token, platform });
+}
+
+export async function getPushTokensForUser(userId: number): Promise<PushToken[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    return await db
+      .select()
+      .from(pushTokens)
+      .where(eq(pushTokens.userId, userId));
+  } catch (error) {
+    console.error(`[DB] Error fetching push tokens for user ${userId}:`, error);
+    // If table doesn't exist or query fails, return empty array instead of throwing
+    // This allows the app to continue functioning even if push notifications aren't set up
+    return [];
+  }
+}
+
+export async function deletePushToken(userId: number, token: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(pushTokens).where(and(eq(pushTokens.userId, userId), eq(pushTokens.token, token)));
+}
+
 // Conversation queries
 export async function getOrCreateConversation(user1Id: number, user2Id: number): Promise<Conversation> {
   const db = await getDb();
@@ -1713,4 +1812,140 @@ export async function getUnreadMessageCount(userId: number) {
   }
   
   return totalUnread;
+}
+
+// Subscription queries
+export async function getSubscriptionByUserId(userId: number): Promise<Subscription | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
+  return result[0];
+}
+
+export async function getSubscriptionByStripeCustomerId(stripeCustomerId: string): Promise<Subscription | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(subscriptions).where(eq(subscriptions.stripeCustomerId, stripeCustomerId)).limit(1);
+  return result[0];
+}
+
+export async function getSubscriptionByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Subscription | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(subscriptions).where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId)).limit(1);
+  return result[0];
+}
+
+export async function upsertSubscription(data: InsertSubscription): Promise<Subscription> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const existing = await getSubscriptionByStripeCustomerId(data.stripeCustomerId);
+  
+  if (existing) {
+    const [updated] = await db
+      .update(subscriptions)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptions.id, existing.id))
+      .returning();
+    return updated;
+  }
+  
+  const [inserted] = await db.insert(subscriptions).values(data).returning();
+  return inserted;
+}
+
+export async function updateSubscriptionStatus(
+  stripeSubscriptionId: string,
+  status: Subscription["status"],
+  data?: Partial<InsertSubscription>
+): Promise<Subscription | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const [updated] = await db
+    .update(subscriptions)
+    .set({
+      status,
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId))
+    .returning();
+  
+  return updated;
+}
+
+export async function cancelSubscription(stripeSubscriptionId: string): Promise<Subscription | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const [updated] = await db
+    .update(subscriptions)
+    .set({
+      cancelAtPeriodEnd: true,
+      canceledAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId))
+    .returning();
+  
+  return updated;
+}
+
+// Payment queries
+export async function createPayment(data: InsertPayment): Promise<Payment> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [inserted] = await db.insert(payments).values(data).returning();
+  return inserted;
+}
+
+export async function getPaymentsByUserId(userId: number, limit?: number): Promise<Payment[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  let query = db
+    .select()
+    .from(payments)
+    .where(eq(payments.userId, userId))
+    .orderBy(desc(payments.createdAt));
+  
+  if (limit) {
+    query = query.limit(limit) as any;
+  }
+  
+  return query;
+}
+
+export async function updatePaymentStatus(
+  stripePaymentIntentId: string,
+  status: string,
+  stripeChargeId?: string
+): Promise<Payment | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const [updated] = await db
+    .update(payments)
+    .set({
+      status,
+      stripeChargeId,
+      updatedAt: new Date(),
+    })
+    .where(eq(payments.stripePaymentIntentId, stripePaymentIntentId))
+    .returning();
+  
+  return updated;
+}
+
+// Check if user has active subscription
+export async function hasActiveSubscription(userId: number): Promise<boolean> {
+  const subscription = await getSubscriptionByUserId(userId);
+  if (!subscription) return false;
+  
+  const activeStatuses: Subscription["status"][] = ["active", "trialing"];
+  return activeStatuses.includes(subscription.status);
 }
