@@ -214,9 +214,13 @@ const resolveApiUrl = () =>
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
 
+const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
 const assertApiKey = () => {
+  // Only assert API key when actually invoking LLM, not at module load time
+  // This allows the module to be imported during build without requiring API key
   if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    throw new Error("OPENAI_API_KEY is not configured. Set BUILT_IN_FORGE_API_KEY environment variable.");
   }
 };
 
@@ -280,7 +284,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: DEFAULT_OPENAI_MODEL,
     messages: messages.map(normalizeMessage),
   };
 
@@ -296,10 +300,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768
-  payload.thinking = {
-    "budget_tokens": 128
-  }
+  const MAX_OPENAI_TOKENS = Number(process.env.OPENAI_MAX_TOKENS ?? 8192);
+  payload.max_tokens = Math.min(MAX_OPENAI_TOKENS, 16000);
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,

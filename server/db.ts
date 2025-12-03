@@ -17,7 +17,8 @@ import {
 } from "../drizzle/schema-postgres";
 import { ENV } from './_core/env';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal';
-import { invokeLLM } from './_core/llm';
+// Dynamic import to avoid module evaluation during build
+import type { InvokeParams, InvokeResult } from './_core/llm';
 import { getEffectiveCookingTime } from './_core/recipeParsing';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -465,6 +466,8 @@ Generate a seasonal recipe that fits these parameters. Return a JSON object with
 
 Make it seasonal, appropriate for ${season}, and suitable for ${mealCategory}.`;
 
+    // Dynamic import to avoid module evaluation during build
+    const { invokeLLM } = await import('./_core/llm');
     const response = await invokeLLM({
       messages: [
         {
