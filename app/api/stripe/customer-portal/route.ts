@@ -6,12 +6,19 @@ import * as db from "@server/db";
 
 export const runtime = "nodejs";
 
-const stripe = new Stripe(ENV.stripeSecretKey, {
-  apiVersion: "2025-11-17.clover",
-});
+// Lazy initialization to avoid module evaluation during build
+function getStripeClient() {
+  if (!ENV.stripeSecretKey) {
+    throw new Error("STRIPE_SECRET_KEY is not configured");
+  }
+  return new Stripe(ENV.stripeSecretKey, {
+    apiVersion: "2025-11-17.clover",
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const stripe = getStripeClient();
     // Authenticate user
     const headers = await req.headers;
     const cookieHeader = headers.get("cookie") ?? undefined;
