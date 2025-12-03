@@ -44,6 +44,7 @@ export const recipes = pgTable("recipes", {
   sourceUrl: text("sourceUrl"),
   source: varchar("source", { length: 100 }).default("user_import"),
   isFavorite: boolean("isFavorite").default(false),
+  isShared: boolean("isShared").default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   // Additional columns for imported recipes
@@ -161,6 +162,21 @@ export const notifications = pgTable("notifications", {
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
 
+export const pushTokens = pgTable("push_tokens", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 255 }).notNull(),
+  platform: varchar("platform", { length: 20 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("push_tokens_token_idx").on(table.token),
+  userIdx: index("push_tokens_user_idx").on(table.userId),
+}));
+
+export type PushToken = typeof pushTokens.$inferSelect;
+export type InsertPushToken = typeof pushTokens.$inferInsert;
+
 export const conversations = pgTable("conversations", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   user1Id: integer("user1Id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -193,3 +209,61 @@ export const messages = pgTable("messages", {
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = typeof messages.$inferInsert;
 
+// Stripe subscription and payment tables
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",
+  "canceled",
+  "incomplete",
+  "incomplete_expired",
+  "past_due",
+  "trialing",
+  "unpaid",
+  "paused",
+]);
+
+export const subscriptions = pgTable("subscriptions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }).notNull().unique(),
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }).unique(),
+  stripePriceId: varchar("stripePriceId", { length: 255 }),
+  status: subscriptionStatusEnum("status").notNull().default("incomplete"),
+  currentPeriodStart: timestamp("currentPeriodStart"),
+  currentPeriodEnd: timestamp("currentPeriodEnd"),
+  cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").default(false),
+  canceledAt: timestamp("canceledAt"),
+  trialStart: timestamp("trialStart"),
+  trialEnd: timestamp("trialEnd"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("subscriptions_userId_idx").on(table.userId),
+  stripeCustomerIdIdx: index("subscriptions_stripeCustomerId_idx").on(table.stripeCustomerId),
+  stripeSubscriptionIdIdx: index("subscriptions_stripeSubscriptionId_idx").on(table.stripeSubscriptionId),
+  statusIdx: index("subscriptions_status_idx").on(table.status),
+}));
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = typeof subscriptions.$inferInsert;
+
+export const payments = pgTable("payments", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }).unique(),
+  stripeChargeId: varchar("stripeChargeId", { length: 255 }),
+  amount: integer("amount").notNull(), // Amount in cents
+  currency: varchar("currency", { length: 3 }).default("usd").notNull(),
+  status: varchar("status", { length: 50 }).notNull(), // succeeded, pending, failed, etc.
+  description: text("description"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("payments_userId_idx").on(table.userId),
+  stripePaymentIntentIdIdx: index("payments_stripePaymentIntentId_idx").on(table.stripePaymentIntentId),
+  statusIdx: index("payments_status_idx").on(table.status),
+  createdAtIdx: index("payments_createdAt_idx").on(table.createdAt),
+}));
+
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = typeof payments.$inferInsert;
