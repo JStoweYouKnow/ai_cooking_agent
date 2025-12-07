@@ -3,6 +3,7 @@ import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { getDb } from "../db";
 import { logger } from "./logger";
+import { verifyAWSCredentials, verifyS3Access, getAllAccessKeys } from "./awsCredentials";
 
 export const systemRouter = router({
   health: publicProcedure
@@ -91,11 +92,110 @@ export const systemRouter = router({
         message: `${Math.round(process.uptime())} seconds`,
       };
 
+      // AWS credentials check (if configured)
+      if (process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ROLE_ARN) {
+        try {
+          const awsStart = Date.now();
+          const awsCheck = await verifyAWSCredentials();
+          const awsLatency = Date.now() - awsStart;
+          
+          if (awsCheck.valid) {
+            checks.aws = {
+              status: 'ok',
+              message: `User: ${awsCheck.userName || 'N/A'}`,
+              latency: awsLatency,
+            };
+          } else {
+            checks.aws = {
+              status: 'error',
+              message: awsCheck.error || 'AWS credentials invalid',
+              latency: awsLatency,
+            };
+            overallStatus = overallStatus === 'ok' ? 'degraded' : 'error';
+          }
+        } catch (error: any) {
+          checks.aws = {
+            status: 'error',
+            message: error.message || 'AWS credential check failed',
+          };
+          overallStatus = overallStatus === 'ok' ? 'degraded' : 'error';
+        }
+      }
+
+      // S3 access check (if S3_BUCKET is configured)
+      if (process.env.S3_BUCKET) {
+        try {
+          const s3Start = Date.now();
+          const s3Check = await verifyS3Access();
+          const s3Latency = Date.now() - s3Start;
+          
+          if (s3Check.valid) {
+            checks.s3 = {
+              status: 'ok',
+              message: `Accessible (${s3Check.bucketCount || 0} buckets)`,
+              latency: s3Latency,
+            };
+          } else {
+            checks.s3 = {
+              status: 'error',
+              message: s3Check.error || 'S3 access denied',
+              latency: s3Latency,
+            };
+            overallStatus = overallStatus === 'ok' ? 'degraded' : 'error';
+          }
+        } catch (error: any) {
+          checks.s3 = {
+            status: 'error',
+            message: error.message || 'S3 access check failed',
+          };
+          overallStatus = overallStatus === 'ok' ? 'degraded' : 'error';
+        }
+      }
+
       return {
         status: overallStatus,
         timestamp: new Date().toISOString(),
         checks,
       };
+    }),
+
+  listAccessKeys: adminProcedure
+    .input(
+      z.object({
+        userName: z.string().optional(),
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      try {
+        const keys = await getAllAccessKeys(input?.userName);
+        return {
+          success: true,
+          keys: keys.map(key => ({
+            accessKeyId: key.AccessKeyId,
+            status: key.Status,
+            createDate: key.CreateDate.toISOString(),
+          })),
+        };
+      } catch (error: any) {
+        logger.error("Failed to list access keys", { error: error.message });
+        throw new Error(`Failed to list access keys: ${error.message || "Unknown error"}`);
+      }
+    }),
+
+  verifyAWSCredentials: adminProcedure
+    .query(async () => {
+      try {
+        const credentialCheck = await verifyAWSCredentials();
+        const s3Check = await verifyS3Access();
+        
+        return {
+          credentials: credentialCheck,
+          s3: s3Check,
+        };
+      } catch (error: any) {
+        logger.error("Failed to verify AWS credentials", { error: error.message });
+        throw new Error(`Failed to verify AWS credentials: ${error.message || "Unknown error"}`);
+      }
     }),
 
   notifyOwner: adminProcedure

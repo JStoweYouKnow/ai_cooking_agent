@@ -6,6 +6,20 @@
  * This script reads SQL migration files from drizzle/ directory
  * and executes them in order against the database specified in DATABASE_URL
  * Supports PostgreSQL connection strings
+ * 
+ * Environment Variables:
+ * - DATABASE_URL (required): PostgreSQL connection string
+ * - DB_SSL_REJECT_UNAUTHORIZED (optional): Set to "true" (default) to verify SSL certificates,
+ *   or "false" to disable verification (NOT recommended for production)
+ * - DB_SSL_CA (optional): CA certificate(s) for SSL verification. Can be:
+ *   - Inline certificate with \n for newlines (e.g., "-----BEGIN CERTIFICATE-----\n...")
+ *   - Will be automatically converted to proper multiline format
+ *   - Required for proper SSL verification in production environments
+ * 
+ * Security Best Practices:
+ * - Always use DB_SSL_REJECT_UNAUTHORIZED=true in production
+ * - Provide proper CA certificates via DB_SSL_CA for production databases
+ * - Only disable certificate verification in local development if absolutely necessary
  */
 
 import { readFileSync, readdirSync } from 'fs';
@@ -41,19 +55,34 @@ function convertMySQLToPostgreSQL(sql) {
   converted = converted.replace(
     /`([^`]+)`\s+enum\s*\(([^)]+)\)\s+NOT\s+NULL\s+DEFAULT\s+'([^']+)'/gi,
     (match, columnName, values, defaultValue) => {
-      return `"${columnName}" VARCHAR(50) NOT NULL DEFAULT '${defaultValue}' CHECK ("${columnName}" IN (${values}))`;
+      // Compute max length from enum values
+      const enumValues = values.match(/'([^']+)'/g) || [];
+      const lengths = enumValues.map(v => v.replace(/'/g, '').length);
+      const maxLen = lengths.length > 0 ? Math.max(...lengths) : 0;
+      const varcharLen = Math.max(maxLen, 1);
+      return `"${columnName}" VARCHAR(${varcharLen}) NOT NULL DEFAULT '${defaultValue}' CHECK ("${columnName}" IN (${values}))`;
     }
   );
   converted = converted.replace(
     /`([^`]+)`\s+enum\s*\(([^)]+)\)\s+NOT\s+NULL/gi,
     (match, columnName, values) => {
-      return `"${columnName}" VARCHAR(50) NOT NULL CHECK ("${columnName}" IN (${values}))`;
+      // Compute max length from enum values
+      const enumValues = values.match(/'([^']+)'/g) || [];
+      const lengths = enumValues.map(v => v.replace(/'/g, '').length);
+      const maxLen = lengths.length > 0 ? Math.max(...lengths) : 0;
+      const varcharLen = Math.max(maxLen, 1);
+      return `"${columnName}" VARCHAR(${varcharLen}) NOT NULL CHECK ("${columnName}" IN (${values}))`;
     }
   );
   converted = converted.replace(
     /`([^`]+)`\s+enum\s*\(([^)]+)\)/gi,
     (match, columnName, values) => {
-      return `"${columnName}" VARCHAR(50) CHECK ("${columnName}" IN (${values}))`;
+      // Compute max length from enum values
+      const enumValues = values.match(/'([^']+)'/g) || [];
+      const lengths = enumValues.map(v => v.replace(/'/g, '').length);
+      const maxLen = lengths.length > 0 ? Math.max(...lengths) : 0;
+      const varcharLen = Math.max(maxLen, 1);
+      return `"${columnName}" VARCHAR(${varcharLen}) CHECK ("${columnName}" IN (${values}))`;
     }
   );
   
@@ -91,16 +120,42 @@ function convertMySQLToPostgreSQL(sql) {
 }
 
 async function runMigrations() {
+  // Configure SSL settings
+  let sslConfig = false;
+  
+  if (DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('ssl=true')) {
+    // Parse DB_SSL_REJECT_UNAUTHORIZED (defaults to "true" for security)
+    const rejectUnauthorizedEnv = process.env.DB_SSL_REJECT_UNAUTHORIZED || 'true';
+    const rejectUnauthorized = rejectUnauthorizedEnv.toLowerCase() === 'true';
+    
+    // Warn if certificate verification is disabled
+    if (!rejectUnauthorized) {
+      console.warn('⚠️  WARNING: SSL certificate verification is DISABLED (rejectUnauthorized=false)');
+      console.warn('⚠️  This is a security risk and should only be used in development.');
+      console.warn('⚠️  For production, set DB_SSL_REJECT_UNAUTHORIZED=true and provide proper CA certificates.\n');
+    }
+    
+    sslConfig = { rejectUnauthorized };
+    
+    // Add CA certificate(s) if provided
+    const caCert = process.env.DB_SSL_CA;
+    if (caCert) {
+      // Support both inline certificates and file paths
+      // Inline certs should have literal \n, which we convert to actual newlines
+      sslConfig.ca = caCert.replace(/\\n/g, '\n');
+      console.log('🔒 Using custom CA certificate for SSL connection');
+    }
+  }
+  
   const pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('ssl=true') 
-      ? { rejectUnauthorized: false } 
-      : false,
+    ssl: sslConfig,
   });
 
-  const client = await pool.connect();
+  let client = null;
 
   try {
+    client = await pool.connect();
     console.log('📦 Connecting to database...');
     console.log('✅ Connected successfully\n');
 
@@ -152,7 +207,7 @@ async function runMigrations() {
               // Release the savepoint on success
               await client.query(`RELEASE SAVEPOINT ${savepointName}`);
             } catch (error) {
-              // Rollback to the savepoint to continue with next statement
+              // Rollback to the savepoint
               await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
               
               // Check if error is "already exists" - that's OK for PostgreSQL
@@ -163,10 +218,22 @@ async function runMigrations() {
                   error.message.includes('already exists') ||
                   error.message.includes('duplicate key') ||
                   error.message.includes('duplicate')) {
-                console.log(`   ⚠️  ${error.message.split('\n')[0]} (skipping)`);
+                console.warn(`   ⚠️  ${error.message.split('\n')[0]} (skipping)`);
               } else {
-                // For other errors, still rollback but log and continue
-                console.log(`   ⚠️  ${error.message.split('\n')[0]} (skipping)`);
+                // For non-duplicate errors, log full error and fail fast
+                console.error(`\n❌ Migration failed in ${file} at statement ${statementIndex}:`);
+                console.error(`Error message: ${error.message}`);
+                if (error.stack) {
+                  console.error(`Stack trace:\n${error.stack}`);
+                } else {
+                  console.error(`Full error: ${JSON.stringify(error, null, 2)}`);
+                }
+                
+                // Rollback the entire transaction
+                await client.query('ROLLBACK');
+                
+                // Exit with non-zero code to fail fast
+                process.exit(1);
               }
             }
             statementIndex++;
@@ -199,7 +266,7 @@ async function runMigrations() {
     }
     process.exit(1);
   } finally {
-    client.release();
+    if (client) client.release();
     await pool.end();
   }
 }

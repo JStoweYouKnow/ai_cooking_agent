@@ -1,4 +1,4 @@
-# AI Cooking Agent - Production Deployment Guide
+# Sous - Production Deployment Guide
 
 A full-stack web application that helps users manage recipes, ingredients, and shopping lists with AI-powered features.
 

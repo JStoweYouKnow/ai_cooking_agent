@@ -56,6 +56,14 @@ services:
       STORAGE_API_URL: ${STORAGE_API_URL}
       STORAGE_API_KEY: ${STORAGE_API_KEY}
 
+      # AWS S3 Configuration
+      AWS_REGION: ${AWS_REGION:-us-east-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN}
+      AWS_ROLE_SESSION_NAME: ${AWS_ROLE_SESSION_NAME:-cooking-app-session}
+
       # App Config
       NODE_ENV: production
       PORT: 3000
