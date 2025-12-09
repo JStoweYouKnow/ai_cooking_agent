@@ -37,6 +37,12 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
       return schemaRecipe;
     }
 
+    // Heuristic extraction for sites without clean JSON-LD (e.g., NYT Cooking)
+    const heuristic = extractHeuristicRecipe(html, url);
+    if (heuristic) {
+      return heuristic;
+    }
+
     // Fallback to AI parsing
     return await parseRecipeWithAI(html, url);
   } catch (error) {
@@ -232,14 +238,8 @@ function normalizeServings(yieldData: any): number | undefined {
  */
 async function parseRecipeWithAI(html: string, url: string): Promise<ParsedRecipe | null> {
   try {
-    // Remove script tags and clean HTML
-    const cleanHtml = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 8000); // Limit to 8000 chars
+    // Preserve structure better for the LLM by keeping line breaks around blocks
+    const cleanHtml = cleanAndChunkHtml(html).slice(0, 15000);
 
     const { invokeLLM } = await import('../_core/llm');
     const response = await invokeLLM({
@@ -299,4 +299,98 @@ Return valid JSON only.`,
     console.error('Error parsing recipe with AI:', error);
     return null;
   }
+}
+
+/**
+ * Preserve some structure while stripping tags for heuristics/LLM
+ */
+function cleanAndChunkHtml(html: string): string {
+  const withoutScripts = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+
+  // Replace common block tags with newlines to keep section boundaries
+  const withBreaks = withoutScripts
+    .replace(/<\/(p|div|li|ul|ol|section|article|br|h[1-6])>/gi, '\n')
+    .replace(/<(br|hr)\s*\/?>/gi, '\n');
+
+  const textOnly = withBreaks
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\r?\n\s*\r?\n/g, '\n')
+    .replace(/\s+/g, ' ')
+    .replace(/\n\s*/g, '\n')
+    .trim();
+
+  return textOnly;
+}
+
+/**
+ * Heuristic extraction for sites that hide JSON-LD (e.g., NYT Cooking)
+ */
+function extractHeuristicRecipe(html: string, url: string): ParsedRecipe | null {
+  try {
+    const cleanText = cleanAndChunkHtml(html);
+
+    const metaTitle =
+      extractMetaContent(html, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+      extractMetaContent(html, /<meta[^>]+name=["']title["'][^>]+content=["']([^"']+)["']/i) ||
+      extractMetaContent(html, /<title>([^<]+)<\/title>/i);
+
+    const ingredients = extractSectionList(cleanText, /(ingredients?)/i, /(preparation|directions?|steps?|method|instructions)/i);
+    const steps = extractSectionList(cleanText, /(preparation|directions?|steps?|method|instructions)/i, /(notes?|tips?)/i);
+
+    if (!metaTitle && ingredients.length === 0 && steps.length === 0) {
+      return null;
+    }
+
+    return {
+      name: metaTitle || 'Untitled Recipe',
+      description: undefined,
+      instructions: steps.length ? steps.map((s, i) => `${i + 1}. ${s}`).join('\n\n') : '',
+      imageUrl: extractMetaContent(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i),
+      cuisine: undefined,
+      category: undefined,
+      cookingTime: extractCookingTimeFromText(cleanText),
+      servings: extractServingsFromText(cleanText),
+      sourceUrl: url,
+      ingredients: ingredients.map(parseIngredientString),
+    };
+  } catch (error) {
+    console.warn('Heuristic extraction failed:', error);
+    return null;
+  }
+}
+
+function extractMetaContent(html: string, regex: RegExp): string | undefined {
+  const match = html.match(regex);
+  return match?.[1]?.trim() || undefined;
+}
+
+function extractSectionList(text: string, startRegex: RegExp, stopRegex: RegExp): string[] {
+  const lower = text.toLowerCase();
+  const startMatch = lower.search(startRegex);
+  if (startMatch === -1) return [];
+
+  const stopMatch = lower.slice(startMatch + 1).search(stopRegex);
+  const sliceEnd = stopMatch === -1 ? text.length : startMatch + 1 + stopMatch;
+
+  const section = text.slice(startMatch, sliceEnd);
+  return section
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !startRegex.test(line) && !stopRegex.test(line));
+}
+
+function extractCookingTimeFromText(text: string): number | undefined {
+  const timeMatch = text.match(/(\d+)\s*(minutes|min|hours|hrs|hr)/i);
+  if (!timeMatch) return undefined;
+  const value = parseInt(timeMatch[1], 10);
+  if (isNaN(value)) return undefined;
+  const unit = timeMatch[2]?.toLowerCase();
+  return unit.startsWith('hour') || unit.startsWith('hr') ? value * 60 : value;
+}
+
+function extractServingsFromText(text: string): number | undefined {
+  const servingsMatch = text.match(/serves?\s*(\d+)/i) || text.match(/yield[:\s]+(\d+)/i);
+  return servingsMatch ? parseInt(servingsMatch[1], 10) : undefined;
 }
