@@ -28,7 +28,14 @@ interface ParsedRecipe {
  */
 export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | null> {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        // Helps sites like Epicurious/NYT return full HTML instead of lightweight/blocked responses
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
     const html = await response.text();
 
     // Try to extract schema.org JSON-LD recipe data
@@ -37,7 +44,7 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
       return schemaRecipe;
     }
 
-    // Heuristic extraction for sites without clean JSON-LD (e.g., NYT Cooking)
+    // Heuristic extraction for sites without clean JSON-LD (e.g., NYT Cooking, Epicurious)
     const heuristic = extractHeuristicRecipe(html, url);
     if (heuristic) {
       return heuristic;
@@ -375,8 +382,15 @@ function extractSectionList(text: string, startRegex: RegExp, stopRegex: RegExp)
   const sliceEnd = stopMatch === -1 ? text.length : startMatch + 1 + stopMatch;
 
   const section = text.slice(startMatch, sliceEnd);
-  return section
-    .split('\n')
+  // Split on newlines and common bullet separators
+  const rawLines = section
+    .replace(/•/g, '\n')
+    .replace(/·/g, '\n')
+    .split('\n');
+
+  return rawLines
+    .map((line) => line.trim())
+    .flatMap((line) => line.split(/^\s*-\s*/)) // split leading dashes
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !startRegex.test(line) && !stopRegex.test(line));
 }
