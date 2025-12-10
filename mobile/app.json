@@ -4,12 +4,12 @@
     "slug": "ai-cooking-agent",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/splash-icon.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6B8E23"
+      "backgroundColor": "#F8F5ED"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -28,8 +28,8 @@
       "package": "com.aicookingagent.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/splash-icon.png",
-        "backgroundColor": "#6B8E23"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F8F5ED"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
