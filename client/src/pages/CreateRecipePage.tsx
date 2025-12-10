@@ -110,6 +110,18 @@ export default function CreateRecipePage() {
 
   const parseFromUrlMutation = trpc.recipes.parseFromUrl.useMutation({
     onSuccess: (data) => {
+      // DEBUG: Log received data
+      console.log('=== CLIENT RECEIVED DATA ===');
+      console.log('Full response:', data);
+      console.log('Has parsed:', 'parsed' in data);
+      console.log('data.parsed:', data && 'parsed' in data ? data.parsed : 'N/A');
+      if (data && 'parsed' in data && data.parsed) {
+        const parsed = data.parsed as any;
+        console.log('Ingredients in parsed:', parsed.ingredients);
+        console.log('Ingredients count:', parsed.ingredients?.length || 0);
+      }
+      console.log('============================');
+
       if (data && 'parsed' in data && data.parsed) {
         const parsed = data.parsed as RecipeJsonData;
         // Populate form with parsed data
