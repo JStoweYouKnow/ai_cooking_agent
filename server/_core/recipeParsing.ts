@@ -319,7 +319,7 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 						const unit = parts.shift();
 						return { name: parts.join(" "), quantity, unit };
 					})
-					.filter((ing): ing is ParsedIngredient => ing !== null && ing.name.trim().length > 0)
+					.filter((ing: ParsedIngredient | null): ing is ParsedIngredient => ing !== null && ing.name.trim().length > 0)
 			: undefined;
 		
 		parsedRecipe = {
