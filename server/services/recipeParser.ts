@@ -38,10 +38,22 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
     });
     const html = await response.text();
 
+    const host = new URL(url).hostname;
+
     // Try to extract schema.org JSON-LD recipe data
     const schemaRecipe = extractSchemaOrgRecipe(html);
     if (schemaRecipe) {
       return schemaRecipe;
+    }
+
+    // Site-specific heuristics before generic heuristics
+    if (host.includes("nytimes.com")) {
+      const nyt = extractNYTRecipe(html, url);
+      if (nyt) return nyt;
+    }
+    if (host.includes("epicurious.com")) {
+      const epi = extractEpicuriousRecipe(html, url);
+      if (epi) return epi;
     }
 
     // Heuristic extraction for sites without clean JSON-LD (e.g., NYT Cooking, Epicurious)
@@ -373,6 +385,22 @@ function extractMetaContent(html: string, regex: RegExp): string | undefined {
   return match?.[1]?.trim() || undefined;
 }
 
+function extractTextListWithSelector(html: string, listRegex: RegExp): string[] {
+  const results: string[] = [];
+  const regex = new RegExp(listRegex, 'gi');
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const raw = match[1];
+    const text = stripTags(raw).trim();
+    if (text) results.push(text);
+  }
+  return results;
+}
+
+function stripTags(str: string): string {
+  return str.replace(/<\/?[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+}
+
 function extractSectionList(text: string, startRegex: RegExp, stopRegex: RegExp): string[] {
   const lower = text.toLowerCase();
   const startMatch = lower.search(startRegex);
@@ -407,4 +435,95 @@ function extractCookingTimeFromText(text: string): number | undefined {
 function extractServingsFromText(text: string): number | undefined {
   const servingsMatch = text.match(/serves?\s*(\d+)/i) || text.match(/yield[:\s]+(\d+)/i);
   return servingsMatch ? parseInt(servingsMatch[1], 10) : undefined;
+}
+
+/**
+ * NYT Cooking specific extraction when JSON-LD is absent
+ */
+function extractNYTRecipe(html: string, url: string): ParsedRecipe | null {
+  const title =
+    extractMetaContent(html, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+    extractMetaContent(html, /<title>([^<]+)<\/title>/i);
+  const image = extractMetaContent(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+
+  // Ingredients often appear as list items near "Ingredients"
+  const ingredientLis = extractTextListWithSelector(html, /<li[^>]*itemprop=["']recipeIngredient["'][^>]*>([\s\S]*?)<\/li>/);
+  let ingredients = ingredientLis;
+
+  if (ingredients.length === 0) {
+    // Fallback: between Ingredients and Preparation headers
+    const chunkMatch = html.match(/Ingredients([\s\S]*?)Preparation/i);
+    if (chunkMatch) {
+      const chunk = chunkMatch[1];
+      ingredients = extractTextListWithSelector(chunk, /<li[^>]*>([\s\S]*?)<\/li>/);
+    }
+  }
+
+  // Steps
+  let steps: string[] = [];
+  const prepMatch = html.match(/Preparation([\s\S]*?)(?:Note|Private Notes|Sponsored|<\/section>)/i);
+  if (prepMatch) {
+    const chunk = prepMatch[1];
+    steps = extractTextListWithSelector(chunk, /<li[^>]*>([\s\S]*?)<\/li>/);
+  }
+
+  if (ingredients.length === 0 && steps.length === 0 && !title) return null;
+
+  const instructions = steps.length ? steps.map((s, i) => `${i + 1}. ${stripTags(s)}`).join('\n\n') : '';
+
+  return {
+    name: title || 'Untitled Recipe',
+    description: undefined,
+    instructions,
+    imageUrl: image,
+    cuisine: undefined,
+    category: undefined,
+    cookingTime: extractCookingTimeFromText(cleanAndChunkHtml(html)),
+    servings: extractServingsFromText(cleanAndChunkHtml(html)),
+    sourceUrl: url,
+    ingredients: ingredients.map(parseIngredientString),
+  };
+}
+
+/**
+ * Epicurious specific extraction when JSON-LD is absent
+ */
+function extractEpicuriousRecipe(html: string, url: string): ParsedRecipe | null {
+  const title =
+    extractMetaContent(html, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+    extractMetaContent(html, /<title>([^<]+)<\/title>/i);
+  const image = extractMetaContent(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+
+  // Ingredients: Epi uses itemprop="recipeIngredient"
+  let ingredients = extractTextListWithSelector(html, /<li[^>]*itemprop=["']recipeIngredient["'][^>]*>([\s\S]*?)<\/li>/);
+  if (ingredients.length === 0) {
+    const ingSection = html.match(/Ingredients([\s\S]*?)Preparation/i);
+    if (ingSection) {
+      ingredients = extractTextListWithSelector(ingSection[1], /<li[^>]*>([\s\S]*?)<\/li>/);
+    }
+  }
+
+  // Steps: look for Preparation section list items
+  let steps: string[] = [];
+  const prepSection = html.match(/Preparation([\s\S]*?)(?:Reviews|Leave a Review|Do Not Sell|Footer|$)/i);
+  if (prepSection) {
+    steps = extractTextListWithSelector(prepSection[1], /<li[^>]*>([\s\S]*?)<\/li>/);
+  }
+
+  if (ingredients.length === 0 && steps.length === 0 && !title) return null;
+
+  const instructions = steps.length ? steps.map((s, i) => `${i + 1}. ${stripTags(s)}`).join('\n\n') : '';
+
+  return {
+    name: title || 'Untitled Recipe',
+    description: undefined,
+    instructions,
+    imageUrl: image,
+    cuisine: undefined,
+    category: undefined,
+    cookingTime: extractCookingTimeFromText(cleanAndChunkHtml(html)),
+    servings: extractServingsFromText(cleanAndChunkHtml(html)),
+    sourceUrl: url,
+    ingredients: ingredients.map(parseIngredientString),
+  };
 }

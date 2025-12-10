@@ -32,8 +32,19 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         {onBack && (
           <TouchableOpacity
             onPress={onBack}
-            style={styles.backButton}
+            style={[
+              styles.backButton,
+              {
+                backgroundColor:
+                  variant === 'gradient'
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(0, 0, 0, 0.05)',
+              },
+            ]}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Back"
+            accessibilityRole="button"
+            accessibilityHint="Navigates to the previous screen"
           >
             <Ionicons
               name="chevron-back"
@@ -119,7 +130,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: borderRadius.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   titleContainer: {
     flex: 1,
