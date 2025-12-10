@@ -294,7 +294,7 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 				: null;
 		const ingredients: ParsedIngredient[] | undefined = Array.isArray(recipe.recipeIngredient)
 			? recipe.recipeIngredient
-					.map((item: any) => {
+					.map((item: any): ParsedIngredient | null => {
 						// Extract string from item (handle both string and object cases)
 						let line: string;
 						if (typeof item === "string") {
