@@ -25,6 +25,7 @@ import GradientButton from "../../components/GradientButton";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
 import CookingModeScreen from "./CookingModeScreen";
 import { colors, spacing, typography, borderRadius } from "../../styles/theme";
+import { normalizeIsFavorite } from "../../utils/favorites";
 
 type Props = RecipeStackScreenProps<"RecipeDetail">;
 const { width } = Dimensions.get("window");
@@ -274,8 +275,7 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }
 
-  const isFavorite =
-    recipe.isFavorite === true || recipe.isFavorite === "true" || recipe.isFavorite === 1;
+  const isFavorite = normalizeIsFavorite(recipe.isFavorite);
 
   return (
     <View style={styles.screen}>
@@ -309,7 +309,10 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.title}>{recipe.name}</Text>
             <View style={styles.titleActions}>
               <TouchableOpacity
-                onPress={() => toggleFavorite.mutate({ id, isFavorite: !isFavorite })}
+                onPress={() => {
+                  const nextFavoriteState = !isFavorite;
+                  toggleFavorite.mutate({ id, isFavorite: nextFavoriteState });
+                }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Ionicons

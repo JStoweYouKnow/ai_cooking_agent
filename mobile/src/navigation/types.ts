@@ -1,25 +1,13 @@
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-// Root Stack Navigator
-export type RootStackParamList = {
-  Login: undefined;
-  Main: undefined;
-};
-
-// Main Tab Navigator
-export type MainTabParamList = {
-  Home: undefined;
-  Recipes: undefined;
-  ShoppingLists: undefined;
-  Ingredients: undefined;
-  Settings: undefined;
-};
-
+// Home Stack Navigator
 export type HomeStackParamList = {
   DashboardMain: undefined;
 };
 
+// Ingredients Stack Navigator
 export type IngredientsStackParamList = {
   IngredientsMain: undefined;
 };
@@ -36,6 +24,31 @@ export type ShoppingListStackParamList = {
   ShoppingListsList: undefined;
   ShoppingListDetail: { id: number };
   CreateShoppingList: undefined;
+};
+
+export type MoreStackParamList = {
+  SettingsMain: undefined;
+  MessagesList: undefined;
+  Chat: { conversationId: number; participantName?: string };
+  Notifications: undefined;
+  AIAssistant: undefined;
+  RecipeGenerator: undefined;
+  Subscription: undefined;
+};
+
+// Main Tab Navigator
+export type MainTabParamList = {
+  Home: NavigatorScreenParams<HomeStackParamList> | undefined;
+  Recipes: NavigatorScreenParams<RecipeStackParamList> | undefined;
+  ShoppingLists: NavigatorScreenParams<ShoppingListStackParamList> | undefined;
+  Ingredients: NavigatorScreenParams<IngredientsStackParamList> | undefined;
+  Settings: NavigatorScreenParams<MoreStackParamList> | undefined;
+};
+
+// Root Stack Navigator
+export type RootStackParamList = {
+  Login: undefined;
+  Main: NavigatorScreenParams<MainTabParamList> | undefined;
 };
 
 // Type helpers for screens
@@ -66,16 +79,6 @@ export type IngredientsStackScreenProps<T extends keyof IngredientsStackParamLis
   IngredientsStackParamList,
   T
 >;
-
-export type MoreStackParamList = {
-  SettingsMain: undefined;
-  MessagesList: undefined;
-  Chat: { conversationId: number; participantName?: string };
-  Notifications: undefined;
-  AIAssistant: undefined;
-  RecipeGenerator: undefined;
-  Subscription: undefined;
-};
 
 export type MoreStackScreenProps<T extends keyof MoreStackParamList> = NativeStackScreenProps<
   MoreStackParamList,

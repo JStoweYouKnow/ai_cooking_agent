@@ -49,18 +49,59 @@ async function sendExpoPushNotification(
 const recipeRouter = router({
   list: optionalAuthProcedure
     .input(
-      z.object({
-        limit: z.number().int().positive().optional(),
-        sortBy: z.enum(["recent", "alphabetical", "meal"]).optional(),
-        mealFilter: z.enum(["breakfast", "lunch", "dinner", "dessert"]).optional(),
-      }).optional()
+      z
+        .object({
+          limit: z.number().int().positive().max(100).optional(),
+          sortBy: z.enum(["recent", "alphabetical", "meal"]).optional(),
+          mealFilter: z.enum(["breakfast", "lunch", "dinner", "dessert"]).optional(),
+          orderBy: z.enum(["createdAt", "name", "category"]).optional(),
+          direction: z.enum(["asc", "desc"]).optional(),
+        })
+        .refine(
+          (val) =>
+            (!val.orderBy && !val.direction) ||
+            (Boolean(val.orderBy) && Boolean(val.direction)),
+          {
+            message: "orderBy and direction must be provided together",
+            path: ["orderBy"],
+          }
+        )
+        .refine(
+          (val) =>
+            !(val.sortBy && (val.orderBy || val.direction)),
+          {
+            message: "sortBy cannot be combined with orderBy/direction",
+            path: ["sortBy"],
+          }
+        )
+        .optional()
     )
     .query(async ({ ctx, input }) => {
-      const user = ctx.user || await db.getOrCreateAnonymousUser();
-      return db.getUserRecipes(user.id, {
-        sortBy: input?.sortBy,
-        mealFilter: input?.mealFilter,
-      });
+      const user = ctx.user || (await db.getOrCreateAnonymousUser());
+
+      const normalizedSort =
+        input?.orderBy && input?.direction
+          ? { orderBy: input.orderBy, direction: input.direction }
+          : input?.sortBy === "recent"
+            ? { orderBy: "createdAt" as const, direction: "desc" as const }
+            : input?.sortBy === "alphabetical"
+              ? { orderBy: "name" as const, direction: "asc" as const }
+              : input?.sortBy === "meal"
+                ? { orderBy: "category" as const, direction: "asc" as const }
+                : undefined;
+
+      const recipeQueryOptions = {
+        ...(input?.mealFilter ? { mealFilter: input.mealFilter } : {}),
+        ...(input?.limit ? { limit: input.limit } : {}),
+        ...(normalizedSort ?? {}),
+      };
+
+      const hasOptions = Object.keys(recipeQueryOptions).length > 0;
+
+      return db.getUserRecipes(
+        user.id,
+        hasOptions ? recipeQueryOptions : undefined
+      );
     }),
   
   getRecent: optionalAuthProcedure
@@ -80,9 +121,7 @@ const recipeRouter = router({
     const recipeCount = recipes.length;
     const ingredientCount = ingredients.length;
     const shoppingListCount = shoppingLists.length;
-    const favoriteCount = recipes.filter((r: any) => 
-      r.isFavorite === true || r.isFavorite === "true" || r.isFavorite === 1
-    ).length;
+    const favoriteCount = recipes.filter((r: any) => Boolean(r.isFavorite)).length;
 
     return {
       recipeCount,
@@ -461,7 +500,7 @@ const recipeRouter = router({
       if (recipe.userId !== user.id && !recipe.isShared) {
         throw new Error("Unauthorized: You can only favorite your own recipes or shared recipes");
       }
-      return db.updateRecipeFavorite(input.id, input.isFavorite);
+      return db.updateRecipeFavorite(input.id, Boolean(input.isFavorite));
     }),
 
   updateTags: optionalAuthProcedure

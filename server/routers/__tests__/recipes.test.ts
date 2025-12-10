@@ -54,7 +54,7 @@ describe('Recipes Router', () => {
 
       expect(result).toEqual(mockRecipes);
       expect(db.getOrCreateAnonymousUser).toHaveBeenCalled();
-      expect(db.getUserRecipes).toHaveBeenCalledWith(1);
+      expect(db.getUserRecipes).toHaveBeenCalledWith(1, undefined);
     });
 
     it('should handle empty recipe list', async () => {
@@ -64,6 +64,43 @@ describe('Recipes Router', () => {
       const result = await caller.recipes.list();
 
       expect(result).toEqual([]);
+    });
+
+    it('requires orderBy and direction together', async () => {
+      const caller = appRouter.createCaller(mockContext);
+      await expect(
+        caller.recipes.list({ orderBy: 'name' as any })
+      ).rejects.toThrow(/orderBy and direction must be provided together/);
+      await expect(
+        caller.recipes.list({ direction: 'asc' as any })
+      ).rejects.toThrow(/orderBy and direction must be provided together/);
+    });
+
+    it('rejects combining sortBy with orderBy/direction', async () => {
+      const caller = appRouter.createCaller(mockContext);
+      await expect(
+        caller.recipes.list({ sortBy: 'recent', orderBy: 'name' as any, direction: 'asc' as any })
+      ).rejects.toThrow(/sortBy cannot be combined/);
+    });
+
+    it('maps legacy sortBy to normalized orderBy/direction', async () => {
+      (db.getUserRecipes as any).mockResolvedValue([]);
+      const caller = appRouter.createCaller(mockContext);
+      await caller.recipes.list({ sortBy: 'recent' });
+      expect(db.getUserRecipes).toHaveBeenCalledWith(1, {
+        orderBy: 'createdAt',
+        direction: 'desc',
+      });
+    });
+
+    it('passes through explicit orderBy/direction', async () => {
+      (db.getUserRecipes as any).mockResolvedValue([]);
+      const caller = appRouter.createCaller(mockContext);
+      await caller.recipes.list({ orderBy: 'name', direction: 'asc' });
+      expect(db.getUserRecipes).toHaveBeenCalledWith(1, {
+        orderBy: 'name',
+        direction: 'asc',
+      });
     });
   });
 

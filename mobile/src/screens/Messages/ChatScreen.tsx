@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, FlatList, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, FlatList, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { trpc } from "../../api/trpc";
 import { MoreStackScreenProps } from "../../navigation/types";
@@ -20,7 +20,36 @@ const ChatScreen: React.FC<Props> = ({ route }) => {
     { refetchInterval: 5000 }
   );
   const sendMessage = trpc.messages.sendMessage.useMutation({
-    onSuccess: () => {
+    // Optimistically append the new message while keeping a snapshot for rollback
+    async onMutate(variables) {
+      await utils.messages.getMessages.cancel({ conversationId });
+
+      const previousMessages = utils.messages.getMessages.getData({ conversationId }) || [];
+      const optimisticMessage = {
+        id: -Date.now(),
+        conversationId,
+        senderId: user?.id ?? 0,
+        content: variables.content,
+        createdAt: new Date(),
+        isRead: true,
+      };
+
+      utils.messages.getMessages.setData({ conversationId }, [...previousMessages, optimisticMessage]);
+
+      return { previousMessages };
+    },
+    onError: (error, variables, context) => {
+      if (context?.previousMessages) {
+        utils.messages.getMessages.setData({ conversationId }, context.previousMessages);
+      }
+      setDraft(variables.content);
+      Alert.alert("Message failed to send", error?.message || "Please try again.");
+    },
+    onSuccess: (_data, variables) => {
+      // Only clear if the draft still matches what was sent to avoid wiping newer input
+      setDraft((current) => (current === variables.content ? "" : current));
+    },
+    onSettled: () => {
       utils.messages.getMessages.invalidate({ conversationId });
     },
   });
@@ -34,9 +63,12 @@ const ChatScreen: React.FC<Props> = ({ route }) => {
   }, [messages]);
 
   const handleSend = () => {
-    if (!draft.trim()) return;
-    sendMessage.mutate({ conversationId, content: draft.trim() });
-    setDraft("");
+    const content = draft.trim();
+    if (!content || sendMessage.isPending) return;
+
+    // Keep draft in sync with what was sent so success comparison is accurate
+    setDraft(content);
+    sendMessage.mutate({ conversationId, content });
   };
 
   return (

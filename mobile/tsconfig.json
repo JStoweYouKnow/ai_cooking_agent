@@ -5,7 +5,12 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": "..",
+    "paths": {
+      "@shared/*": ["../shared/*"],
+      "@server/*": ["../server/*"]
+    }
   },
   "include": [
     "**/*.ts",

@@ -49,65 +49,68 @@ const EmptyState: React.FC<EmptyStateProps> = ({
   onSecondaryAction,
   variant = 'default',
   style,
-}) => (
-  <View
-    style={[
-      styles.container,
-      variant === 'minimal' && styles.containerMinimal,
-      variant === 'compact' && styles.containerCompact,
-      style
-    ]}
-    accessible
-    accessibilityRole="text"
-    accessibilityLabel={title}
-  >
-    {/* Illustration or Icon */}
-    {illustration ? (
-      <Image source={illustration} style={styles.illustration} resizeMode="contain" />
-    ) : icon ? (
-      <View style={styles.iconContainer}>
-        <Ionicons name={icon} size={64} color={colors.text.tertiary} />
-      </View>
-    ) : null}
+}) => {
+  const combinedLabel = description ? `${title}. ${description}` : title;
 
-    {/* Title */}
-    <Text style={[styles.title, variant === 'compact' && styles.titleCompact]} allowFontScaling>
-      {title}
-    </Text>
+  return (
+    <View
+      style={[
+        styles.container,
+        variant === 'minimal' && styles.containerMinimal,
+        variant === 'compact' && styles.containerCompact,
+        style
+      ]}
+      accessible
+      accessibilityLabel={combinedLabel}
+    >
+      {/* Illustration or Icon */}
+      {illustration ? (
+        <Image source={illustration} style={styles.illustration} resizeMode="contain" />
+      ) : icon ? (
+        <View style={styles.iconContainer}>
+          <Ionicons name={icon} size={64} color={colors.text.tertiary} />
+        </View>
+      ) : null}
 
-    {/* Description */}
-    {description ? (
-      <Text style={[styles.description, variant === 'compact' && styles.descriptionCompact]} allowFontScaling>
-        {description}
+      {/* Title */}
+      <Text style={[styles.title, variant === 'compact' && styles.titleCompact]} allowFontScaling>
+        {title}
       </Text>
-    ) : null}
 
-    {/* Actions */}
-    {(primaryActionLabel || secondaryActionLabel) && (
-      <View style={[styles.actions, variant === 'compact' && styles.actionsCompact]}>
-        {primaryActionLabel && onPrimaryAction && (
-          <GradientButton
-            title={primaryActionLabel}
-            onPress={onPrimaryAction}
-            style={styles.primaryButton}
-            accessibilityLabel={primaryActionLabel}
-            accessibilityHint="Performs the primary action for this state"
-          />
-        )}
-        {secondaryActionLabel && onSecondaryAction && (
-          <GradientButton
-            title={secondaryActionLabel}
-            onPress={onSecondaryAction}
-            variant="secondary"
-            style={styles.secondaryButton}
-            accessibilityLabel={secondaryActionLabel}
-            accessibilityHint="Performs the secondary action for this state"
-          />
-        )}
-      </View>
-    )}
-  </View>
-);
+      {/* Description */}
+      {description ? (
+        <Text style={[styles.description, variant === 'compact' && styles.descriptionCompact]} allowFontScaling>
+          {description}
+        </Text>
+      ) : null}
+
+      {/* Actions */}
+      {(primaryActionLabel || secondaryActionLabel) && (
+        <View style={[styles.actions, variant === 'compact' && styles.actionsCompact]}>
+          {primaryActionLabel && onPrimaryAction && (
+            <GradientButton
+              title={primaryActionLabel}
+              onPress={onPrimaryAction}
+              style={styles.primaryButton}
+              accessibilityLabel={primaryActionLabel}
+              accessibilityHint="Performs the primary action for this state"
+            />
+          )}
+          {secondaryActionLabel && onSecondaryAction && (
+            <GradientButton
+              title={secondaryActionLabel}
+              onPress={onSecondaryAction}
+              variant="secondary"
+              style={styles.secondaryButton}
+              accessibilityLabel={secondaryActionLabel}
+              accessibilityHint="Performs the secondary action for this state"
+            />
+          )}
+        </View>
+      )}
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {

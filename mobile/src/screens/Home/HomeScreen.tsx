@@ -1,31 +1,51 @@
 import React from "react";
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
+import type { CompositeNavigationProp } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { trpc } from "../../api/trpc";
 import Card from "../../components/Card";
 import RecipeCard from "../../components/RecipeCard";
+import { HomeStackParamList, MainTabParamList } from "../../navigation/types";
+import { normalizeIsFavorite } from "../../utils/favorites";
+
+type HomeScreenNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<HomeStackParamList, "DashboardMain">,
+  BottomTabNavigationProp<MainTabParamList, "Home">
+>;
 
 const HomeScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<HomeScreenNavigationProp>();
 
   // Fetch dashboard data
-  // @ts-ignore - tRPC types are complex, runtime works correctly
-  const { data: recentRecipes, isLoading: recipesLoading } = trpc.recipes.list.useQuery();
-  
-  // Calculate stats from recipes data
-  const stats = recentRecipes ? {
-    recipeCount: recentRecipes.length,
-    shoppingListCount: 0, // TODO: Fetch shopping lists to get accurate count
-    ingredientCount: 0, // TODO: Calculate from recipes if needed
-    favoriteCount: recentRecipes.filter((r: any) => {
-      const fav = r.isFavorite;
-      return fav === true || fav === "true" || (typeof fav === "number" && fav === 1);
-    }).length,
-  } : null;
-  const statsLoading = recipesLoading;
+  const { data: recentRecipes, isLoading: recipesLoading } = trpc.recipes.list.useQuery({
+    limit: 10,
+    orderBy: "createdAt",
+    direction: "desc",
+  });
+  const {
+    data: recipeStats,
+    isLoading: recipeStatsLoading,
+  } = trpc.recipes.getStats.useQuery();
 
-  if (statsLoading) {
+  // Calculate stats from recipe stats endpoint, with safe fallbacks while loading/error
+  const stats = {
+    recipeCount: recipeStats?.recipeCount ?? 0,
+    shoppingListCount: recipeStats?.shoppingListCount ?? 0, // TODO: Fetch shopping lists to get accurate count if needed elsewhere
+    ingredientCount: recipeStats?.ingredientCount ?? 0,
+    favoriteCount:
+      recipeStats?.favoriteCount ??
+      (recentRecipes
+        ? recentRecipes.filter((r: any) => normalizeIsFavorite(r.isFavorite)).length
+        : 0),
+  };
+
+  // Only show the full-screen loader while both primary queries are still loading
+  const statsLoading = recipeStatsLoading && recipesLoading;
+
+  if (statsLoading && !recipeStats) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6B8E23" />
@@ -45,24 +65,24 @@ const HomeScreen = () => {
         <View style={styles.statRow}>
           <Card style={styles.statCard}>
             <Ionicons name="restaurant" size={32} color="#6B8E23" />
-            <Text style={styles.statNumber}>{stats?.recipeCount || 0}</Text>
+            <Text style={styles.statNumber}>{stats.recipeCount}</Text>
             <Text style={styles.statLabel}>Recipes</Text>
           </Card>
           <Card style={styles.statCard}>
             <Ionicons name="cart" size={32} color="#6B8E23" />
-            <Text style={styles.statNumber}>{stats?.shoppingListCount || 0}</Text>
+            <Text style={styles.statNumber}>{stats.shoppingListCount}</Text>
             <Text style={styles.statLabel}>Shopping Lists</Text>
           </Card>
         </View>
         <View style={styles.statRow}>
           <Card style={styles.statCard}>
             <Ionicons name="leaf" size={32} color="#6B8E23" />
-            <Text style={styles.statNumber}>{stats?.ingredientCount || 0}</Text>
+            <Text style={styles.statNumber}>{stats.ingredientCount}</Text>
             <Text style={styles.statLabel}>Ingredients</Text>
           </Card>
           <Card style={styles.statCard}>
             <Ionicons name="heart" size={32} color="#ff4444" />
-            <Text style={styles.statNumber}>{stats?.favoriteCount || 0}</Text>
+            <Text style={styles.statNumber}>{stats.favoriteCount}</Text>
             <Text style={styles.statLabel}>Favorites</Text>
           </Card>
         </View>
@@ -74,23 +94,21 @@ const HomeScreen = () => {
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={styles.actionButton}
-            // @ts-expect-error - React Navigation nested navigation typing
-            onPress={() => navigation.navigate("Recipes" as never, { screen: "CreateRecipe" } as never)}
+            onPress={() => navigation.navigate("Recipes", { screen: "CreateRecipe" })}
           >
             <Ionicons name="add-circle" size={24} color="#6B8E23" />
             <Text style={styles.actionText}>Add Recipe</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            // @ts-expect-error - React Navigation nested navigation typing
-            onPress={() => navigation.navigate("ShoppingLists" as never, { screen: "CreateShoppingList" } as never)}
+            onPress={() => navigation.navigate("ShoppingLists", { screen: "CreateShoppingList" })}
           >
             <Ionicons name="cart" size={24} color="#6B8E23" />
             <Text style={styles.actionText}>New List</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => navigation.navigate("Recipes" as never)}
+            onPress={() => navigation.navigate("Recipes")}
           >
             <Ionicons name="search" size={24} color="#6B8E23" />
             <Text style={styles.actionText}>Browse</Text>
@@ -103,7 +121,7 @@ const HomeScreen = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Recipes</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Recipes" as never)}>
+            <TouchableOpacity onPress={() => navigation.navigate("Recipes")}>
               <Text style={styles.seeAll}>See All →</Text>
             </TouchableOpacity>
           </View>
@@ -111,8 +129,7 @@ const HomeScreen = () => {
             <RecipeCard
               key={recipe.id}
               recipe={recipe}
-              // @ts-expect-error - React Navigation nested navigation typing
-              onPress={() => navigation.navigate("Recipes" as never, { screen: "RecipeDetail", params: { id: recipe.id } } as never)}
+              onPress={() => navigation.navigate("Recipes", { screen: "RecipeDetail", params: { id: recipe.id } })}
             />
           ))}
         </View>
@@ -156,9 +173,8 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    marginHorizontal: 0,
+    marginHorizontal: 8,
     marginVertical: 4,
-    marginRight: 8,
     alignItems: "center",
     paddingVertical: 20,
   },

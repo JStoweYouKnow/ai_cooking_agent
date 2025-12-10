@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { colors, borderRadius, typography } from '../styles/theme';
 
@@ -10,6 +10,8 @@ interface AvatarProps {
 }
 
 const Avatar: React.FC<AvatarProps> = ({ name, size = 48, imageUrl, style }) => {
+  const [hasImageError, setHasImageError] = useState(false);
+
   const initials = name
     .split(' ')
     .map((part) => part[0])
@@ -18,8 +20,18 @@ const Avatar: React.FC<AvatarProps> = ({ name, size = 48, imageUrl, style }) => 
     .join('')
     .toUpperCase();
 
-  if (imageUrl) {
-    return <Image source={{ uri: imageUrl }} style={[styles.avatar(size), style]} />;
+  useEffect(() => {
+    setHasImageError(false);
+  }, [imageUrl]);
+
+  if (imageUrl && !hasImageError) {
+    return (
+      <Image
+        source={{ uri: imageUrl }}
+        style={[styles.avatar(size), style]}
+        onError={() => setHasImageError(true)}
+      />
+    );
   }
 
   return (

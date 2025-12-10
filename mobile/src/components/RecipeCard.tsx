@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { Recipe } from "../types";
 import Card from "./Card";
 import { resolveImageUrl } from "../utils/imageUrl";
+import { normalizeIsFavorite } from "../utils/favorites";
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -16,14 +17,10 @@ const RecipeCardComponent: React.FC<RecipeCardProps> = ({ recipe, onPress, onTog
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
-  const isFavorite = useMemo(() => {
-    const favValue = recipe.isFavorite;
-    return Boolean(
-      favValue === true ||
-        (typeof favValue === "string" && favValue === "true") ||
-        (typeof favValue === "number" && favValue === 1)
-    );
-  }, [recipe.isFavorite]);
+  const isFavorite = useMemo(
+    () => normalizeIsFavorite(recipe.isFavorite),
+    [recipe.isFavorite]
+  );
 
   // Resolve image URL (handles relative URLs by resolving against API base URL)
   const imageUri = useMemo(() => {

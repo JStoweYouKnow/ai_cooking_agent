@@ -1,3 +1,5 @@
+import type { FavoriteValue } from "../utils/favorites";
+
 // Mobile app type definitions
 // These mirror the server types but are defined locally to avoid import issues
 
@@ -32,7 +34,7 @@ export interface Recipe {
   caloriesPerServing: number | null;
   sourceUrl: string | null;
   source: string | null;
-  isFavorite: boolean | null;
+  isFavorite: FavoriteValue;
   tags: string[] | null;
   isShared: boolean | null;
   // JSONB columns for imported recipes (HTML, TheMealDB, etc.)

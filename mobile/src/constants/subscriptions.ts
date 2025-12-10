@@ -3,13 +3,31 @@
  * These match the products created in Stripe Dashboard
  */
 
+const REQUIRED_PRICE_ENV_VARS = {
+  PREMIUM_MONTHLY: "EXPO_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY",
+  PREMIUM_YEARLY: "EXPO_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY",
+  FAMILY_MONTHLY: "EXPO_PUBLIC_STRIPE_PRICE_FAMILY_MONTHLY",
+  FAMILY_YEARLY: "EXPO_PUBLIC_STRIPE_PRICE_FAMILY_YEARLY",
+  LIFETIME: "EXPO_PUBLIC_STRIPE_PRICE_LIFETIME",
+} as const;
+
+const missingPriceEnvVars = Object.values(REQUIRED_PRICE_ENV_VARS).filter(
+  (envVar) => !process.env[envVar],
+);
+
+if (missingPriceEnvVars.length > 0) {
+  const message = `Missing Stripe price env vars: ${missingPriceEnvVars.join(", ")}`;
+  console.error(message);
+  throw new Error(message);
+}
+
 // Stripe Price IDs
 export const STRIPE_PRICE_IDS = {
-  PREMIUM_MONTHLY: "price_1SYtXR9rKYrAFwcoDAhBVLaC", // $4.99/month
-  PREMIUM_YEARLY: "price_1SYtXT9rKYrAFwcoAm0Er0cV", // $49.99/year
-  FAMILY_MONTHLY: "price_1SYtXU9rKYrAFwcoaKcT8wHL", // $9.99/month
-  FAMILY_YEARLY: "price_1SYtXV9rKYrAFwcoCTS4LWkj", // $99.99/year
-  LIFETIME: "price_1SYtXF9rKYrAFwcoshbIFfKA", // $149.99 one-time
+  PREMIUM_MONTHLY: process.env.EXPO_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY as string, // $4.99/month
+  PREMIUM_YEARLY: process.env.EXPO_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY as string, // $49.99/year
+  FAMILY_MONTHLY: process.env.EXPO_PUBLIC_STRIPE_PRICE_FAMILY_MONTHLY as string, // $9.99/month
+  FAMILY_YEARLY: process.env.EXPO_PUBLIC_STRIPE_PRICE_FAMILY_YEARLY as string, // $99.99/year
+  LIFETIME: process.env.EXPO_PUBLIC_STRIPE_PRICE_LIFETIME as string, // $149.99 one-time
 } as const;
 
 // Subscription tier mapping

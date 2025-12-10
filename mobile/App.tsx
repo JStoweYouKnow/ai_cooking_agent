@@ -19,13 +19,13 @@ export default function App() {
   const TRPCProvider = trpc.Provider;
   
   return (
-    <TRPCProvider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <TRPCProvider client={trpcClient} queryClient={queryClient}>
         <AuthProvider>
           <RootNavigator />
           <StatusBar style="auto" />
         </AuthProvider>
-      </QueryClientProvider>
-    </TRPCProvider>
+      </TRPCProvider>
+    </QueryClientProvider>
   );
 }

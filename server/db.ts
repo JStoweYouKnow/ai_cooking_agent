@@ -1,4 +1,4 @@
-import { eq, desc, and, or, ne, like } from "drizzle-orm";
+import { eq, desc, asc, and, or, ne, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 // Import all schema exports - using relative path for deployment compatibility
 import type {
@@ -321,16 +321,44 @@ function enhanceRecipeWithCookingTime<T extends { cookingTime: number | null }>(
   return recipe;
 }
 
+function normalizeIsFavorite(value: unknown): boolean {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
+function normalizeRecipe<T extends { isFavorite: unknown; cookingTime: number | null }>(
+  recipe: T
+): T & { isFavorite: boolean } {
+  if (!recipe) return recipe as T & { isFavorite: boolean };
+  const withCookingTime = enhanceRecipeWithCookingTime(recipe);
+  return { ...withCookingTime, isFavorite: normalizeIsFavorite(recipe.isFavorite) };
+}
+
+type RecipeListOptions = {
+  sortBy?: "recent" | "alphabetical" | "meal";
+  mealFilter?: "breakfast" | "lunch" | "dinner" | "dessert";
+  orderBy?: "createdAt" | "name" | "category";
+  direction?: "asc" | "desc";
+  limit?: number;
+};
+
 export async function getUserRecipes(
   userId: number,
-  options?: {
-    sortBy?: "recent" | "alphabetical" | "meal";
-    mealFilter?: "breakfast" | "lunch" | "dinner" | "dessert";
-  }
+  options?: RecipeListOptions
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
+  const hasOrderBy = options?.orderBy !== undefined;
+  const hasDirection = options?.direction !== undefined;
+
+  if ((hasOrderBy && !hasDirection) || (!hasOrderBy && hasDirection)) {
+    throw new Error("orderBy and direction must be provided together");
+  }
+
+  if (options?.sortBy && (hasOrderBy || hasDirection)) {
+    throw new Error("sortBy cannot be combined with orderBy/direction");
+  }
+
   // Build where condition
   const baseCondition = or(eq(recipes.userId, userId), eq(recipes.isShared, true));
   const whereCondition = options?.mealFilter
@@ -344,21 +372,43 @@ export async function getUserRecipes(
     .where(whereCondition);
   
   // Apply sorting
-  if (options?.sortBy === "recent") {
-    query = query.orderBy(desc(recipes.createdAt)) as any;
-  } else if (options?.sortBy === "alphabetical") {
-    query = query.orderBy(recipes.name) as any;
-  } else if (options?.sortBy === "meal") {
-    // Sort by category (meal type) first, then alphabetically within each meal
-    query = query.orderBy(recipes.category, recipes.name) as any;
-  } else {
-    // Default: most recent first
-    query = query.orderBy(desc(recipes.createdAt)) as any;
+  const effectiveSort =
+    options?.orderBy && options?.direction
+      ? { orderBy: options.orderBy, direction: options.direction }
+      : options?.sortBy === "recent"
+        ? { orderBy: "createdAt" as const, direction: "desc" as const }
+        : options?.sortBy === "alphabetical"
+          ? { orderBy: "name" as const, direction: "asc" as const }
+          : options?.sortBy === "meal"
+            ? { orderBy: "category" as const, direction: "asc" as const, secondary: true }
+            : { orderBy: "createdAt" as const, direction: "desc" as const };
+
+  if (effectiveSort.orderBy === "createdAt") {
+    query = query.orderBy(
+      effectiveSort.direction === "desc" ? desc(recipes.createdAt) : asc(recipes.createdAt)
+    ) as any;
+  } else if (effectiveSort.orderBy === "name") {
+    query = query.orderBy(
+      effectiveSort.direction === "desc" ? desc(recipes.name) : asc(recipes.name)
+    ) as any;
+  } else if (effectiveSort.orderBy === "category") {
+    const categorySorter =
+      effectiveSort.direction === "desc" ? desc(recipes.category) : asc(recipes.category);
+    const nameSorter =
+      effectiveSort.direction === "desc" ? desc(recipes.name) : asc(recipes.name);
+    // Keep secondary alphabetical ordering when sorting meals by category
+    query = effectiveSort.secondary
+      ? (query.orderBy(categorySorter, nameSorter) as any)
+      : (query.orderBy(categorySorter) as any);
+  }
+  
+  if (options?.limit) {
+    query = query.limit(options.limit) as any;
   }
   
   const results = await query;
-  // Enhance each recipe with computed cooking time
-  return results.map(r => enhanceRecipeWithCookingTime(r));
+  // Normalize favorites and enhance cooking time for consistent client shape
+  return results.map(r => normalizeRecipe(r));
 }
 
 /**
@@ -380,8 +430,8 @@ export async function getUserAddedRecipes(userId: number, limit?: number) {
   }
   
   const results = await query;
-  // Enhance each recipe with computed cooking time
-  return results.map(r => enhanceRecipeWithCookingTime(r));
+  // Normalize favorites and enhance cooking time for consistent client shape
+  return results.map(r => normalizeRecipe(r));
 }
 
 export async function getRecipeById(recipeId: number) {
@@ -389,13 +439,13 @@ export async function getRecipeById(recipeId: number) {
   if (!db) throw new Error("Database not available");
   const result = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1);
   // Enhance recipe with computed cooking time
-  return result[0] ? enhanceRecipeWithCookingTime(result[0]) : undefined;
+  return result[0] ? normalizeRecipe(result[0]) : undefined;
 }
 
 export async function updateRecipeFavorite(recipeId: number, isFavorite: boolean) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.update(recipes).set({ isFavorite }).where(eq(recipes.id, recipeId));
+  return db.update(recipes).set({ isFavorite: !!isFavorite }).where(eq(recipes.id, recipeId));
 }
 
 export async function updateRecipeTags(recipeId: number, tags: string[]) {
