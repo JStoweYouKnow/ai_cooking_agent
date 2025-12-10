@@ -265,6 +265,17 @@ const recipeRouter = router({
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user || await db.getOrCreateAnonymousUser();
       const parsed = await parseRecipeFromUrl(input.url);
+
+      // DEBUG: Log parsed ingredients
+      console.log('=== PARSE FROM URL DEBUG ===');
+      console.log('URL:', input.url);
+      console.log('Parsed object:', parsed ? 'exists' : 'null');
+      console.log('Ingredients:', parsed?.ingredients ? `${parsed.ingredients.length} ingredients` : 'NO INGREDIENTS');
+      if (parsed?.ingredients) {
+        console.log('First 3 ingredients:', parsed.ingredients.slice(0, 3));
+      }
+      console.log('===========================');
+
       if (!parsed) {
         try {
           const { invokeLLM } = await import("./_core/llm");
