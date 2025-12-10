@@ -293,14 +293,33 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 				? parseInt(recipe.recipeYield, 10) || null
 				: null;
 		const ingredients: ParsedIngredient[] | undefined = Array.isArray(recipe.recipeIngredient)
-			? recipe.recipeIngredient.map((line: string) => {
-					// naive split "quantity unit name"
-					const parts = String(line).trim().split(/\s+/);
-					if (parts.length <= 1) return { name: line };
-					const quantity = parts.shift();
-					const unit = parts.shift();
-					return { name: parts.join(" "), quantity, unit };
-			  })
+			? recipe.recipeIngredient
+					.map((item: any) => {
+						// Extract string from item (handle both string and object cases)
+						let line: string;
+						if (typeof item === "string") {
+							line = item;
+						} else if (typeof item === "object" && item !== null) {
+							// Try to extract text from common object properties
+							line = item.text || item.name || item.itemListElement || String(item);
+						} else {
+							line = String(item);
+						}
+
+						// Skip empty or invalid ingredient lines
+						const trimmed = line.trim();
+						if (!trimmed || trimmed === "[object Object]") {
+							return null;
+						}
+
+						// naive split "quantity unit name"
+						const parts = trimmed.split(/\s+/);
+						if (parts.length <= 1) return { name: trimmed };
+						const quantity = parts.shift();
+						const unit = parts.shift();
+						return { name: parts.join(" "), quantity, unit };
+					})
+					.filter((ing): ing is ParsedIngredient => ing !== null && ing.name.trim().length > 0)
 			: undefined;
 		
 		parsedRecipe = {
