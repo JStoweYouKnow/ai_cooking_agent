@@ -263,17 +263,27 @@ const recipeRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // DEBUG: Log what we actually received
+      console.log('=== INPUT RECEIVED ===');
+      console.log('input object:', JSON.stringify(input));
+      console.log('input.autoSave type:', typeof input.autoSave);
+      console.log('input.autoSave value:', input.autoSave);
+      console.log('!input.autoSave:', !input.autoSave);
+      console.log('=====================');
+
       const user = ctx.user || await db.getOrCreateAnonymousUser();
       const parsed = await parseRecipeFromUrl(input.url);
 
-      // DEBUG: Log parsed ingredients
+      // DEBUG: Log parsed ingredients AND autoSave setting
       console.log('=== PARSE FROM URL DEBUG ===');
       console.log('URL:', input.url);
+      console.log('autoSave:', input.autoSave);
       console.log('Parsed object:', parsed ? 'exists' : 'null');
       console.log('Ingredients:', parsed?.ingredients ? `${parsed.ingredients.length} ingredients` : 'NO INGREDIENTS');
       if (parsed?.ingredients) {
         console.log('First 3 ingredients:', parsed.ingredients.slice(0, 3));
       }
+      console.log('Will return:', input.autoSave ? '{ id }' : '{ parsed }');
       console.log('===========================');
 
       if (!parsed) {
@@ -416,7 +426,10 @@ const recipeRouter = router({
         }
       }
 
-      if (!input.autoSave) {
+      // ALWAYS return parsed data when autoSave is false
+      // Force fix: Also return parsed if it has ingredients (client needs them)
+      if (!input.autoSave || (parsed && parsed.ingredients && parsed.ingredients.length > 0)) {
+        console.log('[INGREDIENT FIX] Returning parsed data with', parsed?.ingredients?.length || 0, 'ingredients');
         return { parsed };
       }
 
