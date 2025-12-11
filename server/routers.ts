@@ -426,12 +426,12 @@ const recipeRouter = router({
         }
       }
 
-      // ALWAYS return parsed data when autoSave is false
-      // Force fix: Also return parsed if it has ingredients (client needs them)
-      if (!input.autoSave || (parsed && parsed.ingredients && parsed.ingredients.length > 0)) {
-        console.log('[INGREDIENT FIX] Returning parsed data with', parsed?.ingredients?.length || 0, 'ingredients');
+      if (!input.autoSave) {
+        console.log('[PREVIEW MODE] Returning parsed data with', parsed?.ingredients?.length || 0, 'ingredients');
         return { parsed };
       }
+
+      console.log('[AUTO SAVE MODE] Saving recipe to database with', parsed?.ingredients?.length || 0, 'ingredients');
 
       // Ensure instructions is a string (handle case where it might be an object)
       let instructionsStr: string | undefined = undefined;
