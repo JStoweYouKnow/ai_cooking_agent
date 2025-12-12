@@ -77,7 +77,18 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
 
   const searchMutation = trpc.recipes.searchByIngredients.useMutation();
   const parseFromUrlMutation = trpc.recipes.parseFromUrl.useMutation({
-    onSuccess: () => utils.recipes.list.invalidate(),
+    onSuccess: (res: any) => {
+      utils.recipes.list.invalidate();
+      if ('id' in res && res.id) {
+        // Recipe was auto-saved - navigate to it so user can see ingredients
+        Alert.alert('Success', 'Recipe imported successfully!', [
+          {
+            text: 'View Recipe',
+            onPress: () => navigation.navigate('RecipeDetail', { recipeId: res.id })
+          }
+        ]);
+      }
+    },
   });
   const importFromTheMealDBMutation = trpc.recipes.importFromTheMealDB.useMutation({
     onSuccess: () => utils.recipes.list.invalidate(),
