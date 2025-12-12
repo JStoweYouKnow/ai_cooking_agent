@@ -782,7 +782,14 @@ const recipeRouter = router({
       if (recipe.userId !== user.id && !recipe.isShared) {
         throw new Error("Unauthorized: You can only view ingredients from your own recipes or shared recipes");
       }
-      return db.getRecipeIngredients(input.recipeId);
+
+      const ingredients = await db.getRecipeIngredients(input.recipeId);
+      console.log(`[GET INGREDIENTS] Recipe ${input.recipeId}: Found ${ingredients.length} ingredients in database`);
+      if (ingredients.length === 0) {
+        console.log(`[GET INGREDIENTS] WARNING: No ingredients found for recipe ${input.recipeId}`);
+      }
+
+      return ingredients;
     }),
 
   getDailyRecommendations: optionalAuthProcedure.query(async ({ ctx }) => {
