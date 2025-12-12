@@ -302,7 +302,8 @@ export async function getOrCreateAnonymousUser(): Promise<User> {
 export async function createRecipe(recipe: InsertRecipe) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.insert(recipes).values(recipe);
+  const result = await db.insert(recipes).values(recipe).returning();
+  return result[0]; // Return the created recipe with its ID
 }
 
 // Helper to enhance recipe with computed cooking time

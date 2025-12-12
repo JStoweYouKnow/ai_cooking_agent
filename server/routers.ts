@@ -391,7 +391,7 @@ const recipeRouter = router({
             }
           }
 
-          await db.createRecipe({
+          const created = await db.createRecipe({
             name: fallback.name,
             description: descriptionStr,
             instructions: instructionsStr,
@@ -406,9 +406,11 @@ const recipeRouter = router({
             source: "url_import",
             isShared: true, // HTML-uploaded recipes are shared with all users
           });
-          const recipes = await db.getUserRecipes(user.id);
-          const created = recipes[recipes.length - 1];
+
+          console.log('[LLM FALLBACK] Recipe created:', created ? `id=${created.id}` : 'NO RECIPE');
+
           if (created && Array.isArray(fallback.ingredients)) {
+            console.log('[LLM FALLBACK] Saving', fallback.ingredients.length, 'ingredients to recipe', created.id);
             for (const ing of fallback.ingredients) {
               const ingredient = await db.getOrCreateIngredient(ing.name);
               await db.addRecipeIngredient({
@@ -418,6 +420,7 @@ const recipeRouter = router({
                 unit: ing.unit,
               });
             }
+            console.log('[LLM FALLBACK] ✓ Saved ingredients to recipe', created.id);
           }
           return { id: created?.id || 0 };
         } catch (e) {
@@ -481,7 +484,7 @@ const recipeRouter = router({
         }
       }
 
-      await db.createRecipe({
+      const created = await db.createRecipe({
         name: parsed.name,
         description: descriptionStr,
         instructions: instructionsStr,
@@ -496,8 +499,6 @@ const recipeRouter = router({
         source: typeof parsed.source === "string" ? parsed.source : "url_import",
         isShared: true, // HTML-uploaded recipes are shared with all users
       });
-      const recipes = await db.getUserRecipes(user.id);
-      const created = recipes[recipes.length - 1];
 
       console.log('[INGREDIENT SAVE] Recipe created:', created ? `id=${created.id}` : 'NO RECIPE');
       console.log('[INGREDIENT SAVE] parsed.ingredients:', parsed.ingredients ? `${parsed.ingredients.length} items` : 'NONE');
@@ -508,7 +509,7 @@ const recipeRouter = router({
       });
 
       if (created && parsed.ingredients?.length) {
-        console.log('[INGREDIENT SAVE] Starting to save', parsed.ingredients.length, 'ingredients...');
+        console.log('[INGREDIENT SAVE] Starting to save', parsed.ingredients.length, 'ingredients to recipe', created.id);
         let savedCount = 0;
         for (const ing of parsed.ingredients) {
           try {
@@ -520,12 +521,12 @@ const recipeRouter = router({
               unit: ing.unit,
             });
             savedCount++;
-            console.log('[INGREDIENT SAVE] Saved ingredient', savedCount, ':', ing.name);
+            console.log('[INGREDIENT SAVE] Saved ingredient', savedCount, 'to recipe', created.id, ':', ing.name);
           } catch (error) {
             console.error('[INGREDIENT SAVE] ERROR saving ingredient:', ing.name, error);
           }
         }
-        console.log('[INGREDIENT SAVE] ✓ Successfully saved', savedCount, 'of', parsed.ingredients.length, 'ingredients');
+        console.log('[INGREDIENT SAVE] ✓ Successfully saved', savedCount, 'of', parsed.ingredients.length, 'ingredients to recipe', created.id);
       } else {
         console.log('[INGREDIENT SAVE] ✗ SKIPPED saving ingredients');
       }
