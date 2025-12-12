@@ -64,11 +64,16 @@ export default function RecipeSearchPage() {
   const parseFromUrlMutation = trpc.recipes.parseFromUrl.useMutation({
     onSuccess: async (res) => {
       if ('id' in res && res.id) {
-        // Recipe was auto-saved
+        // Recipe was auto-saved - navigate to the newly created recipe
         await utils.recipes.list.invalidate();
-        toast.success('Recipe imported from URL');
+        toast.success('Recipe imported from URL! Redirecting to recipe...');
         setImportUrl('');
         setUrlError('');
+
+        // Navigate to the newly created recipe so user can see it with ingredients
+        setTimeout(() => {
+          window.location.href = `/recipes/${res.id}`;
+        }, 500);
       } else {
         // Preview mode - show the parsed recipe
         setParsedRecipePreview(res.parsed);
