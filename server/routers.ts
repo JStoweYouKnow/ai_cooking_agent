@@ -498,17 +498,38 @@ const recipeRouter = router({
       });
       const recipes = await db.getUserRecipes(user.id);
       const created = recipes[recipes.length - 1];
+
+      console.log('[INGREDIENT SAVE] Recipe created:', created ? `id=${created.id}` : 'NO RECIPE');
+      console.log('[INGREDIENT SAVE] parsed.ingredients:', parsed.ingredients ? `${parsed.ingredients.length} items` : 'NONE');
+      console.log('[INGREDIENT SAVE] Condition check:', {
+        hasCreated: !!created,
+        hasIngredients: !!parsed.ingredients?.length,
+        willSave: !!(created && parsed.ingredients?.length)
+      });
+
       if (created && parsed.ingredients?.length) {
+        console.log('[INGREDIENT SAVE] Starting to save', parsed.ingredients.length, 'ingredients...');
+        let savedCount = 0;
         for (const ing of parsed.ingredients) {
-          const ingredient = await db.getOrCreateIngredient(ing.name);
-          await db.addRecipeIngredient({
-            recipeId: created.id,
-            ingredientId: ingredient.id,
-            quantity: ing.quantity,
-            unit: ing.unit,
-          });
+          try {
+            const ingredient = await db.getOrCreateIngredient(ing.name);
+            await db.addRecipeIngredient({
+              recipeId: created.id,
+              ingredientId: ingredient.id,
+              quantity: ing.quantity,
+              unit: ing.unit,
+            });
+            savedCount++;
+            console.log('[INGREDIENT SAVE] Saved ingredient', savedCount, ':', ing.name);
+          } catch (error) {
+            console.error('[INGREDIENT SAVE] ERROR saving ingredient:', ing.name, error);
+          }
         }
+        console.log('[INGREDIENT SAVE] ✓ Successfully saved', savedCount, 'of', parsed.ingredients.length, 'ingredients');
+      } else {
+        console.log('[INGREDIENT SAVE] ✗ SKIPPED saving ingredients');
       }
+
       return { id: created?.id || 0 };
     }),
   toggleFavorite: optionalAuthProcedure
