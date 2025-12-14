@@ -6,19 +6,32 @@ import superjson from "superjson";
 import { trpc } from "./trpc";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 
 // Get the base URL for the API
 // In development, this should point to your local server
 // In production, this should point to your production server
 export const getBaseUrl = () => {
   if (__DEV__) {
-    // Use IP address for better compatibility with iOS Simulator
-    // iOS Simulator sometimes can't reach localhost
-    // Your machine's IP: 192.168.1.94
-    // To use localhost instead, change to: "http://localhost:3000"
-    const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.1.94:3000";
-    console.log("[API] Using base URL:", API_URL);
-    return API_URL;
+    // Prefer explicit env override
+    if (process.env.EXPO_PUBLIC_API_URL) {
+      console.log("[API] Using env base URL:", process.env.EXPO_PUBLIC_API_URL);
+      return process.env.EXPO_PUBLIC_API_URL;
+    }
+
+    // Derive host from dev server (helps on device where localhost is wrong)
+    const hostUri = Constants.expoConfig?.hostUri;
+    if (hostUri) {
+      const host = hostUri.split(":")[0];
+      const derived = `http://${host}:3000`;
+      console.log("[API] Derived dev base URL from hostUri:", derived);
+      return derived;
+    }
+
+    // Fallback to remembered LAN IP
+    const fallback = "http://192.168.1.94:3000";
+    console.log("[API] Using fallback base URL:", fallback);
+    return fallback;
   }
   // Production URL
   return process.env.EXPO_PUBLIC_API_URL || "https://sous.projcomfort.com";

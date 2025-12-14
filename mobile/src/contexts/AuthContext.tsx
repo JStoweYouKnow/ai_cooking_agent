@@ -43,54 +43,119 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    console.log("[AuthProvider] Component mounted, calling loadUser...");
     loadUser();
   }, []);
 
   const loadUser = async () => {
+    const AUTH_TIMEOUT_MS = 10000; // 10 seconds timeout
+    let timeoutId: NodeJS.Timeout | null = null;
+    
     try {
+      console.log("[AuthProvider] loadUser started");
       setIsLoading(true);
-      const token = await SecureStore.getItemAsync("auth_token");
-      if (token) {
-        // Use tRPC client directly instead of query hook to avoid serialization issues
+      
+      // Set timeout to prevent infinite loading
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          console.warn("[AuthProvider] loadUser timeout - showing login screen");
+          reject(new Error("Auth check timeout - backend may be unreachable"));
+        }, AUTH_TIMEOUT_MS);
+      });
+
+      const loadUserPromise = (async () => {
         try {
-          // @ts-ignore - tRPC client types are complex, runtime works correctly
-          const userData = await (trpcClient as any).auth.me.query();
-          if (userData && userData.id) {
-            // Transform server User to mobile AuthUser
-            const authUser: AuthUser = {
-              id: userData.id,
-              openId: userData.openId,
-              name: userData.name,
-              email: userData.email,
-              role: userData.role || "user",
-            };
-            console.log("[Auth] User loaded successfully:", { id: authUser.id, openId: authUser.openId, name: authUser.name });
-            setUser(authUser);
-            console.log("[Auth] User state updated, isAuthenticated should be:", Boolean(authUser));
-          } else {
-            // Token is invalid, clear it
-            await SecureStore.deleteItemAsync("auth_token");
+          console.log("[AuthProvider] Checking SecureStore for auth token...");
+          let token: string | null = null;
+          try {
+            token = await SecureStore.getItemAsync("auth_token");
+            console.log("[AuthProvider] Token check result:", token ? "Token found" : "No token");
+          } catch (storeError: any) {
+            console.error("[AuthProvider] Error accessing SecureStore:", storeError);
+            // SecureStore might not be available, continue without token
+            console.log("[AuthProvider] Continuing without token due to SecureStore error");
           }
-        } catch (error: any) {
-          // API call failed, clear token
-          console.error("Error fetching user:", error);
-          console.error("Error details:", {
-            message: error?.message,
-            code: error?.code,
-            data: error?.data,
-          });
-          // Don't clear token on network errors - might be temporary
-          if (error?.message?.includes("Network request failed")) {
-            console.warn("[Auth] Network error - backend may not be running or unreachable");
+          
+          if (token) {
+            // Use tRPC client directly instead of query hook to avoid serialization issues
+            try {
+              console.log("[AuthProvider] Fetching user data from API...");
+              // @ts-ignore - tRPC client types are complex, runtime works correctly
+              const userData = await (trpcClient as any).auth.me.query();
+              console.log("[AuthProvider] API response received:", userData ? "User data present" : "No user data");
+              
+              if (userData && userData.id) {
+                // Transform server User to mobile AuthUser
+                const authUser: AuthUser = {
+                  id: userData.id,
+                  openId: userData.openId,
+                  name: userData.name,
+                  email: userData.email,
+                  role: userData.role || "user",
+                };
+                console.log("[Auth] User loaded successfully:", { id: authUser.id, openId: authUser.openId, name: authUser.name });
+                setUser(authUser);
+                console.log("[Auth] User state updated, isAuthenticated should be:", Boolean(authUser));
+              } else {
+                // Token is invalid, clear it
+                console.log("[AuthProvider] Invalid user data, clearing token");
+                try {
+                  await SecureStore.deleteItemAsync("auth_token");
+                } catch (storeError) {
+                  console.error("[AuthProvider] Error clearing token:", storeError);
+                }
+              }
+            } catch (error: any) {
+              // API call failed, clear token
+              console.error("[AuthProvider] Error fetching user:", error);
+              console.error("[AuthProvider] Error details:", {
+                message: error?.message,
+                code: error?.code,
+                data: error?.data,
+              });
+              // Don't clear token on network errors - might be temporary
+              if (error?.message?.includes("Network request failed")) {
+                console.warn("[Auth] Network error - backend may not be running or unreachable");
+              } else {
+                try {
+                  await SecureStore.deleteItemAsync("auth_token");
+                } catch (storeError) {
+                  console.error("[AuthProvider] Error clearing token:", storeError);
+                }
+              }
+            }
           } else {
-            await SecureStore.deleteItemAsync("auth_token");
+            console.log("[AuthProvider] No token found, user will see login screen");
           }
+        } catch (error) {
+          console.error("[AuthProvider] Error in loadUserPromise:", error);
+          throw error;
+        }
+      })();
+
+      // Race between timeout and actual load
+      await Promise.race([loadUserPromise, timeoutPromise]);
+      
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    } catch (error: any) {
+      console.error("[AuthProvider] Error loading user (final catch):", error);
+      // On timeout or other errors, ensure we show login screen
+      if (error?.message?.includes("timeout")) {
+        console.log("[AuthProvider] Timeout occurred - proceeding to show login screen");
+      } else {
+        try {
+          await SecureStore.deleteItemAsync("auth_token");
+        } catch (storeError) {
+          console.error("[AuthProvider] Error clearing token (final catch):", storeError);
         }
       }
-    } catch (error) {
-      console.error("Error loading user:", error);
-      await SecureStore.deleteItemAsync("auth_token");
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      console.log("[AuthProvider] loadUser completed, setting isLoading to false");
       setIsLoading(false);
     }
   };
@@ -99,8 +164,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
       // Store the openId as auth token (for backward compatibility)
-      await SecureStore.setItemAsync("auth_token", openId);
-      console.log("[Auth] Stored auth token:", openId.substring(0, 10) + "...");
+      try {
+        await SecureStore.setItemAsync("auth_token", openId);
+        console.log("[Auth] Stored auth token:", openId.substring(0, 10) + "...");
+      } catch (storeError) {
+        console.error("[Auth] Error storing token in SecureStore:", storeError);
+        throw new Error("Failed to store authentication token");
+      }
       
       // Directly fetch user instead of calling loadUser (which might have error handling that clears token)
       try {
@@ -143,7 +213,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             ? `Server response has null/undefined id: ${userData.id}`
             : "Unknown error";
           console.error("[Auth] Error details:", errorDetails);
-          await SecureStore.deleteItemAsync("auth_token");
+          try {
+            await SecureStore.deleteItemAsync("auth_token");
+          } catch (storeError) {
+            console.error("[Auth] Error clearing token:", storeError);
+          }
           throw new Error(`Authentication failed: ${errorDetails}. Please try logging in again.`);
         }
       } catch (error: any) {
@@ -157,7 +231,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.error("[Auth]", errorMsg);
           throw new Error(errorMsg);
         }
-        await SecureStore.deleteItemAsync("auth_token");
+        try {
+          await SecureStore.deleteItemAsync("auth_token");
+        } catch (storeError) {
+          console.error("[Auth] Error clearing token:", storeError);
+        }
         throw new Error(error?.message || "Failed to authenticate. Please try again.");
       }
     } catch (error) {
@@ -233,10 +311,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       setIsLoading(true);
-      await SecureStore.deleteItemAsync("auth_token");
+      try {
+        await SecureStore.deleteItemAsync("auth_token");
+        console.log("[Auth] Token cleared from SecureStore");
+      } catch (storeError) {
+        console.error("[Auth] Error clearing token from SecureStore:", storeError);
+        // Continue with logout even if SecureStore fails
+      }
       setUser(null);
+      console.log("[Auth] User logged out successfully");
     } catch (error) {
-      console.error("Error logging out:", error);
+      console.error("[Auth] Error logging out:", error);
       throw error;
     } finally {
       setIsLoading(false);
