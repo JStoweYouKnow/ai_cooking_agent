@@ -13,6 +13,7 @@ import {
   FlatList,
 } from "react-native";
 import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { resolveImageUrl } from "../../utils/imageUrl";
 import { Ionicons } from "@expo/vector-icons";
 import { RecipeStackScreenProps } from "../../navigation/types";
@@ -33,6 +34,7 @@ const { width } = Dimensions.get("window");
 const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { id } = route.params;
   const utils = trpc.useUtils();
+  const insets = useSafeAreaInsets();
   const [cookingModeVisible, setCookingModeVisible] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,13 +118,38 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     ]);
   };
 
+  // Helper function to clean ingredient name (remove "Ingredient:" prefix and normalize)
+  const cleanIngredientName = (name: string): string => {
+    if (!name || typeof name !== "string") return "";
+
+    let cleaned = name.trim();
+
+    // Remove "Ingredient:" or "Ingredient " prefix (case-insensitive, with optional colon)
+    cleaned = cleaned.replace(/^Ingredient:\s*/i, "");
+    cleaned = cleaned.replace(/^Ingredient\s+/i, "");
+
+    // Remove common prefixes that might appear
+    cleaned = cleaned.replace(/^ing:\s*/i, "");
+    cleaned = cleaned.replace(/^ingredient\s*:\s*/i, "");
+
+    // If the cleaned name is just "Ingredient" or empty, return empty string
+    if (cleaned.toLowerCase() === "ingredient" || cleaned.length === 0) {
+      return "";
+    }
+
+    // Clean up extra whitespace (multiple spaces, tabs, etc.)
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+    return cleaned;
+  };
+
   // Get ingredients from either the junction table OR the JSONB column
   const ingredientItems = useMemo(() => {
     // First try the junction table (for manually created recipes)
     if (recipeIngredients && recipeIngredients.length > 0) {
       return recipeIngredients.map((ing: any) => ({
         id: String(ing.id || ing.ingredientId),
-        name: ing.name || ing.ingredientName || "Ingredient",
+        name: cleanIngredientName(ing.name || ing.ingredientName || "Ingredient"),
         quantity: ing.quantity,
         unit: ing.unit,
         category: ing.category,
@@ -131,12 +158,17 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     // Fall back to JSONB ingredients column (for imported recipes)
     const jsonbIngredients = recipe?.ingredients;
     if (jsonbIngredients && Array.isArray(jsonbIngredients)) {
-      return jsonbIngredients.map((ing: any, idx: number) => ({
-        id: String(idx),
-        name: ing.raw || ing.ingredient || ing.name || String(ing),
-        quantity: ing.quantity || ing.quantity_float || null,
-        unit: ing.unit || null,
-      }));
+      const mapped = jsonbIngredients.map((ing: any, idx: number) => {
+        const rawName = ing.raw || ing.ingredient || ing.name || String(ing);
+        const cleanedName = cleanIngredientName(rawName);
+        return {
+          id: String(idx),
+          name: cleanedName,
+          quantity: ing.quantity || ing.quantity_float || null,
+          unit: ing.unit || null,
+        };
+      });
+      return mapped;
     }
     return [];
   }, [recipeIngredients, recipe?.ingredients]);
@@ -277,15 +309,27 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const isFavorite = normalizeIsFavorite(recipe.isFavorite);
 
+  // Calculate bottom padding to account for fixed bottom buttons AND tab bar
+  // Button height: 64px + container padding: 32px (16px top + 16px bottom) = 96px
+  // Tab bar height: ~70px (padding: 4px + item padding: 16px + label: 12px + margins: 16px + safe area)
+  // Safe area bottom + large safety margin to prevent cutoff
+  const tabBarHeight = 70; // Approximate tab bar height (padding + items + labels + margins)
+  const actionButtonsHeight = 64 + 32; // Button height + container padding
+  const safetyMargin = 140; // Large safety margin to ensure content is never cut off
+  const bottomPadding = actionButtonsHeight + tabBarHeight + insets.bottom + safetyMargin;
+
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPadding }]}
+        contentInsetAdjustmentBehavior="automatic"
+      >
         <View style={styles.heroWrapper}>
           {(() => {
             const imageUri = resolveImageUrl(recipe.imageUrl);
             return imageUri ? (
-              <Image 
-                source={{ uri: imageUri }} 
+              <Image
+                source={{ uri: imageUri }}
                 style={styles.heroImage}
                 contentFit="cover"
                 transition={200}
@@ -439,7 +483,7 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 <Ionicons name="close" size={24} color={colors.text.primary} />
               </TouchableOpacity>
             </View>
-            
+
             <TextInput
               style={styles.searchInput}
               placeholder="Search users..."

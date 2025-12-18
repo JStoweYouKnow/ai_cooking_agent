@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { TouchableOpacity, Text, View, StyleSheet, ActivityIndicator, ViewStyle, TextStyle, Animated } from "react-native";
+import { TouchableOpacity, Text, View, StyleSheet, ActivityIndicator, ViewStyle, TextStyle, Animated, StyleProp } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, borderRadius, typography, shadows, animations, gradients } from "../styles/theme";
 
@@ -9,8 +9,8 @@ interface GradientButtonProps {
   variant?: "primary" | "secondary" | "olive";
   loading?: boolean;
   disabled?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   icon?: React.ReactNode;
   accessibilityLabel?: string;
   accessibilityHint?: string;
@@ -58,7 +58,7 @@ const GradientButton: React.FC<GradientButtonProps> = ({
     primary: gradients.primary,
     secondary: gradients.secondary,
     olive: gradients.olive,
-  };
+  } as const;
 
   return (
     <TouchableOpacity
@@ -88,7 +88,7 @@ const GradientButton: React.FC<GradientButtonProps> = ({
           ) : numberOfLines && numberOfLines > 1 ? (
             <View style={styles.textWrapper}>
               {icon && icon}
-              <Text 
+              <Text
                 style={[
                   styles.text,
                   !icon && styles.textNoIcon,
@@ -103,7 +103,7 @@ const GradientButton: React.FC<GradientButtonProps> = ({
           ) : (
             <>
               {icon && icon}
-              <Text 
+              <Text
                 style={[styles.text, !icon && styles.textNoIcon, textStyle]}
                 numberOfLines={numberOfLines}
               >

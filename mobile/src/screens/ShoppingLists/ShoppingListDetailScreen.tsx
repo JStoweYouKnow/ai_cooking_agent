@@ -289,12 +289,9 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           ) : (
             <>
               {activeItems.length > 0 && (
-                <FlatList
-                  data={activeItems}
-                  keyExtractor={(item) => item.id.toString()}
-                  scrollEnabled={false}
-                  renderItem={({ item }) => (
-                    <View style={styles.itemRow}>
+                <View>
+                  {activeItems.map((item: any) => (
+                    <View style={styles.itemRow} key={item.id}>
                       <TouchableOpacity
                         style={styles.checkbox}
                         onPress={() => handleToggleItem(item.id, item.isChecked)}
@@ -318,8 +315,8 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         <Ionicons name="trash-outline" size={20} color={colors.russet} />
                       </TouchableOpacity>
                     </View>
-                  )}
-                />
+                  ))}
+                </View>
               )}
               {completedItems.length > 0 && (
                 <View style={{ marginTop: spacing.lg }}>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing, borderRadius, typography } from '../styles/theme';
 
 export interface IngredientItem {
@@ -16,31 +16,29 @@ interface IngredientListProps {
   showCategoryBadges?: boolean;
 }
 
-const IngredientList: React.FC<IngredientListProps> = ({ items, title = 'Ingredients', showCategoryBadges }) => (
-  <View style={styles.container}>
-    <Text style={styles.title}>{title}</Text>
-    <FlatList
-      data={items}
-      keyExtractor={(item) => item.id}
-      scrollEnabled={false}
-      renderItem={({ item }) => (
-        <View style={styles.row}>
-          <View style={styles.rowText}>
-            <Text style={styles.ingredientName}>{item.name}</Text>
-            <Text style={styles.quantity}>
-              {[item.quantity, item.unit].filter(Boolean).join(' ')}
-            </Text>
-          </View>
-          {showCategoryBadges && item.category && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{item.category}</Text>
+const IngredientList: React.FC<IngredientListProps> = ({ items, title = 'Ingredients', showCategoryBadges }) => {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>{title}</Text>
+      <View style={styles.listContainer}>
+        {items.map((item) => (
+          <View key={item.id} style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={styles.ingredientName} numberOfLines={0}>
+                {[item.quantity, item.unit, item.name].filter(Boolean).join(' ')}
+              </Text>
             </View>
-          )}
-        </View>
-      )}
-    />
-  </View>
-);
+            {showCategoryBadges && item.category && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{item.category}</Text>
+              </View>
+            )}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -68,15 +66,14 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     marginRight: spacing.sm,
+    flexShrink: 1,
   },
   ingredientName: {
     fontSize: typography.fontSize.md,
     color: colors.text.primary,
   },
-  quantity: {
-    fontSize: typography.fontSize.sm,
-    color: colors.text.secondary,
-    marginTop: 2,
+  listContainer: {
+    width: '100%',
   },
   badge: {
     backgroundColor: colors.tan,
@@ -92,6 +89,3 @@ const styles = StyleSheet.create({
 });
 
 export default IngredientList;
-
-
-

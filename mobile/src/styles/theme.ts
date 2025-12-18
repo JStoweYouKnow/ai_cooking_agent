@@ -137,7 +137,7 @@ export const gradients = {
   olive: ['#77856A', '#8B9A7E'],
   premium: ['#1E2A38', '#2A3A4A'],
   accent: ['#D4C3A9', '#C4B399'],
-};
+} as const;
 
 export const theme = {
   colors,

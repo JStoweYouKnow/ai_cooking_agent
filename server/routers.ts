@@ -45,6 +45,31 @@ async function sendExpoPushNotification(
   }
 }
 
+// Helper function to clean ingredient names (remove "Ingredient:" prefix and normalize)
+function cleanIngredientName(name: string | undefined | null): string {
+  if (!name || typeof name !== "string") return "";
+
+  let cleaned = name.trim();
+
+  // Remove "Ingredient:" or "Ingredient " prefix (case-insensitive, with optional colon)
+  cleaned = cleaned.replace(/^Ingredient:\s*/i, "");
+  cleaned = cleaned.replace(/^Ingredient\s+/i, "");
+
+  // Remove common prefixes that might appear
+  cleaned = cleaned.replace(/^ing:\s*/i, "");
+  cleaned = cleaned.replace(/^ingredient\s*:\s*/i, "");
+
+  // If the cleaned name is just "Ingredient" or empty, return empty string
+  if (cleaned.toLowerCase() === "ingredient" || cleaned.length === 0) {
+    return "";
+  }
+
+  // Clean up extra whitespace (multiple spaces, tabs, etc.)
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+  return cleaned;
+}
+
 // Recipe router
 const recipeRouter = router({
   list: optionalAuthProcedure
@@ -103,7 +128,7 @@ const recipeRouter = router({
         hasOptions ? recipeQueryOptions : undefined
       );
     }),
-  
+
   getRecent: optionalAuthProcedure
     .input(z.object({ limit: z.number().int().positive().optional() }).optional())
     .query(async ({ ctx, input }) => {
@@ -117,7 +142,7 @@ const recipeRouter = router({
     const recipes = await db.getUserRecipes(user.id);
     const ingredients = await db.getUserIngredients(user.id);
     const shoppingLists = await db.getUserShoppingLists(user.id);
-    
+
     const recipeCount = recipes.length;
     const ingredientCount = ingredients.length;
     const shoppingListCount = shoppingLists.length;
@@ -344,7 +369,7 @@ const recipeRouter = router({
           if (!input.autoSave) {
             return { parsed: fallback as unknown };
           }
-          
+
           // Ensure instructions is a string
           let instructionsStr: string | undefined = undefined;
           if (fallback.instructions !== undefined && fallback.instructions !== null) {
@@ -358,13 +383,13 @@ const recipeRouter = router({
               instructionsStr = String(fallback.instructions);
             }
           }
-          
+
           // Ensure description is a string
           const descriptionStr = typeof fallback.description === "string"
             ? fallback.description
             : fallback.description !== undefined && fallback.description !== null
-            ? String(fallback.description)
-            : undefined;
+              ? String(fallback.description)
+              : undefined;
 
           // Try to extract cooking time from instructions if not provided
           let cookingTime = typeof fallback.cookingTime === "number" ? fallback.cookingTime : undefined;
@@ -412,7 +437,13 @@ const recipeRouter = router({
           if (created && Array.isArray(fallback.ingredients)) {
             console.log('[LLM FALLBACK] Saving', fallback.ingredients.length, 'ingredients to recipe', created.id);
             for (const ing of fallback.ingredients) {
-              const ingredient = await db.getOrCreateIngredient(ing.name);
+              // Clean ingredient name before saving
+              const cleanedName = cleanIngredientName(ing.name);
+              if (!cleanedName) {
+                console.log('[LLM FALLBACK] Skipping ingredient with empty name:', ing.name);
+                continue;
+              }
+              const ingredient = await db.getOrCreateIngredient(cleanedName);
               await db.addRecipeIngredient({
                 recipeId: created.id,
                 ingredientId: ingredient.id,
@@ -450,13 +481,13 @@ const recipeRouter = router({
           instructionsStr = String(instructionsValue);
         }
       }
-      
+
       // Ensure description is a string
       const descriptionStr = typeof parsed.description === "string"
         ? parsed.description
         : parsed.description !== undefined && parsed.description !== null
-        ? String(parsed.description)
-        : undefined;
+          ? String(parsed.description)
+          : undefined;
 
       // Try to extract cooking time from instructions if not provided by parser
       let cookingTime = typeof parsed.cookingTime === "number" ? parsed.cookingTime : undefined;
@@ -502,6 +533,11 @@ const recipeRouter = router({
 
       console.log('[INGREDIENT SAVE] Recipe created:', created ? `id=${created.id}` : 'NO RECIPE');
       console.log('[INGREDIENT SAVE] parsed.ingredients:', parsed.ingredients ? `${parsed.ingredients.length} items` : 'NONE');
+      console.log('[INGREDIENT SAVE] Instructions length:', instructionsStr?.length || 0, 'characters');
+      if (instructionsStr && instructionsStr.length > 0) {
+        const stepCount = instructionsStr.split(/\n+/).filter(s => s.trim().length > 0).length;
+        console.log('[INGREDIENT SAVE] Instructions step count:', stepCount);
+      }
       console.log('[INGREDIENT SAVE] Condition check:', {
         hasCreated: !!created,
         hasIngredients: !!parsed.ingredients?.length,
@@ -510,10 +546,25 @@ const recipeRouter = router({
 
       if (created && parsed.ingredients?.length) {
         console.log('[INGREDIENT SAVE] Starting to save', parsed.ingredients.length, 'ingredients to recipe', created.id);
+        console.log('[INGREDIENT SAVE] Sample ingredients:', parsed.ingredients.slice(0, 3).map(ing => ({
+          name: ing.name,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          nameLength: ing.name?.length || 0
+        })));
         let savedCount = 0;
         for (const ing of parsed.ingredients) {
           try {
-            const ingredient = await db.getOrCreateIngredient(ing.name);
+            // Clean ingredient name before saving
+            const cleanedName = cleanIngredientName(ing.name);
+            if (!cleanedName) {
+              console.warn('[INGREDIENT SAVE] Skipping ingredient with empty name after cleaning. Original:', ing.name, 'Parsed:', ing);
+              continue;
+            }
+            if (cleanedName.length < ing.name.length * 0.5) {
+              console.warn('[INGREDIENT SAVE] Ingredient name significantly shortened during cleaning. Original:', ing.name, 'Cleaned:', cleanedName);
+            }
+            const ingredient = await db.getOrCreateIngredient(cleanedName);
             await db.addRecipeIngredient({
               recipeId: created.id,
               ingredientId: ingredient.id,
@@ -521,14 +572,14 @@ const recipeRouter = router({
               unit: ing.unit,
             });
             savedCount++;
-            console.log('[INGREDIENT SAVE] Saved ingredient', savedCount, 'to recipe', created.id, ':', ing.name);
+            console.log('[INGREDIENT SAVE] Saved ingredient', savedCount, 'to recipe', created.id, ':', cleanedName, `(qty: ${ing.quantity || 'none'}, unit: ${ing.unit || 'none'})`);
           } catch (error) {
-            console.error('[INGREDIENT SAVE] ERROR saving ingredient:', ing.name, error);
+            console.error('[INGREDIENT SAVE] ERROR saving ingredient:', ing.name, 'Parsed:', ing, error);
           }
         }
         console.log('[INGREDIENT SAVE] ✓ Successfully saved', savedCount, 'of', parsed.ingredients.length, 'ingredients to recipe', created.id);
       } else {
-        console.log('[INGREDIENT SAVE] ✗ SKIPPED saving ingredients');
+        console.log('[INGREDIENT SAVE] ✗ SKIPPED saving ingredients. Created:', !!created, 'Ingredients count:', parsed.ingredients?.length || 0);
       }
 
       return { id: created?.id || 0 };
@@ -550,9 +601,9 @@ const recipeRouter = router({
     }),
 
   updateTags: optionalAuthProcedure
-    .input(z.object({ 
-      id: z.number().int().positive(), 
-      tags: z.array(z.string().min(1).max(50)).max(20) 
+    .input(z.object({
+      id: z.number().int().positive(),
+      tags: z.array(z.string().min(1).max(50)).max(20)
     }))
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user || await db.getOrCreateAnonymousUser();
@@ -602,7 +653,7 @@ const recipeRouter = router({
               `https://www.themealdb.com/api/json/v1/1/filter.php?i=${encodeURIComponent(ingredient)}`
             );
             const data = (await response.json()) as {
-              meals: Array<{ idMeal: string; [key: string]: unknown }> | null;
+              meals: Array<{ idMeal: string;[key: string]: unknown }> | null;
             };
 
             if (data.meals) {
@@ -754,7 +805,13 @@ const recipeRouter = router({
         // Add ingredients
         if (created) {
           for (const ing of ingredients) {
-            const ingredient = await db.getOrCreateIngredient(ing.name);
+            // Clean ingredient name before saving
+            const cleanedName = cleanIngredientName(ing.name);
+            if (!cleanedName) {
+              console.log('[TheMealDB Import] Skipping ingredient with empty name:', ing.name);
+              continue;
+            }
+            const ingredient = await db.getOrCreateIngredient(cleanedName);
             await db.addRecipeIngredient({
               recipeId: created.id,
               ingredientId: ingredient.id,
@@ -786,9 +843,6 @@ const recipeRouter = router({
 
       const ingredients = await db.getRecipeIngredients(input.recipeId);
       console.log(`[GET INGREDIENTS] Recipe ${input.recipeId}: Found ${ingredients.length} ingredients in database`);
-      if (ingredients.length === 0) {
-        console.log(`[GET INGREDIENTS] WARNING: No ingredients found for recipe ${input.recipeId}`);
-      }
 
       return ingredients;
     }),
@@ -806,7 +860,7 @@ const ingredientRouter = router({
 
   getOrCreate: publicProcedure
     .input(
-      z.object({ 
+      z.object({
         name: z.preprocess(
           (val) => {
             // Handle case where name might be an object (from mobile app bug)
@@ -817,21 +871,21 @@ const ingredientRouter = router({
             return val;
           },
           z.string().min(1).max(255)
-        ), 
-        category: z.string().max(100).optional(), 
-        imageUrl: z.string().url().max(1000).optional() 
+        ),
+        category: z.string().max(100).optional(),
+        imageUrl: z.string().url().max(1000).optional()
       })
     )
     .mutation(async ({ input }) => {
       // Log for debugging
-      console.log('[getOrCreate] Input received:', { 
-        name: input.name, 
+      console.log('[getOrCreate] Input received:', {
+        name: input.name,
         nameType: typeof input.name,
         nameLength: input.name?.length,
         category: input.category,
-        imageUrl: input.imageUrl?.substring(0, 50) 
+        imageUrl: input.imageUrl?.substring(0, 50)
       });
-      
+
       // Validate and trim name
       const trimmedName = input.name?.trim();
       if (!trimmedName || trimmedName.length === 0) {
@@ -840,15 +894,15 @@ const ingredientRouter = router({
       if (trimmedName.length > 255) {
         throw new Error('Ingredient name cannot exceed 255 characters');
       }
-      
+
       const ingredient = await db.getOrCreateIngredient(trimmedName, input.category);
-      
+
       console.log('[getOrCreate] Ingredient created/retrieved:', {
         id: ingredient.id,
         name: ingredient.name,
         category: ingredient.category
       });
-      
+
       // If imageUrl is provided and ingredient doesn't have one, update it
       if (input.imageUrl && !ingredient.imageUrl) {
         await db.updateIngredientImage(ingredient.id, input.imageUrl);
@@ -856,7 +910,7 @@ const ingredientRouter = router({
         console.log('[getOrCreate] Updated ingredient with imageUrl:', updated);
         return updated;
       }
-      
+
       console.log('[getOrCreate] Returning ingredient:', ingredient);
       return ingredient;
     }),
@@ -941,7 +995,7 @@ Return a JSON object with an "ingredients" array. Each ingredient must have name
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
         const parsed = JSON.parse(contentStr);
         const ingredients = parsed.ingredients || [];
-        
+
         // Filter and normalize ingredients
         const validIngredients = ingredients
           .map((ing: any) => {
@@ -952,35 +1006,35 @@ Return a JSON object with an "ingredients" array. Each ingredient must have name
                 if (trimmed.length === 0 || trimmed.length > 255) return null;
                 return { name: trimmed, quantity: '', unit: '' };
               }
-              
+
               // Normalize object format - ensure name is a string
               let name = ing?.name;
-              
+
               // Convert name to string if it's not already
               if (name && typeof name !== 'string') {
                 name = String(name);
               }
-              
+
               // Validate name
               if (!name || typeof name !== 'string' || !name.trim()) {
                 console.warn('[recognizeFromImage] Invalid ingredient name:', ing);
                 return null; // Invalid, will be filtered out
               }
-              
+
               const trimmedName = name.trim();
               if (trimmedName.length === 0 || trimmedName.length > 255) {
                 console.warn('[recognizeFromImage] Ingredient name out of range:', trimmedName);
                 return null;
               }
-              
+
               // Ensure quantity and unit are strings
-              const quantity = (ing.quantity && typeof ing.quantity === 'string' && ing.quantity.trim()) 
-                ? ing.quantity.trim() 
+              const quantity = (ing.quantity && typeof ing.quantity === 'string' && ing.quantity.trim())
+                ? ing.quantity.trim()
                 : '';
-              const unit = (ing.unit && typeof ing.unit === 'string' && ing.unit.trim()) 
-                ? ing.unit.trim() 
+              const unit = (ing.unit && typeof ing.unit === 'string' && ing.unit.trim())
+                ? ing.unit.trim()
                 : '';
-              
+
               return {
                 name: trimmedName,
                 quantity,
@@ -992,29 +1046,29 @@ Return a JSON object with an "ingredients" array. Each ingredient must have name
             }
           })
           .filter((ing: any) => ing !== null && ing.name && typeof ing.name === 'string' && ing.name.length > 0 && ing.name.length <= 255);
-        
+
         console.log(`[recognizeFromImage] Recognized ${validIngredients.length} valid ingredients from ${ingredients.length} total`);
         if (validIngredients.length > 0) {
           console.log('[recognizeFromImage] Sample ingredient:', validIngredients[0]);
           // Final validation - ensure all returned ingredients have string names
-          const finalCheck = validIngredients.every((ing: any) => 
-            ing && 
-            typeof ing === 'object' && 
-            ing.name && 
+          const finalCheck = validIngredients.every((ing: any) =>
+            ing &&
+            typeof ing === 'object' &&
+            ing.name &&
             typeof ing.name === 'string'
           );
           if (!finalCheck) {
             console.error('[recognizeFromImage] WARNING: Some ingredients have invalid name types:', validIngredients);
             // Filter out any that still have invalid names
-            return validIngredients.filter((ing: any) => 
-              ing && 
-              typeof ing === 'object' && 
-              ing.name && 
+            return validIngredients.filter((ing: any) =>
+              ing &&
+              typeof ing === 'object' &&
+              ing.name &&
               typeof ing.name === 'string'
             );
           }
         }
-        
+
         return validIngredients;
       } catch (error) {
         console.error("Error recognizing ingredients from image:", error);
@@ -1117,12 +1171,12 @@ const shoppingListRouter = router({
       try {
         const user = ctx.user || await db.getOrCreateAnonymousUser();
         const createdList = await db.createShoppingList({ ...input, userId: user.id });
-        
+
         // createShoppingList should always return the created list object
         if (!createdList || !('id' in createdList)) {
           throw new Error("Failed to create shopping list: invalid response from database");
         }
-        
+
         return createdList;
       } catch (error: any) {
         console.error("Error creating shopping list:", error);
@@ -1174,27 +1228,27 @@ const shoppingListRouter = router({
         console.log("addItem mutation called with:", input);
         const user = ctx.user || await db.getOrCreateAnonymousUser();
         console.log("User:", { id: user.id, openId: user.openId });
-        
+
         const shoppingList = await db.getShoppingListById(input.shoppingListId);
         if (!shoppingList) {
           console.error("Shopping list not found:", input.shoppingListId);
           throw new Error("Shopping list not found");
         }
         console.log("Shopping list found:", { id: shoppingList.id, userId: shoppingList.userId });
-        
+
         // Verify ownership
         if (shoppingList.userId !== user.id) {
           console.error(`Ownership mismatch: list userId=${shoppingList.userId}, user id=${user.id}`);
           throw new Error("Unauthorized: You can only add items to your own shopping lists");
         }
-        
+
         console.log("Adding item:", {
           shoppingListId: input.shoppingListId,
           ingredientId: input.ingredientId,
           quantity: input.quantity,
           unit: input.unit,
         });
-        
+
         // Verify ingredient exists
         const ingredient = await db.getIngredientById(input.ingredientId);
         if (!ingredient) {
@@ -1202,14 +1256,14 @@ const shoppingListRouter = router({
           throw new Error(`Ingredient with ID ${input.ingredientId} not found`);
         }
         console.log("Ingredient verified:", ingredient.name);
-        
+
         const result = await db.addShoppingListItem({
           shoppingListId: input.shoppingListId,
           ingredientId: input.ingredientId,
           quantity: input.quantity,
           unit: input.unit,
         });
-        
+
         console.log("Item added successfully:", result);
         return result;
       } catch (error: any) {
@@ -1250,7 +1304,7 @@ const shoppingListRouter = router({
     }),
 
   update: optionalAuthProcedure
-    .input(z.object({ 
+    .input(z.object({
       id: z.number().int().positive(),
       name: z.string().min(1).max(255).optional(),
       description: z.string().max(1000).optional(),
@@ -1265,7 +1319,7 @@ const shoppingListRouter = router({
       if (shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only update your own shopping lists");
       }
-      
+
       const updates: { name?: string; description?: string } = {};
       if (input.name !== undefined) {
         updates.name = input.name;
@@ -1273,11 +1327,11 @@ const shoppingListRouter = router({
       if (input.description !== undefined) {
         updates.description = input.description;
       }
-      
+
       if (Object.keys(updates).length === 0) {
         throw new Error("No updates provided");
       }
-      
+
       return db.updateShoppingList(input.id, updates);
     }),
 
@@ -1477,7 +1531,7 @@ const messageRouter = router({
         // Get last message
         const messages = await db.getConversationMessages(conv.id, 1);
         const lastMessage = messages[0] || null;
-        
+
         return {
           ...conv,
           otherUser: otherUser ? { id: otherUser.id, name: otherUser.name, email: otherUser.email } : null,
@@ -1495,10 +1549,10 @@ const messageRouter = router({
       if (!conversation) {
         throw new Error("Conversation not found");
       }
-      
+
       const otherUserId = conversation.user1Id === ctx.user.id ? conversation.user2Id : conversation.user1Id;
       const otherUser = await db.getUserById(otherUserId);
-      
+
       return {
         ...conversation,
         otherUser: otherUser ? { id: otherUser.id, name: otherUser.name, email: otherUser.email } : null,
@@ -1506,7 +1560,7 @@ const messageRouter = router({
     }),
 
   getMessages: protectedProcedure
-    .input(z.object({ 
+    .input(z.object({
       conversationId: z.number().int().positive(),
       limit: z.number().int().positive().max(100).optional(),
     }))
@@ -1516,13 +1570,13 @@ const messageRouter = router({
       if (!conversation) {
         throw new Error("Conversation not found");
       }
-      
+
       const limit = input.limit || 100;
       const messages = await db.getConversationMessages(input.conversationId, limit);
-      
+
       // Mark messages as read when user views them
       await db.markMessagesAsRead(input.conversationId, ctx.user.id);
-      
+
       return messages.reverse(); // Return in chronological order (oldest first)
     }),
 
@@ -1537,9 +1591,9 @@ const messageRouter = router({
       if (!input.conversationId && !input.recipientId) {
         throw new Error("Either conversationId or recipientId must be provided");
       }
-      
+
       let conversationId = input.conversationId;
-      
+
       // If recipientId provided, get or create conversation
       if (input.recipientId) {
         if (input.recipientId === ctx.user.id) {
@@ -1548,17 +1602,17 @@ const messageRouter = router({
         const conversation = await db.getOrCreateConversation(ctx.user.id, input.recipientId);
         conversationId = conversation.id;
       }
-      
+
       if (!conversationId) {
         throw new Error("Conversation not found");
       }
-      
+
       // Verify user has access to conversation
       const conversation = await db.getConversationById(conversationId, ctx.user.id);
       if (!conversation) {
         throw new Error("Conversation not found");
       }
-      
+
       // If recipeId is provided, verify recipe exists and user has access
       if (input.recipeId) {
         const recipe = await db.getRecipeById(input.recipeId);
@@ -1574,14 +1628,14 @@ const messageRouter = router({
           input.content = `🍳 Shared recipe: ${recipe.name}\n\n${input.content}`;
         }
       }
-      
+
       const message = await db.createMessage({
         conversationId,
         senderId: ctx.user.id,
         content: input.content,
         isRead: false,
       });
-      
+
       return message;
     }),
 
@@ -1595,7 +1649,7 @@ const messageRouter = router({
       if (input.recipientId === ctx.user.id) {
         throw new Error("Cannot share recipe with yourself");
       }
-      
+
       // Verify recipe exists and user has access
       const recipe = await db.getRecipeById(input.recipeId);
       if (!recipe) {
@@ -1604,22 +1658,22 @@ const messageRouter = router({
       if (recipe.userId !== ctx.user.id && !recipe.isShared) {
         throw new Error("You can only share your own recipes or shared recipes");
       }
-      
+
       // Get or create conversation
       const conversation = await db.getOrCreateConversation(ctx.user.id, input.recipientId);
-      
+
       // Create message with recipe share
-      const shareMessage = input.message 
+      const shareMessage = input.message
         ? `🍳 Shared recipe: ${recipe.name}\n\n${input.message}`
         : `🍳 Shared recipe: ${recipe.name}\n\nCheck out this recipe!`;
-      
+
       const message = await db.createMessage({
         conversationId: conversation.id,
         senderId: ctx.user.id,
         content: shareMessage,
         isRead: false,
       });
-      
+
       return { message, conversationId: conversation.id };
     }),
 
@@ -1630,7 +1684,7 @@ const messageRouter = router({
     .query(async ({ ctx, input }) => {
       const dbInstance = await db.getDb();
       if (!dbInstance) throw new Error("Database not available");
-      
+
       // Search users by name or email (excluding current user)
       const results = await dbInstance
         .select({
@@ -1649,7 +1703,7 @@ const messageRouter = router({
           )
         )
         .limit(20);
-      
+
       return results;
     }),
 
@@ -1705,14 +1759,14 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
         typeof rawContent === "string"
           ? rawContent
           : Array.isArray(rawContent)
-          ? rawContent
+            ? rawContent
               .map((part) => {
                 if (typeof part === "string") return part;
                 if ("text" in part) return part.text;
                 return "";
               })
               .join("\n")
-          : "";
+            : "";
 
       return { reply: reply.trim() };
     }),
@@ -1909,15 +1963,15 @@ const userRouter = router({
     if (!userData) {
       throw new Error("User not found");
     }
-    
+
     return {
-      dietaryPreferences: userData.dietaryPreferences 
+      dietaryPreferences: userData.dietaryPreferences
         ? JSON.parse(userData.dietaryPreferences) as string[]
         : [],
-      allergies: userData.allergies 
+      allergies: userData.allergies
         ? JSON.parse(userData.allergies) as string[]
         : [],
-      goals: userData.goals 
+      goals: userData.goals
         ? JSON.parse(userData.goals) as Record<string, unknown>
         : null,
       calorieBudget: userData.calorieBudget ?? null,
@@ -1941,19 +1995,19 @@ const userRouter = router({
         goals: input.goals,
         calorieBudget: input.calorieBudget,
       });
-      
+
       if (!updated) {
         throw new Error("Failed to update preferences");
       }
-      
+
       return {
-        dietaryPreferences: updated.dietaryPreferences 
+        dietaryPreferences: updated.dietaryPreferences
           ? JSON.parse(updated.dietaryPreferences) as string[]
           : [],
-        allergies: updated.allergies 
+        allergies: updated.allergies
           ? JSON.parse(updated.allergies) as string[]
           : [],
-        goals: updated.goals 
+        goals: updated.goals
           ? JSON.parse(updated.goals) as Record<string, unknown>
           : null,
         calorieBudget: updated.calorieBudget ?? null,
@@ -1967,7 +2021,7 @@ export const appRouter = router({
     me: publicProcedure.query((opts) => {
       const user = opts.ctx.user;
       const authHeader = opts.ctx.req.headers.authorization || (opts.ctx.req.headers as Record<string, unknown>)["Authorization"];
-      
+
       if (!user) {
         console.log("[Auth.me] No user in context - authentication may have failed");
         console.log("[Auth.me] Auth header present:", !!authHeader);

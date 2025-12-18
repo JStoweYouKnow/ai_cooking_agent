@@ -216,19 +216,19 @@ const IngredientsScreen: React.FC = () => {
       // Launch image picker
       const result = fromCamera
         ? await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 0.8,
-            base64: true,
-          })
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+          base64: true,
+        })
         : await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 0.8,
-            base64: true,
-          });
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+          base64: true,
+        });
 
       if (result.canceled) {
         console.log("[IngredientsScreen] User canceled image picker");
@@ -251,11 +251,11 @@ const IngredientsScreen: React.FC = () => {
         console.warn("[IngredientsScreen] Image selected but base64 not available, will try to upload URI");
       }
 
-      setSelectedImage({ 
-        uri: asset.uri, 
-        base64: asset.base64 || undefined 
+      setSelectedImage({
+        uri: asset.uri,
+        base64: asset.base64 || undefined
       });
-      
+
       console.log("[IngredientsScreen] Image selected successfully:", {
         uri: asset.uri.substring(0, 50) + "...",
         hasBase64: !!asset.base64,
@@ -292,7 +292,7 @@ const IngredientsScreen: React.FC = () => {
       // Handle both old format (array of strings) and new format (array of objects)
       for (const item of recognized) {
         let name: string | undefined;
-        
+
         // Extract name with proper type checking
         if (typeof item === 'string') {
           name = item;
@@ -306,61 +306,61 @@ const IngredientsScreen: React.FC = () => {
             name = String(nameValue);
           }
         }
-        
+
         // Skip if name is invalid
         if (!name || typeof name !== 'string' || !name.trim()) {
           console.warn('[IngredientsScreen] Skipping invalid ingredient:', item, 'extracted name:', name);
           continue;
         }
-        
+
         const trimmedName = name.trim();
-        
+
         // Double-check it's still valid after trimming
         if (trimmedName.length === 0 || trimmedName.length > 255) {
           console.warn('[IngredientsScreen] Skipping ingredient with invalid name length:', trimmedName);
           continue;
         }
-        
+
         // Handle empty strings - convert to undefined for optional fields
-        const quantity = typeof item === 'object' && item.quantity && typeof item.quantity === 'string' && item.quantity.trim() 
-          ? item.quantity.trim() 
+        const quantity = typeof item === 'object' && item.quantity && typeof item.quantity === 'string' && item.quantity.trim()
+          ? item.quantity.trim()
           : undefined;
-        const unit = typeof item === 'object' && item.unit && typeof item.unit === 'string' && item.unit.trim() 
-          ? item.unit.trim() 
+        const unit = typeof item === 'object' && item.unit && typeof item.unit === 'string' && item.unit.trim()
+          ? item.unit.trim()
           : undefined;
-        
+
         try {
           // Final safety check - ensure trimmedName is definitely a string
           if (typeof trimmedName !== 'string') {
             console.error('[IngredientsScreen] FATAL: trimmedName is not a string:', typeof trimmedName, trimmedName, 'item:', item);
             continue;
           }
-          
+
           // Create a clean object with only string values
-          const apiPayload = { 
+          const apiPayload = {
             name: String(trimmedName) // Force string conversion as final safety
           };
-          
+
           console.log('[IngredientsScreen] Calling getOrCreate with payload:', apiPayload);
           const ingredient = await getOrCreateMutation.mutateAsync(apiPayload);
-          
+
           console.log('[IngredientsScreen] getOrCreate returned:', {
             id: ingredient.id,
             name: ingredient.name,
             category: ingredient.category
           });
-          
+
           if (!ingredient || !ingredient.id) {
             console.error('[IngredientsScreen] Invalid ingredient returned from getOrCreate:', ingredient);
             continue;
           }
-          
-          await addToUserListMutation.mutateAsync({ 
+
+          await addToUserListMutation.mutateAsync({
             ingredientId: ingredient.id,
             quantity: quantity,
             unit: unit,
           });
-          
+
           console.log('[IngredientsScreen] Successfully added ingredient to user list:', ingredient.name);
         } catch (error: any) {
           console.error(`[IngredientsScreen] Failed to add ingredient "${trimmedName}":`, error);
@@ -403,7 +403,7 @@ const IngredientsScreen: React.FC = () => {
           <Text style={styles.ingredientAvatarText}>{item.name[0]?.toUpperCase()}</Text>
         </View>
         <View style={{ flex: 1, paddingRight: spacing.sm }}>
-          <Text style={styles.ingredientName} numberOfLines={2} ellipsizeMode="tail">{item.name}</Text>
+          <Text style={styles.ingredientName}>{item.name}</Text>
           <View style={styles.quantityRow}>
             <View style={styles.quantityControls}>
               <TouchableOpacity
@@ -498,14 +498,14 @@ const IngredientsScreen: React.FC = () => {
       contentContainerStyle={{ paddingBottom: spacing.xxl, gap: spacing.sm }}
       renderItem={renderIngredientCard}
       ListEmptyComponent={
-        !pantryLoading && (
+        !pantryLoading ? (
           <EmptyState
             title="No ingredients"
             description="Add items manually or use the camera to populate your pantry."
             primaryActionLabel="Add Ingredient"
             onPrimaryAction={() => setIsAddModalVisible(true)}
           />
-        )
+        ) : null
       }
     />
   );
