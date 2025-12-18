@@ -141,6 +141,392 @@ function toText(value: unknown): string | null {
 }
 
 /**
+ * Extract text content from an instruction object/step
+ * Handles various JSON-LD formats including HowToStep schema
+ */
+function extractInstructionText(step: any): string | null {
+	if (!step) return null;
+	
+	// If it's already a string, return it
+	if (typeof step === "string") {
+		return step.trim() || null;
+	}
+	
+	// If it's an object, try to extract text from various properties
+	if (typeof step === "object" && step !== null) {
+		// Check for direct text properties (most common)
+		if (step.text && typeof step.text === "string") {
+			return step.text.trim() || null;
+		}
+		if (step.name && typeof step.name === "string") {
+			return step.name.trim() || null;
+		}
+		
+		// Handle HowToStep schema with itemListElement
+		if (step.itemListElement) {
+			if (Array.isArray(step.itemListElement)) {
+				// Extract text from each element in the array
+				const texts = step.itemListElement
+					.map((elem: any) => {
+						if (typeof elem === "string") return elem;
+						if (typeof elem === "object" && elem !== null) {
+							return elem.text || elem.name || elem.itemListElement?.text || null;
+						}
+						return null;
+					})
+					.filter((t: any): t is string => typeof t === "string" && t.trim().length > 0);
+				if (texts.length > 0) {
+					return texts.join(" ");
+				}
+			} else if (typeof step.itemListElement === "object") {
+				const elemText = step.itemListElement.text || step.itemListElement.name;
+				if (typeof elemText === "string") {
+					return elemText.trim() || null;
+				}
+			}
+		}
+		
+		// Handle HowToStep with @type
+		if (step["@type"] === "HowToStep" || (Array.isArray(step["@type"]) && step["@type"].includes("HowToStep"))) {
+			// Try text property first
+			if (step.text && typeof step.text === "string") {
+				return step.text.trim() || null;
+			}
+			// Try name property
+			if (step.name && typeof step.name === "string") {
+				return step.name.trim() || null;
+			}
+		}
+		
+		// Last resort: try to find any string property
+		for (const key of ["text", "name", "description", "instructionText", "stepText"]) {
+			if (step[key] && typeof step[key] === "string" && step[key].trim()) {
+				return step[key].trim();
+			}
+		}
+		
+		// If all else fails, don't use JSON.stringify as it can truncate
+		// Instead, return null to skip this step
+		return null;
+	}
+	
+	// For other types, convert to string but filter out invalid values
+	const str = String(step || "");
+	return str.trim() && str !== "[object Object]" ? str.trim() : null;
+}
+
+/**
+ * Extract text content from an ingredient object/item
+ * Handles various JSON-LD formats including Ingredient schema
+ * Recursively extracts text from nested structures to preserve complete ingredient text
+ */
+function extractIngredientText(item: any): string | null {
+	if (!item) return null;
+	
+	// If it's already a string, return it (preserve all content including special chars)
+	if (typeof item === "string") {
+		return item.trim() || null;
+	}
+	
+	// If it's an object, try to extract text from various properties
+	if (typeof item === "object" && item !== null) {
+		// PRIORITY 1: Check itemListElement first (often contains complete text in structured formats)
+		// This must come before text/name checks to avoid truncation when itemListElement has full text
+		if (item.itemListElement) {
+			if (Array.isArray(item.itemListElement)) {
+				// Recursively extract text from each element in the array
+				// This handles cases where ingredient text is split across multiple array elements
+				const texts = item.itemListElement
+					.map((elem: any) => {
+						// Recursively call extractIngredientText to handle nested structures
+						// This will extract from nested itemListElement, text, name, etc.
+						return extractIngredientText(elem);
+					})
+					.filter((t: string | null): t is string => t !== null && t.trim().length > 0);
+				if (texts.length > 0) {
+					// Join with space to preserve complete ingredient text
+					// This reconstructs "Salt and pepper" from ["Salt", "and", "pepper"]
+					const joined = texts.join(" ");
+					// If we got text from itemListElement, prefer it over direct text/name
+					// But also check if direct text/name is longer (might be more complete)
+					const directText = (item.text && typeof item.text === "string") ? item.text.trim() : null;
+					const directName = (item.name && typeof item.name === "string") ? item.name.trim() : null;
+					
+					// Use the longest text to ensure we get the complete ingredient
+					const candidates = [joined, directText, directName].filter((t): t is string => t !== null && t.length > 0);
+					if (candidates.length > 0) {
+						// Return the longest candidate (most likely to be complete)
+						return candidates.reduce((longest, current) => current.length > longest.length ? current : longest);
+					}
+					return joined;
+				}
+			} else if (typeof item.itemListElement === "object") {
+				// Recursively extract from nested object
+				const elemText = extractIngredientText(item.itemListElement);
+				if (elemText) {
+					// Also check if direct text/name exists and might be more complete
+					const directText = (item.text && typeof item.text === "string") ? item.text.trim() : null;
+					const directName = (item.name && typeof item.name === "string") ? item.name.trim() : null;
+					
+					// Use the longest text
+					const candidates = [elemText, directText, directName].filter((t): t is string => t !== null && t.length > 0);
+					if (candidates.length > 0) {
+						return candidates.reduce((longest, current) => current.length > longest.length ? current : longest);
+					}
+					return elemText;
+				}
+			} else if (typeof item.itemListElement === "string") {
+				// Direct string value - also check if text/name is longer
+				const itemListText = item.itemListElement.trim();
+				const directText = (item.text && typeof item.text === "string") ? item.text.trim() : null;
+				const directName = (item.name && typeof item.name === "string") ? item.name.trim() : null;
+				
+				const candidates = [itemListText, directText, directName].filter((t): t is string => t !== null && t.length > 0);
+				if (candidates.length > 0) {
+					return candidates.reduce((longest, current) => current.length > longest.length ? current : longest);
+				}
+				return itemListText || null;
+			}
+		}
+		
+		// PRIORITY 2: Fall back to direct text properties (only if itemListElement didn't yield results)
+		if (item.text && typeof item.text === "string") {
+			return item.text.trim() || null;
+		}
+		if (item.name && typeof item.name === "string") {
+			return item.name.trim() || null;
+		}
+		
+		// Handle Ingredient schema with @type (also prioritize itemListElement if present)
+		if (item["@type"] === "Ingredient" || (Array.isArray(item["@type"]) && item["@type"].includes("Ingredient"))) {
+			// itemListElement already checked above, so just try text/name as fallback
+			if (item.text && typeof item.text === "string") {
+				return item.text.trim() || null;
+			}
+			if (item.name && typeof item.name === "string") {
+				return item.name.trim() || null;
+			}
+		}
+		
+		// Try other common ingredient properties
+		for (const key of ["text", "name", "description", "ingredientName", "itemName"]) {
+			if (item[key] && typeof item[key] === "string" && item[key].trim()) {
+				return item[key].trim();
+			}
+		}
+		
+		// If all else fails, don't use String(item) or JSON.stringify as they can truncate
+		// Instead, return null to skip this ingredient
+		return null;
+	}
+	
+	// For other types, convert to string but filter out invalid values
+	const str = String(item || "");
+	return str.trim() && str !== "[object Object]" ? str.trim() : null;
+}
+
+/**
+ * Comprehensive unit dictionary for cooking measurements
+ * Includes volume, weight, and count units
+ */
+const COOKING_UNITS = new Set([
+	// Volume units
+	"cup", "cups", "c",
+	"tablespoon", "tablespoons", "tbsp", "tbs", "T",
+	"teaspoon", "teaspoons", "tsp", "t",
+	"fluid ounce", "fluid ounces", "fl oz", "fl. oz.",
+	"milliliter", "milliliters", "ml",
+	"liter", "liters", "l",
+	"gallon", "gallons", "gal",
+	"pint", "pints", "pt",
+	"quart", "quarts", "qt",
+	// Weight units
+	"pound", "pounds", "lb", "lbs", "#",
+	"ounce", "ounces", "oz",
+	"gram", "grams", "g",
+	"kilogram", "kilograms", "kg",
+	// Count units
+	"piece", "pieces", "pc", "pcs",
+	"slice", "slices",
+	"clove", "cloves",
+	"head", "heads",
+	"bunch", "bunches",
+	"can", "cans",
+	"package", "packages", "pkg", "pkgs",
+	"container", "containers",
+	"bottle", "bottles",
+	"jar", "jars",
+	"box", "boxes",
+]);
+
+/**
+ * Parse an ingredient line into quantity, unit, and name
+ * Handles fractional quantities, ranges, and complex ingredient names
+ * 
+ * Examples:
+ * - "1 1/2 cups flour" → { quantity: "1 1/2", unit: "cups", name: "flour" }
+ * - "3 to 4 tablespoons olive oil" → { quantity: "3 to 4", unit: "tablespoons", name: "olive oil" }
+ * - "1/4 cup butter" → { quantity: "1/4", unit: "cup", name: "butter" }
+ * - "salt" → { name: "salt" }
+ * - "2 eggs" → { quantity: "2", name: "eggs" }
+ */
+function parseIngredientLine(line: string): ParsedIngredient {
+	const trimmed = line.trim();
+	if (!trimmed) {
+		return { name: trimmed };
+	}
+
+	// Pattern to match fractional quantities: "1/2", "1 1/2", "2 3/4", etc.
+	// This pattern matches fractions with optional whole number prefix
+	// The (\d+\s*)? allows for optional whole number with optional space
+	const fractionalPattern = /^(\d+\s*)?\d+\/\d+/;
+	// Pattern to match ranges: "3 to 4", "2-3", "1 or 2", etc.
+	// Capture the separator to preserve original format
+	const rangePattern = /^(\d+(?:\s*\/\s*\d+)?)\s*(to|-|or)\s*(\d+(?:\s*\/\s*\d+)?)/i;
+	// Pattern to match simple numbers: "2", "1.5", etc.
+	const numberPattern = /^(\d+(?:\.\d+)?)/;
+
+	// Try to match a range first (e.g., "3 to 4 cups" or "2-3 cloves")
+	const rangeMatch = trimmed.match(rangePattern);
+	if (rangeMatch) {
+		const rangeStart = rangeMatch[1].trim();
+		const rangeEnd = rangeMatch[3].trim();
+		const separator = rangeMatch[2].toLowerCase() === "to" ? "to" : rangeMatch[2].toLowerCase() === "or" ? "or" : "-";
+		const quantity = `${rangeStart} ${separator} ${rangeEnd}`;
+		const afterRange = trimmed.substring(rangeMatch[0].length).trim();
+		
+		// Check if next word(s) are a unit
+		const words = afterRange.split(/\s+/);
+		if (words.length > 0) {
+			const firstWord = words[0].toLowerCase();
+			const secondWord = words.length > 1 ? `${firstWord} ${words[1].toLowerCase()}` : null;
+			
+			// Check for two-word units (e.g., "fluid ounce")
+			if (secondWord && COOKING_UNITS.has(secondWord)) {
+				const unit = words.slice(0, 2).join(" ");
+				const name = words.slice(2).join(" ");
+				// Ensure name is never empty - if no name found, use the full original line
+				return {
+					quantity,
+					unit,
+					name: name.trim() || trimmed,
+				};
+			}
+			
+			// Check for single-word unit
+			if (COOKING_UNITS.has(firstWord)) {
+				const unit = words[0];
+				const name = words.slice(1).join(" ");
+				// Ensure name is never empty - if no name found, use the full original line
+				return {
+					quantity,
+					unit,
+					name: name.trim() || trimmed,
+				};
+			}
+		}
+		
+		// If no unit found after range, treat the range as quantity and rest as name
+		// Ensure we always have a name - use full line if afterRange is empty
+		return {
+			quantity,
+			name: afterRange || trimmed,
+		};
+	}
+
+	// Try to match fractional quantity (e.g., "1 1/2 cups")
+	const fractionalMatch = trimmed.match(fractionalPattern);
+	if (fractionalMatch) {
+		const fractionalPart = fractionalMatch[0];
+		const afterFraction = trimmed.substring(fractionalPart.length).trim();
+		const words = afterFraction.split(/\s+/);
+		
+		if (words.length > 0) {
+			const firstWord = words[0].toLowerCase();
+			const secondWord = words.length > 1 ? `${firstWord} ${words[1].toLowerCase()}` : null;
+			
+			// Check for two-word units
+			if (secondWord && COOKING_UNITS.has(secondWord)) {
+				const unit = words.slice(0, 2).join(" ");
+				const name = words.slice(2).join(" ");
+				// Ensure name is never empty
+				return {
+					quantity: fractionalPart.trim(),
+					unit,
+					name: name.trim() || trimmed,
+				};
+			}
+			
+			// Check for single-word unit
+			if (COOKING_UNITS.has(firstWord)) {
+				const unit = words[0];
+				const name = words.slice(1).join(" ");
+				// Ensure name is never empty
+				return {
+					quantity: fractionalPart.trim(),
+					unit,
+					name: name.trim() || trimmed,
+				};
+			}
+		}
+		
+		// If no unit found, treat fractional as quantity and rest as name
+		// Ensure we always have a name
+		return {
+			quantity: fractionalPart.trim(),
+			name: afterFraction.trim() || trimmed,
+		};
+	}
+
+	// Try to match simple number (e.g., "2 cups flour")
+	const numberMatch = trimmed.match(numberPattern);
+	if (numberMatch) {
+		const quantity = numberMatch[1];
+		const afterNumber = trimmed.substring(numberMatch[0].length).trim();
+		const words = afterNumber.split(/\s+/);
+		
+		if (words.length > 0) {
+			const firstWord = words[0].toLowerCase();
+			const secondWord = words.length > 1 ? `${firstWord} ${words[1].toLowerCase()}` : null;
+			
+			// Check for two-word units
+			if (secondWord && COOKING_UNITS.has(secondWord)) {
+				const unit = words.slice(0, 2).join(" ");
+				const name = words.slice(2).join(" ");
+				// Ensure name is never empty
+				return {
+					quantity,
+					unit,
+					name: name.trim() || trimmed,
+				};
+			}
+			
+			// Check for single-word unit
+			if (COOKING_UNITS.has(firstWord)) {
+				const unit = words[0];
+				const name = words.slice(1).join(" ");
+				// Ensure name is never empty
+				return {
+					quantity,
+					unit,
+					name: name.trim() || trimmed,
+				};
+			}
+		}
+		
+		// If no unit found, treat number as quantity and rest as name
+		// Ensure we always have a name
+		return {
+			quantity,
+			name: afterNumber.trim() || trimmed,
+		};
+	}
+
+	// No quantity/unit found - return as name only
+	return { name: trimmed };
+}
+
+/**
  * Extract image URL from HTML meta tags (og:image, twitter:image, etc.)
  */
 function extractImageFromMetaTags(html: string, baseUrl: string): string | null {
@@ -239,24 +625,39 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 		let instructions: string | null = null;
 		if (recipe.recipeInstructions) {
 			if (typeof recipe.recipeInstructions === "string") {
-				instructions = recipe.recipeInstructions;
+				instructions = recipe.recipeInstructions.trim() || null;
+				console.log(`[RECIPE PARSE] Instructions (string): length=${instructions?.length || 0}`);
 			} else if (Array.isArray(recipe.recipeInstructions)) {
-				instructions = recipe.recipeInstructions
-					.map((s: any) => {
-						if (typeof s === "string") return s;
-						if (typeof s === "object" && s !== null) {
-							return s.text || s.name || s.itemListElement || JSON.stringify(s);
+				// Extract text from each instruction step, preserving all content
+				console.log(`[RECIPE PARSE] Instructions (array): count=${recipe.recipeInstructions.length}`);
+				const instructionTexts = recipe.recipeInstructions
+					.map((s: any, idx: number) => {
+						const text = extractInstructionText(s);
+						if (!text) {
+							console.warn(`[RECIPE PARSE] Instruction ${idx} could not be extracted:`, typeof s === "object" ? Object.keys(s) : s);
 						}
-						return String(s || "");
+						return text;
 					})
-					.filter(Boolean)
-					.join("\n");
+					.filter((text: string | null): text is string => text !== null && text.length > 0);
+				
+				if (instructionTexts.length > 0) {
+					instructions = instructionTexts.join("\n");
+					console.log(`[RECIPE PARSE] Instructions extracted: ${instructionTexts.length} steps, total length=${instructions.length}`);
+				} else {
+					console.warn(`[RECIPE PARSE] No instruction text could be extracted from ${recipe.recipeInstructions.length} items`);
+					instructions = null;
+				}
 			} else if (typeof recipe.recipeInstructions === "object") {
-				// Handle single object with text property
-				instructions = (recipe.recipeInstructions as any).text || JSON.stringify(recipe.recipeInstructions);
+				// Handle single object (could be HowToStep or similar)
+				instructions = extractInstructionText(recipe.recipeInstructions);
+				console.log(`[RECIPE PARSE] Instructions (object): length=${instructions?.length || 0}`);
 			} else {
-				instructions = String(recipe.recipeInstructions);
+				const str = String(recipe.recipeInstructions);
+				instructions = str.trim() || null;
+				console.log(`[RECIPE PARSE] Instructions (other): length=${instructions?.length || 0}`);
 			}
+		} else {
+			console.log(`[RECIPE PARSE] No recipeInstructions found`);
 		}
 		
 		// Extract image from JSON-LD (preferred if available)
@@ -294,30 +695,62 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | nu
 				: null;
 		const ingredients: ParsedIngredient[] | undefined = Array.isArray(recipe.recipeIngredient)
 			? recipe.recipeIngredient
-					.map((item: any): ParsedIngredient | null => {
-						// Extract string from item (handle both string and object cases)
-						let line: string;
-						if (typeof item === "string") {
-							line = item;
-						} else if (typeof item === "object" && item !== null) {
-							// Try to extract text from common object properties
-							line = item.text || item.name || item.itemListElement || String(item);
-						} else {
-							line = String(item);
+					.map((item: any, idx: number): ParsedIngredient | null => {
+						// Log original item structure for debugging
+						const originalItemType = typeof item;
+						const originalItemKeys = typeof item === "object" && item !== null ? Object.keys(item) : [];
+						console.log(`[RECIPE PARSE] Ingredient ${idx}: type=${originalItemType}, keys=[${originalItemKeys.join(", ")}]`);
+						
+						// Log itemListElement structure if present
+						if (item && typeof item === "object" && item.itemListElement) {
+							if (Array.isArray(item.itemListElement)) {
+								console.log(`[RECIPE PARSE] Ingredient ${idx} itemListElement: array with ${item.itemListElement.length} elements`);
+								item.itemListElement.slice(0, 3).forEach((elem: any, i: number) => {
+									console.log(`[RECIPE PARSE] Ingredient ${idx} itemListElement[${i}]:`, 
+										typeof elem === "string" ? `"${elem}"` : 
+										typeof elem === "object" ? JSON.stringify(elem).substring(0, 100) : elem);
+								});
+							} else {
+								console.log(`[RECIPE PARSE] Ingredient ${idx} itemListElement:`, 
+									typeof item.itemListElement === "string" ? `"${item.itemListElement}"` :
+									JSON.stringify(item.itemListElement).substring(0, 100));
+							}
 						}
-
-						// Skip empty or invalid ingredient lines
-						const trimmed = line.trim();
-						if (!trimmed || trimmed === "[object Object]") {
+						
+						// Log direct text/name if present
+						if (item && typeof item === "object") {
+							if (item.text) console.log(`[RECIPE PARSE] Ingredient ${idx} item.text: "${item.text}"`);
+							if (item.name) console.log(`[RECIPE PARSE] Ingredient ${idx} item.name: "${item.name}"`);
+						}
+						
+						// Extract complete ingredient text using robust extraction function
+						const extractedText = extractIngredientText(item);
+						
+						// Log extraction result
+						if (extractedText) {
+							console.log(`[RECIPE PARSE] Ingredient ${idx} extracted: length=${extractedText.length}, text="${extractedText}"`);
+						} else {
+							console.warn(`[RECIPE PARSE] Ingredient ${idx} extraction failed. Original item:`, 
+								typeof item === "object" ? JSON.stringify(item).substring(0, 300) : item);
 							return null;
 						}
 
-						// naive split "quantity unit name"
-						const parts = trimmed.split(/\s+/);
-						if (parts.length <= 1) return { name: trimmed };
-						const quantity = parts.shift();
-						const unit = parts.shift();
-						return { name: parts.join(" "), quantity, unit };
+						// Skip empty or invalid ingredient lines
+						const trimmed = extractedText.trim();
+						if (!trimmed) {
+							console.warn(`[RECIPE PARSE] Ingredient ${idx} is empty after trimming`);
+							return null;
+						}
+
+						// Use enhanced parser to handle fractions, ranges, and units correctly
+						const parsed = parseIngredientLine(trimmed);
+						if (!parsed.name || parsed.name.trim().length === 0) {
+							console.warn(`[RECIPE PARSE] Parsed ingredient ${idx} has empty name. Original: "${trimmed}", Parsed:`, parsed);
+							// Fallback: use original line as name
+							return { name: trimmed };
+						}
+						console.log(`[RECIPE PARSE] Parsed ingredient ${idx}: "${trimmed}" -> quantity="${parsed.quantity || ''}", unit="${parsed.unit || ''}", name="${parsed.name}"`);
+						return parsed;
 					})
 					.filter((ing: ParsedIngredient | null): ing is ParsedIngredient => ing !== null && ing.name.trim().length > 0)
 			: undefined;
