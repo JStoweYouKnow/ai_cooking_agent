@@ -1421,10 +1421,12 @@ export async function getAllRecipeIngredients(recipeId: number): Promise<Array<{
 
   // 1. Get ingredients from junction table
   const junctionIngredients = await db.select().from(recipeIngredients).where(eq(recipeIngredients.recipeId, recipeId));
+  const junctionIngredientIds = new Set<number>();
 
   for (const ri of junctionIngredients) {
     const ingredient = await getIngredientById(ri.ingredientId);
     if (ingredient) {
+      junctionIngredientIds.add(ri.ingredientId);
       result.push({
         ingredientId: ri.ingredientId,
         ingredientName: ingredient.name,
@@ -1434,24 +1436,27 @@ export async function getAllRecipeIngredients(recipeId: number): Promise<Array<{
     }
   }
 
-  // 2. If no junction ingredients, check the JSONB column
-  if (result.length === 0) {
-    const recipe = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1);
-    if (recipe[0] && recipe[0].ingredients) {
-      const jsonbIngredients = recipe[0].ingredients as Array<{
-        name?: string;
-        ingredient?: string;
-        raw?: string;
-        quantity?: string | number | null;
-        unit?: string | null;
-      }>;
+  // 2. Also check the JSONB column for any ingredients not in junction table
+  // This handles cases where ingredients were saved to JSONB but not junction table
+  const recipe = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1);
+  if (recipe[0] && recipe[0].ingredients) {
+    const jsonbIngredients = recipe[0].ingredients as Array<{
+      name?: string;
+      ingredient?: string;
+      raw?: string;
+      quantity?: string | number | null;
+      unit?: string | null;
+    }>;
 
-      for (const ing of jsonbIngredients) {
-        // Check for 'name' first (new format from parseFromUrl), then fall back to 'ingredient' or 'raw' (old format)
-        const ingredientName = ing.name || ing.ingredient || ing.raw || 'Unknown';
-        if (ingredientName && ingredientName !== 'Unknown') {
-          // Get or create the ingredient in the ingredients table
-          const ingredient = await getOrCreateIngredient(ingredientName);
+    for (const ing of jsonbIngredients) {
+      // Check for 'name' first (new format from parseFromUrl), then fall back to 'ingredient' or 'raw' (old format)
+      const ingredientName = ing.name || ing.ingredient || ing.raw || 'Unknown';
+      if (ingredientName && ingredientName !== 'Unknown') {
+        // Get or create the ingredient in the ingredients table
+        const ingredient = await getOrCreateIngredient(ingredientName);
+        
+        // Only add if not already in junction table (avoid duplicates)
+        if (!junctionIngredientIds.has(ingredient.id)) {
           result.push({
             ingredientId: ingredient.id,
             ingredientName: ingredient.name,

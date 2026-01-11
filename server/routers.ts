@@ -1211,7 +1211,26 @@ const shoppingListRouter = router({
       if (shoppingList.userId !== user.id) {
         throw new Error("Unauthorized: You can only view items from your own shopping lists");
       }
-      return db.getShoppingListItems(input.id);
+      const items = await db.getShoppingListItems(input.id);
+      
+      // Enrich items with ingredient details and purchase quantities
+      const { convertToPurchaseQuantity } = await import("../utils/measurementConverter");
+      const enrichedItems = await Promise.all(
+        items.map(async (item) => {
+          const ingredient = await db.getIngredientById(item.ingredientId);
+          const purchaseQty = ingredient
+            ? convertToPurchaseQuantity(item.quantity, item.unit, ingredient.name)
+            : null;
+          
+          return {
+            ...item,
+            ingredient: ingredient || null,
+            purchaseQuantity: purchaseQty,
+          };
+        })
+      );
+      
+      return enrichedItems;
     }),
 
   addItem: optionalAuthProcedure

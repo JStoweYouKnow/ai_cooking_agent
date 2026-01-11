@@ -326,14 +326,18 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                           </TouchableOpacity>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.itemName}>{item.ingredientName || "Ingredient"}</Text>
-                            {(item.quantity || item.unit) ? (
+                            {item.purchaseQuantity?.displayText ? (
                               <Text style={styles.itemMeta}>
-                                {(() => {
-                                  const parts = [];
-                                  if (item.quantity) parts.push(String(item.quantity));
-                                  if (item.unit) parts.push(String(item.unit));
-                                  return parts.join(" ");
-                                })()}
+                                Buy: {item.purchaseQuantity.displayText}
+                                {(item.quantity || item.unit) && (
+                                  <Text style={styles.itemMetaSecondary}>
+                                    {" "}(recipe: {[item.quantity, item.unit].filter(Boolean).join(" ")})
+                                  </Text>
+                                )}
+                              </Text>
+                            ) : (item.quantity || item.unit) ? (
+                              <Text style={styles.itemMeta}>
+                                {[item.quantity, item.unit].filter(Boolean).join(" ")}
                               </Text>
                             ) : null}
                           </View>
@@ -368,14 +372,18 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                             <Text style={[styles.itemName, styles.completedText]}>
                               {item.ingredientName || "Ingredient"}
                             </Text>
-                            {(item.quantity || item.unit) ? (
+                            {item.purchaseQuantity?.displayText ? (
                               <Text style={[styles.itemMeta, styles.completedText]}>
-                                {(() => {
-                                  const parts = [];
-                                  if (item.quantity) parts.push(String(item.quantity));
-                                  if (item.unit) parts.push(String(item.unit));
-                                  return parts.join(" ");
-                                })()}
+                                Buy: {item.purchaseQuantity.displayText}
+                                {(item.quantity || item.unit) && (
+                                  <Text style={[styles.itemMetaSecondary, styles.completedText]}>
+                                    {" "}(recipe: {[item.quantity, item.unit].filter(Boolean).join(" ")})
+                                  </Text>
+                                )}
+                              </Text>
+                            ) : (item.quantity || item.unit) ? (
+                              <Text style={[styles.itemMeta, styles.completedText]}>
+                                {[item.quantity, item.unit].filter(Boolean).join(" ")}
                               </Text>
                             ) : null}
                           </View>
@@ -637,6 +645,11 @@ const styles = StyleSheet.create({
   itemMeta: {
     color: colors.text.secondary,
     fontSize: typography.fontSize.sm,
+  },
+  itemMetaSecondary: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.tertiary,
+    fontStyle: "italic",
   },
   completedLabel: {
     fontSize: typography.fontSize.sm,
