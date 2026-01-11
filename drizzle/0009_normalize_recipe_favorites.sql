@@ -7,3 +7,12 @@ WHERE CAST(isFavorite AS CHAR) IN ('1', 'true', 'TRUE');
 UPDATE recipes
 SET isFavorite = FALSE
 WHERE isFavorite IS NULL OR CAST(isFavorite AS CHAR) NOT IN ('1', 'true', 'TRUE');
+
+
+
+
+
+
+
+
+
