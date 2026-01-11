@@ -50,6 +50,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const loadUser = async () => {
     const AUTH_TIMEOUT_MS = 10000; // 10 seconds timeout
     let timeoutId: NodeJS.Timeout | null = null;
+    const abortController = new AbortController();
     
     try {
       console.log("[AuthProvider] loadUser started");
@@ -59,18 +60,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const timeoutPromise = new Promise<void>((_, reject) => {
         timeoutId = setTimeout(() => {
           console.warn("[AuthProvider] loadUser timeout - showing login screen");
+          abortController.abort();
           reject(new Error("Auth check timeout - backend may be unreachable"));
         }, AUTH_TIMEOUT_MS);
       });
 
       const loadUserPromise = (async () => {
         try {
+          // Check if cancelled before starting
+          if (abortController.signal.aborted) {
+            throw new Error("Operation cancelled");
+          }
+
           console.log("[AuthProvider] Checking SecureStore for auth token...");
           let token: string | null = null;
           try {
             token = await SecureStore.getItemAsync("auth_token");
+            // Check if cancelled after await
+            if (abortController.signal.aborted) {
+              throw new Error("Operation cancelled");
+            }
             console.log("[AuthProvider] Token check result:", token ? "Token found" : "No token");
           } catch (storeError: any) {
+            // If cancelled, rethrow the cancellation error
+            if (abortController.signal.aborted) {
+              throw new Error("Operation cancelled");
+            }
             console.error("[AuthProvider] Error accessing SecureStore:", storeError);
             // SecureStore might not be available, continue without token
             console.log("[AuthProvider] Continuing without token due to SecureStore error");
@@ -79,12 +94,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (token) {
             // Use tRPC client directly instead of query hook to avoid serialization issues
             try {
+              // Check if cancelled before API call
+              if (abortController.signal.aborted) {
+                throw new Error("Operation cancelled");
+              }
+
               console.log("[AuthProvider] Fetching user data from API...");
               // @ts-ignore - tRPC client types are complex, runtime works correctly
               const userData = await (trpcClient as any).auth.me.query();
+              
+              // Check if cancelled after await
+              if (abortController.signal.aborted) {
+                throw new Error("Operation cancelled");
+              }
+
               console.log("[AuthProvider] API response received:", userData ? "User data present" : "No user data");
               
               if (userData && userData.id) {
+                // Check if cancelled before state update
+                if (abortController.signal.aborted) {
+                  throw new Error("Operation cancelled");
+                }
+
                 // Transform server User to mobile AuthUser
                 const authUser: AuthUser = {
                   id: userData.id,
@@ -97,6 +128,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 setUser(authUser);
                 console.log("[Auth] User state updated, isAuthenticated should be:", Boolean(authUser));
               } else {
+                // Check if cancelled before clearing token
+                if (abortController.signal.aborted) {
+                  throw new Error("Operation cancelled");
+                }
+
                 // Token is invalid, clear it
                 console.log("[AuthProvider] Invalid user data, clearing token");
                 try {
@@ -106,6 +142,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 }
               }
             } catch (error: any) {
+              // If cancelled, rethrow the cancellation error
+              if (abortController.signal.aborted) {
+                throw new Error("Operation cancelled");
+              }
+
               // API call failed, clear token
               console.error("[AuthProvider] Error fetching user:", error);
               console.error("[AuthProvider] Error details:", {
@@ -117,6 +158,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               if (error?.message?.includes("Network request failed")) {
                 console.warn("[Auth] Network error - backend may not be running or unreachable");
               } else {
+                // Check if cancelled before clearing token
+                if (abortController.signal.aborted) {
+                  throw new Error("Operation cancelled");
+                }
+
                 try {
                   await SecureStore.deleteItemAsync("auth_token");
                 } catch (storeError) {
@@ -128,22 +174,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.log("[AuthProvider] No token found, user will see login screen");
           }
         } catch (error) {
+          // Don't log cancellation errors as errors
+          if (error instanceof Error && error.message === "Operation cancelled") {
+            throw error;
+          }
           console.error("[AuthProvider] Error in loadUserPromise:", error);
           throw error;
         }
       })();
 
-      // Race between timeout and actual load
-      await Promise.race([loadUserPromise, timeoutPromise]);
-      
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
+      // Race between timeout and actual load, with proper error handling
+      await Promise.race([
+        loadUserPromise.catch(error => {
+          // Attach catch to prevent unhandled rejection
+          if (error instanceof Error && error.message === "Operation cancelled") {
+            throw error;
+          }
+          throw error;
+        }),
+        timeoutPromise
+      ]);
     } catch (error: any) {
       console.error("[AuthProvider] Error loading user (final catch):", error);
       // On timeout or other errors, ensure we show login screen
       if (error?.message?.includes("timeout")) {
         console.log("[AuthProvider] Timeout occurred - proceeding to show login screen");
+      } else if (error?.message?.includes("Operation cancelled")) {
+        console.log("[AuthProvider] Operation was cancelled (timeout or abort)");
       } else {
         try {
           await SecureStore.deleteItemAsync("auth_token");
@@ -152,6 +209,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       }
     } finally {
+      // Centralized timeout cleanup - only place where clearTimeout is called
       if (timeoutId) {
         clearTimeout(timeoutId);
       }

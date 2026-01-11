@@ -1439,6 +1439,7 @@ export async function getAllRecipeIngredients(recipeId: number): Promise<Array<{
     const recipe = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1);
     if (recipe[0] && recipe[0].ingredients) {
       const jsonbIngredients = recipe[0].ingredients as Array<{
+        name?: string;
         ingredient?: string;
         raw?: string;
         quantity?: string | number | null;
@@ -1446,7 +1447,8 @@ export async function getAllRecipeIngredients(recipeId: number): Promise<Array<{
       }>;
 
       for (const ing of jsonbIngredients) {
-        const ingredientName = ing.ingredient || ing.raw || 'Unknown';
+        // Check for 'name' first (new format from parseFromUrl), then fall back to 'ingredient' or 'raw' (old format)
+        const ingredientName = ing.name || ing.ingredient || ing.raw || 'Unknown';
         if (ingredientName && ingredientName !== 'Unknown') {
           // Get or create the ingredient in the ingredients table
           const ingredient = await getOrCreateIngredient(ingredientName);

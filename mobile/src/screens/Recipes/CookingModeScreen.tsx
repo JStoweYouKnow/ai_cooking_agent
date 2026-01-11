@@ -9,6 +9,7 @@ import {
   PanResponder,
   Animated,
   ScaledSize,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import GradientButton from "../../components/GradientButton";
@@ -43,8 +44,23 @@ const CookingModeScreen: React.FC<CookingModeScreenProps> = ({
     return () => subscription?.remove();
   }, []);
 
+  // Ensure step index stays within bounds when steps change
+  useEffect(() => {
+    if (steps.length > 0) {
+      setCurrentStepIndex((prev) => {
+        const clamped = Math.max(0, Math.min(prev, steps.length - 1));
+        return clamped;
+      });
+    }
+  }, [steps.length]);
+
   // Determine if device is in landscape mode
   const isLandscape = dimensions.width > dimensions.height;
+
+  // Clamp step index to valid bounds
+  const clampStepIndex = (index: number): number => {
+    return Math.max(0, Math.min(index, steps.length - 1));
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -57,14 +73,14 @@ const CookingModeScreen: React.FC<CookingModeScreenProps> = ({
         const swipeThreshold = dimensions.width * 0.25;
         if (gestureState.dx > swipeThreshold && currentStepIndex > 0) {
           // Swipe right - previous step
-          setCurrentStepIndex((prev) => prev - 1);
+          setCurrentStepIndex((prev) => clampStepIndex(prev - 1));
           Animated.spring(pan, {
             toValue: { x: 0, y: 0 },
             useNativeDriver: true,
           }).start();
         } else if (gestureState.dx < -swipeThreshold && currentStepIndex < steps.length - 1) {
           // Swipe left - next step
-          setCurrentStepIndex((prev) => prev + 1);
+          setCurrentStepIndex((prev) => clampStepIndex(prev + 1));
           Animated.spring(pan, {
             toValue: { x: 0, y: 0 },
             useNativeDriver: true,
@@ -82,7 +98,7 @@ const CookingModeScreen: React.FC<CookingModeScreenProps> = ({
 
   const handleNext = () => {
     if (currentStepIndex < steps.length - 1) {
-      setCurrentStepIndex((prev) => prev + 1);
+      setCurrentStepIndex((prev) => clampStepIndex(prev + 1));
     } else {
       onClose();
     }
@@ -90,9 +106,13 @@ const CookingModeScreen: React.FC<CookingModeScreenProps> = ({
 
   const handlePrev = () => {
     if (currentStepIndex > 0) {
-      setCurrentStepIndex((prev) => prev - 1);
+      setCurrentStepIndex((prev) => clampStepIndex(prev - 1));
     }
   };
+
+  // Ensure currentStepIndex is always within bounds
+  const safeStepIndex = clampStepIndex(currentStepIndex);
+  const currentStepText = steps[safeStepIndex] || "";
 
   if (!visible || steps.length === 0) return null;
 
@@ -126,26 +146,32 @@ const CookingModeScreen: React.FC<CookingModeScreenProps> = ({
               <View style={styles.landscapeLeft}>
                 <View style={styles.stepIndicator}>
                   <Text style={styles.stepCounter}>
-                    Step {currentStepIndex + 1} of {steps.length}
+                    Step {safeStepIndex + 1} of {steps.length}
                   </Text>
                   <View style={styles.progressBar}>
                     <View
                       style={[
                         styles.progressFill,
-                        { width: `${((currentStepIndex + 1) / steps.length) * 100}%` },
+                        { width: `${((safeStepIndex + 1) / steps.length) * 100}%` },
                       ]}
                     />
                   </View>
                 </View>
                 <Text style={[styles.stepNumber, styles.stepNumberLandscape]}>
-                  {currentStepIndex + 1}
+                  {safeStepIndex + 1}
                 </Text>
               </View>
 
               <View style={styles.landscapeRight}>
-                <Text style={[styles.stepText, styles.stepTextLandscape]}>
-                  {steps[currentStepIndex]}
-                </Text>
+                <ScrollView 
+                  style={styles.scrollContainer}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={true}
+                >
+                  <Text style={[styles.stepText, styles.stepTextLandscape]}>
+                    {currentStepText}
+                  </Text>
+                </ScrollView>
                 <View style={styles.hintContainer}>
                   <Ionicons name="swap-horizontal" size={20} color={colors.text.secondary} />
                   <Text style={styles.hintText}>Swipe left/right to navigate</Text>
@@ -157,21 +183,27 @@ const CookingModeScreen: React.FC<CookingModeScreenProps> = ({
             <>
               <View style={styles.stepIndicator}>
                 <Text style={styles.stepCounter}>
-                  Step {currentStepIndex + 1} of {steps.length}
+                  Step {safeStepIndex + 1} of {steps.length}
                 </Text>
                 <View style={styles.progressBar}>
                   <View
                     style={[
                       styles.progressFill,
-                      { width: `${((currentStepIndex + 1) / steps.length) * 100}%` },
+                      { width: `${((safeStepIndex + 1) / steps.length) * 100}%` },
                     ]}
                   />
                 </View>
               </View>
 
               <View style={styles.stepContent}>
-                <Text style={styles.stepNumber}>{currentStepIndex + 1}</Text>
-                <Text style={styles.stepText}>{steps[currentStepIndex]}</Text>
+                <Text style={styles.stepNumber}>{safeStepIndex + 1}</Text>
+                <ScrollView 
+                  style={styles.scrollContainer}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={true}
+                >
+                  <Text style={styles.stepText}>{currentStepText}</Text>
+                </ScrollView>
               </View>
 
               <View style={styles.hintContainer}>
@@ -187,11 +219,11 @@ const CookingModeScreen: React.FC<CookingModeScreenProps> = ({
             title="Previous"
             variant="secondary"
             onPress={handlePrev}
-            disabled={currentStepIndex === 0}
+            disabled={safeStepIndex === 0}
             style={styles.controlButton}
           />
           <GradientButton
-            title={currentStepIndex === steps.length - 1 ? "Done" : "Next"}
+            title={safeStepIndex === steps.length - 1 ? "Done" : "Next"}
             onPress={handleNext}
             style={styles.controlButton}
           />
@@ -247,25 +279,33 @@ const styles = StyleSheet.create({
   },
   stepContent: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
+    paddingTop: spacing.lg,
   },
   stepNumber: {
     fontSize: 72,
     fontWeight: typography.fontWeight.bold,
     color: colors.olive,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   stepNumberLandscape: {
     fontSize: 96,
     marginBottom: 0,
+  },
+  scrollContainer: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   stepText: {
     fontSize: typography.fontSize.xxl,
     color: colors.text.inverse,
     textAlign: "center",
     lineHeight: 36,
-    paddingHorizontal: spacing.lg,
   },
   stepTextLandscape: {
     fontSize: typography.fontSize.xl,
@@ -310,7 +350,8 @@ const styles = StyleSheet.create({
   },
   landscapeRight: {
     flex: 2,
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    paddingTop: spacing.lg,
   },
 });
 

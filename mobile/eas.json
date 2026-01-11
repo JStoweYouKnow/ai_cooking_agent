@@ -24,7 +24,12 @@
       },
       "env": {
         "NODE_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "https://sous.projcomfort.com"
+        "EXPO_PUBLIC_API_URL": "https://sous.projcomfort.com",
+        "EXPO_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY": "price_1SYtXR9rKYrAFwcoDAhBVLaC",
+        "EXPO_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY": "price_1SYtXT9rKYrAFwcoAm0Er0cV",
+        "EXPO_PUBLIC_STRIPE_PRICE_FAMILY_MONTHLY": "price_1SYtXU9rKYrAFwcoaKcT8wHL",
+        "EXPO_PUBLIC_STRIPE_PRICE_FAMILY_YEARLY": "price_1SYtXV9rKYrAFwcoCTS4LWkj",
+        "EXPO_PUBLIC_STRIPE_PRICE_LIFETIME": "price_1SYtXF9rKYrAFwcoshbIFfKA"
       }
     }
   },

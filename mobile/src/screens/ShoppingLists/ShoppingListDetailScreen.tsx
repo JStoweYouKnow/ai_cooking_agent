@@ -25,6 +25,7 @@ import SearchBar from "../../components/SearchBar";
 import BottomSheet from "../../components/BottomSheet";
 import { colors, spacing, typography, borderRadius } from "../../styles/theme";
 import { groceryStores, getStoreDeepLink } from "../../utils/groceryStores";
+import { groupItemsByCategory, CATEGORY_ICONS, type GroceryCategory } from "../../utils/groceryCategories";
 
 type Props = ShoppingListStackScreenProps<"ShoppingListDetail">;
 
@@ -88,20 +89,38 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     return new Map(ingredients.map((ing: any) => [ing.id, ing]));
   }, [ingredients]);
 
-  // Enrich items with ingredient names
+  // Enrich items with ingredient names and categories
   const enrichedItems = useMemo(() => {
     if (!items) return [];
     return items.map((item: any) => {
       const ingredient = ingredientMap.get(item.ingredientId);
+      if (!ingredient) {
+        console.warn(
+          `[ShoppingListDetail] Ingredient lookup failed for ingredientId ${item.ingredientId}. ` +
+          `Total ingredients in map: ${ingredientMap.size}, ` +
+          `Shopping list items: ${items.length}`
+        );
+      }
       return {
         ...item,
         ingredientName: ingredient?.name || `Ingredient #${item.ingredientId}`,
+        category: ingredient?.category || null,
       };
     });
   }, [items, ingredientMap]);
 
   const activeItems = useMemo(() => enrichedItems.filter((item: any) => !item.isChecked), [enrichedItems]);
   const completedItems = useMemo(() => enrichedItems.filter((item: any) => item.isChecked), [enrichedItems]);
+
+  // Group active items by grocery category
+  const groupedActiveItems = useMemo(() => {
+    return groupItemsByCategory(activeItems);
+  }, [activeItems]);
+
+  // Group completed items by grocery category
+  const groupedCompletedItems = useMemo(() => {
+    return groupItemsByCategory(completedItems);
+  }, [completedItems]);
 
   const handleToggleItem = (itemId: number, isChecked: boolean) => {
     toggleItem.mutate({ itemId, isChecked: !isChecked });
@@ -290,30 +309,39 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <>
               {activeItems.length > 0 && (
                 <View>
-                  {activeItems.map((item: any) => (
-                    <View style={styles.itemRow} key={item.id}>
-                      <TouchableOpacity
-                        style={styles.checkbox}
-                        onPress={() => handleToggleItem(item.id, item.isChecked)}
-                      >
-                        <Ionicons name="ellipse-outline" size={22} color={colors.olive} />
-                      </TouchableOpacity>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.itemName}>{item.ingredientName || "Ingredient"}</Text>
-                        {(item.quantity || item.unit) ? (
-                          <Text style={styles.itemMeta}>
-                            {(() => {
-                              const parts = [];
-                              if (item.quantity) parts.push(String(item.quantity));
-                              if (item.unit) parts.push(String(item.unit));
-                              return parts.join(" ");
-                            })()}
-                          </Text>
-                        ) : null}
+                  {Array.from(groupedActiveItems.entries()).map(([category, items]) => (
+                    <View key={category} style={styles.categorySection}>
+                      <View style={styles.categoryHeader}>
+                        <Text style={styles.categoryEmoji}>{CATEGORY_ICONS[category]}</Text>
+                        <Text style={styles.categoryTitle}>{category}</Text>
+                        <Text style={styles.categoryCount}>({items.length})</Text>
                       </View>
-                      <TouchableOpacity onPress={() => handleRemoveItem(item.id)}>
-                        <Ionicons name="trash-outline" size={20} color={colors.russet} />
-                      </TouchableOpacity>
+                      {items.map((item: any) => (
+                        <View style={styles.itemRow} key={item.id}>
+                          <TouchableOpacity
+                            style={styles.checkbox}
+                            onPress={() => handleToggleItem(item.id, item.isChecked)}
+                          >
+                            <Ionicons name="ellipse-outline" size={22} color={colors.olive} />
+                          </TouchableOpacity>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itemName}>{item.ingredientName || "Ingredient"}</Text>
+                            {(item.quantity || item.unit) ? (
+                              <Text style={styles.itemMeta}>
+                                {(() => {
+                                  const parts = [];
+                                  if (item.quantity) parts.push(String(item.quantity));
+                                  if (item.unit) parts.push(String(item.unit));
+                                  return parts.join(" ");
+                                })()}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <TouchableOpacity onPress={() => handleRemoveItem(item.id)}>
+                            <Ionicons name="trash-outline" size={20} color={colors.russet} />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
                     </View>
                   ))}
                 </View>
@@ -321,32 +349,41 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               {completedItems.length > 0 && (
                 <View style={{ marginTop: spacing.lg }}>
                   <Text style={styles.completedLabel}>Completed</Text>
-                  {completedItems.map((item: any) => (
-                    <View style={styles.itemRow} key={`completed-${item.id}`}>
-                      <TouchableOpacity
-                        style={styles.checkbox}
-                        onPress={() => handleToggleItem(item.id, item.isChecked)}
-                      >
-                        <Ionicons name="checkmark-circle" size={22} color={colors.olive} />
-                      </TouchableOpacity>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.itemName, styles.completedText]}>
-                          {item.ingredientName || "Ingredient"}
-                        </Text>
-                        {(item.quantity || item.unit) ? (
-                          <Text style={[styles.itemMeta, styles.completedText]}>
-                            {(() => {
-                              const parts = [];
-                              if (item.quantity) parts.push(String(item.quantity));
-                              if (item.unit) parts.push(String(item.unit));
-                              return parts.join(" ");
-                            })()}
-                          </Text>
-                        ) : null}
+                  {Array.from(groupedCompletedItems.entries()).map(([category, items]) => (
+                    <View key={`completed-${category}`} style={styles.categorySection}>
+                      <View style={styles.categoryHeader}>
+                        <Text style={styles.categoryEmoji}>{CATEGORY_ICONS[category]}</Text>
+                        <Text style={[styles.categoryTitle, styles.completedText]}>{category}</Text>
+                        <Text style={[styles.categoryCount, styles.completedText]}>({items.length})</Text>
                       </View>
-                      <TouchableOpacity onPress={() => handleRemoveItem(item.id)}>
-                        <Ionicons name="trash-outline" size={20} color={colors.text.tertiary} />
-                      </TouchableOpacity>
+                      {items.map((item: any) => (
+                        <View style={styles.itemRow} key={`completed-${item.id}`}>
+                          <TouchableOpacity
+                            style={styles.checkbox}
+                            onPress={() => handleToggleItem(item.id, item.isChecked)}
+                          >
+                            <Ionicons name="checkmark-circle" size={22} color={colors.olive} />
+                          </TouchableOpacity>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.itemName, styles.completedText]}>
+                              {item.ingredientName || "Ingredient"}
+                            </Text>
+                            {(item.quantity || item.unit) ? (
+                              <Text style={[styles.itemMeta, styles.completedText]}>
+                                {(() => {
+                                  const parts = [];
+                                  if (item.quantity) parts.push(String(item.quantity));
+                                  if (item.unit) parts.push(String(item.unit));
+                                  return parts.join(" ");
+                                })()}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <TouchableOpacity onPress={() => handleRemoveItem(item.id)}>
+                            <Ionicons name="trash-outline" size={20} color={colors.text.tertiary} />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
                     </View>
                   ))}
                 </View>
@@ -732,6 +769,32 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontStyle: "italic",
     paddingVertical: spacing.sm,
+  },
+  categorySection: {
+    marginTop: spacing.md,
+  },
+  categoryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    backgroundColor: colors.glass.background,
+    borderRadius: borderRadius.sm,
+    marginBottom: spacing.xs,
+  },
+  categoryEmoji: {
+    fontSize: typography.fontSize.lg,
+    marginRight: spacing.xs,
+  },
+  categoryTitle: {
+    flex: 1,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.primary,
+  },
+  categoryCount: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
   },
 });
 

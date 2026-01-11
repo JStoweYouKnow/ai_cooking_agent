@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, Button, StyleSheet, DevSettings } from "react-native";
+import * as Updates from "expo-updates";
 
 type Props = {
   children: React.ReactNode;
@@ -24,9 +25,18 @@ export class RootErrorBoundary extends React.Component<Props, State> {
     console.error("[RootErrorBoundary] Caught error:", error, info.componentStack);
   }
 
-  handleReload = async () => {
-    // Use React Native dev reload (works in Expo dev client too)
-    DevSettings.reload();
+  handleReload = () => {
+    // Try dev reload first (only available in development)
+    if (DevSettings && typeof DevSettings.reload === "function") {
+      DevSettings.reload();
+      return;
+    }
+    // Fallback to Expo Updates reload (production-safe)
+    if (Updates && typeof Updates.reloadAsync === "function") {
+      Updates.reloadAsync().catch((error: unknown) => {
+        console.error("[RootErrorBoundary] Failed to reload:", error);
+      });
+    }
   };
 
   render() {
