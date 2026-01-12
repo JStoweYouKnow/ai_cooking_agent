@@ -1241,7 +1241,7 @@ const shoppingListRouter = router({
       const items = await db.getShoppingListItems(input.id);
       
       // Enrich items with ingredient details and purchase quantities
-      const { convertToPurchaseQuantity } = await import("../utils/measurementConverter");
+      const { convertToPurchaseQuantity } = await import("./utils/measurementConverter");
       const enrichedItems = await Promise.all(
         items.map(async (item) => {
           const ingredient = await db.getIngredientById(item.ingredientId);
