@@ -223,9 +223,13 @@ function extractInstructionText(step: any): string | null {
 function extractIngredientText(item: any): string | null {
 	if (!item) return null;
 
-	// If it's already a string, return it (preserve all content including special chars)
+	// If it's already a string, decode HTML entities and return it
 	if (typeof item === "string") {
-		return item.trim() || null;
+		const decoded = item.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'");
+		// Also handle numeric entities
+		const fullyDecoded = decoded.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
+			.replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+		return fullyDecoded.trim() || null;
 	}
 
 	// If it's an object, try to extract text from various properties
@@ -370,8 +374,36 @@ const COOKING_UNITS = new Set([
  * - "salt" → { name: "salt" }
  * - "2 eggs" → { quantity: "2", name: "eggs" }
  */
+// Helper function to decode HTML entities
+function decodeHtmlEntities(text: string): string {
+	// Common HTML entities
+	const entities: Record<string, string> = {
+		'&nbsp;': ' ',
+		'&amp;': '&',
+		'&lt;': '<',
+		'&gt;': '>',
+		'&quot;': '"',
+		'&#39;': "'",
+		'&apos;': "'",
+	};
+	
+	let decoded = text;
+	// Replace named entities
+	for (const [entity, char] of Object.entries(entities)) {
+		decoded = decoded.replace(new RegExp(entity, 'gi'), char);
+	}
+	
+	// Replace numeric entities (&#160; for &nbsp;, etc.)
+	decoded = decoded.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)));
+	decoded = decoded.replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+	
+	return decoded;
+}
+
 function parseIngredientLine(line: string): ParsedIngredient {
-	const trimmed = line.trim();
+	// Decode HTML entities first
+	const decoded = decodeHtmlEntities(line);
+	const trimmed = decoded.trim();
 	if (!trimmed) {
 		return { name: trimmed };
 	}

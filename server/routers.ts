@@ -45,11 +45,38 @@ async function sendExpoPushNotification(
   }
 }
 
+// Helper function to decode HTML entities
+function decodeHtmlEntities(text: string): string {
+  // Common HTML entities
+  const entities: Record<string, string> = {
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&apos;': "'",
+  };
+  
+  let decoded = text;
+  // Replace named entities
+  for (const [entity, char] of Object.entries(entities)) {
+    decoded = decoded.replace(new RegExp(entity, 'gi'), char);
+  }
+  
+  // Replace numeric entities (&#160; for &nbsp;, etc.)
+  decoded = decoded.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)));
+  decoded = decoded.replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  
+  return decoded;
+}
+
 // Helper function to clean ingredient names (remove "Ingredient:" prefix and normalize)
 function cleanIngredientName(name: string | undefined | null): string {
   if (!name || typeof name !== "string") return "";
 
-  let cleaned = name.trim();
+  // Decode HTML entities first
+  let cleaned = decodeHtmlEntities(name.trim());
 
   // Remove "Ingredient:" or "Ingredient " prefix (case-insensitive, with optional colon)
   cleaned = cleaned.replace(/^Ingredient:\s*/i, "");

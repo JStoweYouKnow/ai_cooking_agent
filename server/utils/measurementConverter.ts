@@ -173,8 +173,8 @@ export function convertToPurchaseQuantity(
   recipeUnit: string | null | undefined,
   ingredientName: string
 ): PurchaseQuantity | null {
+  // If no quantity or unit, return a default purchase suggestion
   if (!recipeQuantity && !recipeUnit) {
-    // No quantity specified - suggest buying 1 unit
     const category = getIngredientCategory(ingredientName);
     const packageInfo = PACKAGE_SIZES[category] || PACKAGE_SIZES.produce;
     return {
@@ -185,8 +185,15 @@ export function convertToPurchaseQuantity(
   }
   
   const qty = parseQuantity(recipeQuantity);
+  // If quantity is 0 and no unit, but we have an ingredient name, still suggest a purchase
   if (qty === 0 && !recipeUnit) {
-    return null;
+    const category = getIngredientCategory(ingredientName);
+    const packageInfo = PACKAGE_SIZES[category] || PACKAGE_SIZES.produce;
+    return {
+      quantity: '1',
+      unit: packageInfo.unit,
+      displayText: `1 ${packageInfo.unit}`,
+    };
   }
   
   const unit = (recipeUnit || '').toLowerCase().trim();

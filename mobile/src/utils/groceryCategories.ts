@@ -180,7 +180,7 @@ export function getGroceryCategory(ingredientCategory?: string | null, ingredien
     }
 
     // Produce patterns
-    if (/(tomato|lettuce|spinach|kale|carrot|onion|garlic|bell pepper|jalapeño|chili pepper|potato|sweet potato|broccoli|cauliflower|cucumber|celery|mushroom|zucchini|squash|cabbage|brussels sprout|asparagus|green bean|pea|corn|avocado|apple|banana|orange|lemon|lime|berry|berries|strawberry|blueberry|raspberry|grape|melon|watermelon|pineapple|mango|peach|pear|plum|cherry|shallot|scallion|leek)/i.test(name)) {
+    if (/(tomato|lettuce|spinach|kale|carrot|onion|garlic|bell pepper|jalapeño|chili pepper|chile|chiles|green chile|green chiles|thai chile|thai chiles|red chile|red chiles|serrano|habanero|poblano|anaheim|potato|sweet potato|broccoli|cauliflower|cucumber|celery|mushroom|zucchini|squash|cabbage|brussels sprout|asparagus|green bean|pea|corn|avocado|apple|banana|orange|lemon|lime|berry|berries|strawberry|blueberry|raspberry|grape|melon|watermelon|pineapple|mango|peach|pear|plum|cherry|shallot|scallion|leek)/i.test(name)) {
       return 'Produce';
     }
 
