@@ -157,6 +157,10 @@ export function getGroceryCategory(ingredientCategory?: string | null, ingredien
     if (/(garam masala|five spice|seven spice|pumpkin spice|apple pie spice|chinese five spice|ras el hanout|berbere|jerk seasoning|old bay|taco seasoning|chili seasoning|italian seasoning|herbes de provence|bouquet garni|adobo|jerk|za'atar|harissa|baharat|dukkah)/i.test(name)) {
       return 'Spices & Seasonings';
     }
+    // Herbs and fresh herbs (check before other patterns to avoid conflicts)
+    if (/(\bsage\b|\bsage leaves\b|\bparsley\b|\bflat-leaf parsley\b|\bcurly parsley\b|\bitalian parsley\b|\bthyme\b|\bfresh thyme\b|\bdried thyme\b|\bbay leaf\b|\bbay leaves\b|\brosemary\b|\bfresh rosemary\b|\bdried rosemary\b|\bbasil\b|\bfresh basil\b|\bdried basil\b|\boregano\b|\bfresh oregano\b|\bdried oregano\b|\bdill\b|\bdill weed\b|\bfresh dill\b|\bcilantro\b|\bfresh cilantro\b|\bchives\b|\bchive\b|\btarragon\b|\bfresh tarragon\b|\bmarjoram\b|\bfresh marjoram\b|\bmint\b|\bspearmint\b|\bpeppermint\b|\bfresh mint\b|\bchervil\b|\bfresh chervil\b|\blemon verbena\b|\bherb\b|\bherbs\b|\bfresh herbs\b|\bdried herbs\b|\bherb mix\b|\bherb mixture\b|\bsprig\b|\bsprigs\b)/i.test(name)) {
+      return 'Spices & Seasonings';
+    }
     // Comprehensive spice and herb patterns
     if (/(salt|sea salt|kosher salt|table salt|pepper|black pepper|white pepper|red pepper|pink pepper|green pepper|ground pepper|whole pepper|peppercorn|paprika|smoked paprika|hungarian paprika|sweet paprika|cumin|cumin seed|ground cumin|oregano|basil|thyme|rosemary|cinnamon|ground cinnamon|cinnamon stick|nutmeg|ground nutmeg|mace|ginger|ground ginger|fresh ginger|garlic powder|garlic salt|onion powder|onion salt|cayenne|cayenne pepper|chili powder|chili flakes|red pepper flakes|curry|curry powder|turmeric|ground turmeric|cardamom|cardamom pod|cardamom seed|clove|whole clove|ground clove|allspice|ground allspice|bay leaf|bay leaves|sage|dill|dill weed|dill seed|parsley|cilantro|coriander|ground coriander|coriander seed|coriander seeds|fennel|fennel seed|star anise|saffron|sumac|anise|aniseed|caraway|caraway seed|celery seed|celery salt|fenugreek|fenugreek seed|juniper|juniper berry|mustard seed|mustard powder|dry mustard|nigella|nigella seed|black seed|poppy seed|sesame seed|sesame|toasted sesame|chives|chive|tarragon|marjoram|sprig|spearmint|mint|peppermint|lemongrass|kaffir lime|kaffir lime leaf|galangal|lemongrass|korean chili|gochugaru|aleppo pepper|urfa biber|chipotle|chipotle powder|smoked paprika|pimenton|annatto|achiote|asafoetida|hing|ajwain|carom|epazote|hoja santa|lavender|rose petals|dried rose|vanilla bean|vanilla extract|vanilla|extract|essence)/i.test(name)) {
       return 'Spices & Seasonings';
@@ -185,9 +189,12 @@ export function getGroceryCategory(ingredientCategory?: string | null, ingredien
       return 'Dairy & Eggs';
     }
 
-    // Meat & Seafood patterns (check AFTER stock/broth to avoid matching "chicken stock")
-    if (/(beef|pork|chicken|turkey|lamb|bacon|sausage|ham|prosciutto|salami|pepperoni|ground beef|ground pork|ground turkey|steak|ribeye|sirloin|tenderloin|chop|breast|thigh|wing|drumstick|ribs|brisket|roast|veal)/i.test(name)) {
-      return 'Meat & Seafood';
+    // Meat & Seafood patterns (check AFTER stock/broth and herbs to avoid false matches)
+    // Exclude words that might match herbs (e.g., "chop" in "chopped parsley", "thigh" in "thyme")
+    if (!/(chopped|diced|minced|sliced|fresh|dried)\s+(parsley|sage|thyme|rosemary|basil|oregano|dill|cilantro|herb|herbs|chives|tarragon|marjoram|mint)/i.test(name)) {
+      if (/\b(beef|pork|chicken|turkey|lamb|bacon|sausage|ham|prosciutto|salami|pepperoni|ground beef|ground pork|ground turkey|steak|ribeye|sirloin|tenderloin|chop|breast|thigh|wing|drumstick|ribs|brisket|roast|veal)\b/i.test(name)) {
+        return 'Meat & Seafood';
+      }
     }
 
     // Seafood patterns

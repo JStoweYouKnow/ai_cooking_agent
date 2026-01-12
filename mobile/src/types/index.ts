@@ -95,6 +95,12 @@ export interface ShoppingListItem {
   unit: string | null;
   isChecked: boolean | null;
   createdAt: Date;
+  ingredient?: Ingredient | null;
+  purchaseQuantity?: {
+    quantity: string;
+    unit: string;
+    displayText: string;
+  } | null;
 }
 
 export interface Notification {
