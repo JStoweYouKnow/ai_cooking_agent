@@ -4,10 +4,6 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "node": "22.x.x",
-    "pnpm": {
-      "version": "9.15.9"
-    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
