@@ -878,6 +878,452 @@ const recipeRouter = router({
     const user = ctx.user || await db.getOrCreateAnonymousUser();
     return db.getDailyRecommendations(user.id);
   }),
+
+  // Cook with What You Have - Generate recipes from pantry ingredients
+  generateFromPantry: optionalAuthProcedure
+    .input(
+      z.object({
+        imageUrl: z.string().url().optional(),
+        ingredients: z.array(z.string()).optional(),
+        dietaryPreferences: z.array(z.string()).optional(),
+        maxCookingTime: z.number().int().positive().optional(),
+        servings: z.number().int().positive().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      
+      try {
+        const { invokeLLM } = await import("./_core/llm");
+        
+        // If image provided, recognize ingredients first
+        let ingredients: string[] = input.ingredients || [];
+        if (input.imageUrl) {
+          // Call the ingredient recognition endpoint logic directly
+          const response = await invokeLLM({
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "image_url",
+                    image_url: {
+                      url: input.imageUrl,
+                      detail: "auto",
+                    },
+                  },
+                  {
+                    type: "text",
+                    text: `Analyze this image and identify all ingredients you can see. Return a JSON array of ingredient names only.`,
+                  },
+                ],
+              },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "pantry_ingredients",
+                schema: {
+                  type: "object",
+                  properties: {
+                    ingredients: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                  required: ["ingredients"],
+                },
+              },
+            },
+          });
+          
+          const recognized = JSON.parse(response.choices[0].message.content);
+          ingredients = [...ingredients, ...recognized.ingredients];
+        }
+        
+        if (ingredients.length === 0) {
+          throw new Error("No ingredients provided. Please add ingredients or upload a photo.");
+        }
+        
+        // Get user preferences
+        const userData = await db.getUserById(user.id);
+        const dietaryPrefs = [
+          ...(input.dietaryPreferences || []),
+          ...(userData?.dietaryPreferences ? JSON.parse(userData.dietaryPreferences) : []),
+        ];
+        const allergies = userData?.allergies ? JSON.parse(userData.allergies) : [];
+        
+        // Generate recipe using AI
+        const prompt = `Generate a recipe that uses ONLY these ingredients: ${ingredients.join(", ")}.
+        
+Requirements:
+${dietaryPrefs.length > 0 ? `- Dietary preferences: ${dietaryPrefs.join(", ")}` : ""}
+${allergies.length > 0 ? `- Must avoid: ${allergies.join(", ")}` : ""}
+${input.maxCookingTime ? `- Maximum cooking time: ${input.maxCookingTime} minutes` : ""}
+${input.servings ? `- Serves: ${input.servings} people` : ""}
+
+IMPORTANT: Only use the ingredients provided. Do not suggest additional ingredients that need to be purchased.
+
+Return a JSON object with:
+- name: Recipe name
+- description: Brief description
+- ingredients: Array of {name, quantity, unit} using ONLY the provided ingredients
+- instructions: Step-by-step cooking instructions
+- cookingTime: Estimated time in minutes
+- servings: Number of servings
+- difficulty: "easy", "medium", or "hard"
+- tips: Optional tips for success
+
+Format the response as valid JSON.`;
+
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "pantry_recipe",
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  description: { type: "string" },
+                  ingredients: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        quantity: { type: "string" },
+                        unit: { type: "string" },
+                      },
+                      required: ["name"],
+                    },
+                  },
+                  instructions: { type: "string" },
+                  cookingTime: { type: "number" },
+                  servings: { type: "number" },
+                  difficulty: {
+                    type: "string",
+                    enum: ["easy", "medium", "hard"],
+                  },
+                  tips: { type: "string" },
+                },
+                required: ["name", "ingredients", "instructions"],
+              },
+            },
+          },
+        });
+        
+        const recipeData = JSON.parse(response.choices[0].message.content);
+        
+        // Save recipe to database
+        const recipe = await db.createRecipe({
+          name: recipeData.name,
+          description: recipeData.description || recipeData.tips,
+          instructions: recipeData.instructions,
+          cookingTime: recipeData.cookingTime,
+          servings: recipeData.servings || input.servings || 4,
+          cuisine: null,
+          category: null,
+          userId: user.id,
+          source: "ai_pantry_generated",
+          isShared: false,
+        });
+        
+        // Add ingredients to recipe
+        if (recipeData.ingredients && Array.isArray(recipeData.ingredients)) {
+          for (const ing of recipeData.ingredients) {
+            const ingredient = await db.getOrCreateIngredient(ing.name);
+            await db.addRecipeIngredient({
+              recipeId: recipe.id,
+              ingredientId: ingredient.id,
+              quantity: ing.quantity || null,
+              unit: ing.unit || null,
+            });
+          }
+        }
+        
+        return {
+          ...recipe,
+          difficulty: recipeData.difficulty || "medium",
+          tips: recipeData.tips,
+          noShoppingNeeded: true,
+        };
+      } catch (error) {
+        console.error("[generateFromPantry] Error:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error instanceof Error ? error.message : "Failed to generate recipe from pantry",
+        });
+      }
+    }),
+
+  // Get ingredient substitution suggestions
+  getSubstitutions: optionalAuthProcedure
+    .input(
+      z.object({
+        ingredientName: z.string().min(1),
+        dietaryPreferences: z.array(z.string()).optional(),
+        allergies: z.array(z.string()).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      
+      const prompt = `Suggest ingredient substitutions for "${input.ingredientName}".
+
+${input.dietaryPreferences?.length ? `Dietary preferences: ${input.dietaryPreferences.join(", ")}` : ""}
+${input.allergies?.length ? `Must avoid: ${input.allergies.join(", ")}` : ""}
+
+Return a JSON array of substitution options, each with:
+- name: Substitution ingredient name
+- ratio: How much to use (e.g., "1:1", "2:1", "1/2:1")
+- reason: Why this substitution works
+- bestFor: What types of recipes this works best for
+
+Return at least 3-5 substitution options.`;
+
+      const response = await invokeLLM({
+        messages: [{ role: "user", content: prompt }],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "substitutions",
+            schema: {
+              type: "object",
+              properties: {
+                substitutions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      ratio: { type: "string" },
+                      reason: { type: "string" },
+                      bestFor: { type: "string" },
+                    },
+                    required: ["name", "ratio", "reason"],
+                  },
+                },
+              },
+              required: ["substitutions"],
+            },
+          },
+        },
+      });
+      
+      const data = JSON.parse(response.choices[0].message.content);
+      return data.substitutions || [];
+    }),
+
+  // Predict recipe difficulty
+  predictDifficulty: optionalAuthProcedure
+    .input(z.object({ recipeId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const recipe = await db.getRecipeById(input.recipeId);
+      if (!recipe) {
+        throw new Error("Recipe not found");
+      }
+      
+      const { invokeLLM } = await import("./_core/llm");
+      
+      const prompt = `Analyze this recipe and predict its difficulty level (1-5 stars, where 1 is easiest and 5 is hardest).
+
+Recipe Name: ${recipe.name}
+Instructions: ${recipe.instructions || "N/A"}
+Cooking Time: ${recipe.cookingTime || "Unknown"} minutes
+Servings: ${recipe.servings || "Unknown"}
+
+Consider:
+- Number of steps
+- Complexity of techniques
+- Required equipment
+- Time required
+- Skill level needed
+
+Return a JSON object with:
+- difficulty: Number from 1-5
+- confidence: Number from 0-1 (how confident you are)
+- reasoning: Brief explanation
+- skillLevel: "beginner", "intermediate", or "advanced"`;
+
+      const response = await invokeLLM({
+        messages: [{ role: "user", content: prompt }],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "difficulty_prediction",
+            schema: {
+              type: "object",
+              properties: {
+                difficulty: { type: "number", minimum: 1, maximum: 5 },
+                confidence: { type: "number", minimum: 0, maximum: 1 },
+                reasoning: { type: "string" },
+                skillLevel: {
+                  type: "string",
+                  enum: ["beginner", "intermediate", "advanced"],
+                },
+              },
+              required: ["difficulty", "confidence", "reasoning", "skillLevel"],
+            },
+          },
+        },
+      });
+      
+      return JSON.parse(response.choices[0].message.content);
+    }),
+
+  // Generate weekly meal plan
+  generateMealPlan: optionalAuthProcedure
+    .input(
+      z.object({
+        weekStart: z.string().optional(), // ISO date string
+        dietaryPreferences: z.array(z.string()).optional(),
+        maxCookingTime: z.number().int().positive().optional(),
+        budget: z.number().positive().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const userData = await db.getUserById(user.id);
+      
+      const dietaryPrefs = [
+        ...(input.dietaryPreferences || []),
+        ...(userData?.dietaryPreferences ? JSON.parse(userData.dietaryPreferences) : []),
+      ];
+      const allergies = userData?.allergies ? JSON.parse(userData.allergies) : [];
+      const calorieBudget = userData?.calorieBudget || input.budget;
+      
+      const { invokeLLM } = await import("./_core/llm");
+      
+      const prompt = `Generate a weekly meal plan (7 days) with breakfast, lunch, dinner, and optional snack for each day.
+
+Requirements:
+${dietaryPrefs.length > 0 ? `- Dietary preferences: ${dietaryPrefs.join(", ")}` : ""}
+${allergies.length > 0 ? `- Must avoid: ${allergies.join(", ")}` : ""}
+${input.maxCookingTime ? `- Maximum cooking time per meal: ${input.maxCookingTime} minutes` : ""}
+${calorieBudget ? `- Daily calorie budget: ${calorieBudget} calories` : ""}
+
+Return a JSON object with a "days" array. Each day should have:
+- date: ISO date string
+- breakfast: { name, description, cookingTime, calories }
+- lunch: { name, description, cookingTime, calories }
+- dinner: { name, description, cookingTime, calories }
+- snack: { name, description, calories } (optional)
+
+Ensure variety throughout the week and that meals are practical and achievable.`;
+
+      const response = await invokeLLM({
+        messages: [{ role: "user", content: prompt }],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "meal_plan",
+            schema: {
+              type: "object",
+              properties: {
+                days: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      date: { type: "string" },
+                      breakfast: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          description: { type: "string" },
+                          cookingTime: { type: "number" },
+                          calories: { type: "number" },
+                        },
+                        required: ["name"],
+                      },
+                      lunch: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          description: { type: "string" },
+                          cookingTime: { type: "number" },
+                          calories: { type: "number" },
+                        },
+                        required: ["name"],
+                      },
+                      dinner: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          description: { type: "string" },
+                          cookingTime: { type: "number" },
+                          calories: { type: "number" },
+                        },
+                        required: ["name"],
+                      },
+                      snack: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          description: { type: "string" },
+                          calories: { type: "number" },
+                        },
+                        required: ["name"],
+                      },
+                    },
+                    required: ["date", "breakfast", "lunch", "dinner"],
+                  },
+                },
+              },
+              required: ["days"],
+            },
+          },
+        },
+      });
+      
+      const mealPlan = JSON.parse(response.choices[0].message.content);
+      
+      // Save meal plan recipes to database
+      const savedRecipes: number[] = [];
+      for (const day of mealPlan.days) {
+        for (const mealType of ["breakfast", "lunch", "dinner", "snack"] as const) {
+          const meal = day[mealType];
+          if (meal && meal.name) {
+            const recipe = await db.createRecipe({
+              name: meal.name,
+              description: meal.description,
+              cookingTime: meal.cookingTime,
+              caloriesPerServing: meal.calories,
+              servings: 1,
+              userId: user.id,
+              source: "ai_meal_plan",
+              isShared: false,
+            });
+            savedRecipes.push(recipe.id);
+          }
+        }
+      }
+      
+      return {
+        ...mealPlan,
+        recipeIds: savedRecipes,
+      };
+    }),
+
+  // Get recently cooked recipes for stats and streak calculation
+  getRecentlyCooked: optionalAuthProcedure
+    .input(
+      z.object({
+        limit: z.number().int().positive().max(100).optional(),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const limit = input?.limit || 10;
+      return db.getRecentlyCookedRecipes(user.id, limit);
+    }),
 });
 
 
