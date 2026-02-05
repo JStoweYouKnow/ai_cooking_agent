@@ -3,7 +3,7 @@
  * Shows onboarding flow for first-time users
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { View, ActivityIndicator } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import OnboardingFlow from "./OnboardingFlow";
@@ -60,7 +60,15 @@ const OnboardingWrapper: React.FC<OnboardingWrapperProps> = ({ children }) => {
   // Show onboarding if not completed
   // showOnboarding === true means we should show onboarding
   if (showOnboarding === true) {
-    return <OnboardingFlow onComplete={handleOnboardingComplete} onSkip={handleOnboardingComplete} />;
+    return (
+      <Suspense fallback={
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" />
+        </View>
+      }>
+        <OnboardingFlow onComplete={handleOnboardingComplete} onSkip={handleOnboardingComplete} />
+      </Suspense>
+    );
   }
 
   // Show main app
