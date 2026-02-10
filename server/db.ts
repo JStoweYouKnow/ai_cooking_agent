@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, or, ne, like } from "drizzle-orm";
+import { eq, desc, asc, and, or, ne, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 // Import all schema exports - using relative path for deployment compatibility
 import type {
@@ -13,7 +13,7 @@ import {
   users, recipes, ingredients, recipeIngredients,
   userIngredients, shoppingLists, shoppingListItems,
   notifications, conversations, messages, pushTokens,
-  subscriptions, payments
+  subscriptions, payments, recipePhotos
 } from "../drizzle/schema-postgres.ts";
 import { ENV } from './_core/env.ts';
 import { getCurrentSeason, getSeasonalScore } from './utils/seasonal.ts';
@@ -459,6 +459,111 @@ export async function deleteRecipe(recipeId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.delete(recipes).where(eq(recipes.id, recipeId));
+}
+
+/**
+ * Mark a recipe as cooked and increment the cooked count
+ */
+export async function markRecipeAsCooked(recipeId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Use atomic SQL increment to avoid race conditions
+  // Use COALESCE to handle NULL values, defaulting to 0
+  return db.update(recipes).set({
+    cookedAt: new Date(),
+    cookedCount: sql`COALESCE(${recipes.cookedCount}, 0) + 1`,
+    updatedAt: new Date(),
+  }).where(eq(recipes.id, recipeId));
+}
+
+/**
+ * Get recently cooked recipes for a user
+ */
+export async function getRecentlyCookedRecipes(userId: number, limit = 10) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return db.select()
+    .from(recipes)
+    .where(and(eq(recipes.userId, userId), ne(recipes.cookedAt, null)))
+    .orderBy(desc(recipes.cookedAt))
+    .limit(limit);
+}
+
+// ============================================
+// Recipe Photo Journal - "I Made This!" feature
+// ============================================
+
+/**
+ * Get all photos for a recipe by a specific user
+ */
+export async function getRecipePhotos(recipeId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return db.select()
+    .from(recipePhotos)
+    .where(and(
+      eq(recipePhotos.recipeId, recipeId),
+      eq(recipePhotos.userId, userId)
+    ))
+    .orderBy(desc(recipePhotos.cookedAt));
+}
+
+/**
+ * Get a single recipe photo by ID
+ */
+export async function getRecipePhotoById(photoId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const results = await db.select()
+    .from(recipePhotos)
+    .where(eq(recipePhotos.id, photoId))
+    .limit(1);
+  
+  return results[0] ?? null;
+}
+
+/**
+ * Add a new recipe photo
+ */
+export async function addRecipePhoto(data: {
+  recipeId: number;
+  userId: number;
+  imageUrl: string;
+  caption?: string;
+  rating?: number;
+  notes?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const results = await db.insert(recipePhotos)
+    .values({
+      recipeId: data.recipeId,
+      userId: data.userId,
+      imageUrl: data.imageUrl,
+      caption: data.caption ?? null,
+      rating: data.rating ?? null,
+      notes: data.notes ?? null,
+      cookedAt: new Date(),
+    })
+    .returning();
+  
+  return results[0];
+}
+
+/**
+ * Delete a recipe photo
+ */
+export async function deleteRecipePhoto(photoId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return db.delete(recipePhotos)
+    .where(eq(recipePhotos.id, photoId));
 }
 
 /**
@@ -1929,7 +2034,14 @@ export async function upsertSubscription(data: InsertSubscription): Promise<Subs
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const existing = await getSubscriptionByStripeCustomerId(data.stripeCustomerId);
+  // Try to find existing subscription by Stripe customer ID (if provided) or user ID
+  let existing: Subscription | undefined;
+  if (data.stripeCustomerId) {
+    existing = await getSubscriptionByStripeCustomerId(data.stripeCustomerId);
+  }
+  if (!existing && data.userId) {
+    existing = await getSubscriptionByUserId(data.userId);
+  }
 
   if (existing) {
     const [updated] = await db
@@ -2030,11 +2142,110 @@ export async function updatePaymentStatus(
   return updated;
 }
 
-// Check if user has active subscription
+// Check if user has active subscription (supports both Stripe and RevenueCat)
 export async function hasActiveSubscription(userId: number): Promise<boolean> {
   const subscription = await getSubscriptionByUserId(userId);
   if (!subscription) return false;
 
   const activeStatuses: Subscription["status"][] = ["active", "trialing"];
-  return activeStatuses.includes(subscription.status);
+
+  // Check if subscription status is active
+  if (!activeStatuses.includes(subscription.status)) return false;
+
+  // For RevenueCat subscriptions, also check expiration date
+  if (subscription.subscriptionPlatform === 'revenuecat_ios' && subscription.revenuecatExpirationDate) {
+    const now = new Date();
+    if (subscription.revenuecatExpirationDate < now) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// RevenueCat-specific queries
+export async function getSubscriptionByRevenueCatUserId(revenuecatAppUserId: string): Promise<Subscription | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(subscriptions).where(eq(subscriptions.revenuecatAppUserId, revenuecatAppUserId)).limit(1);
+  return result[0];
+}
+
+export async function getSubscriptionByRevenueCatTransactionId(transactionId: string): Promise<Subscription | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(subscriptions).where(eq(subscriptions.revenuecatOriginalTransactionId, transactionId)).limit(1);
+  return result[0];
+}
+
+export async function upsertRevenueCatSubscription(data: {
+  userId: number;
+  revenuecatAppUserId: string;
+  revenuecatProductId: string;
+  revenuecatOriginalTransactionId: string;
+  revenuecatExpirationDate?: Date | null;
+  status: Subscription["status"];
+  priceId?: string;
+}): Promise<Subscription> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Try to find existing subscription by RevenueCat user ID or user ID
+  let existing = await getSubscriptionByRevenueCatUserId(data.revenuecatAppUserId);
+  if (!existing) {
+    existing = await getSubscriptionByUserId(data.userId);
+  }
+
+  const subscriptionData = {
+    userId: data.userId,
+    revenuecatAppUserId: data.revenuecatAppUserId,
+    revenuecatProductId: data.revenuecatProductId,
+    revenuecatOriginalTransactionId: data.revenuecatOriginalTransactionId,
+    revenuecatExpirationDate: data.revenuecatExpirationDate || null,
+    status: data.status,
+    subscriptionPlatform: 'revenuecat_ios' as const,
+    priceId: data.priceId || null,
+    updatedAt: new Date(),
+  };
+
+  if (existing) {
+    const [updated] = await db
+      .update(subscriptions)
+      .set(subscriptionData)
+      .where(eq(subscriptions.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  const [inserted] = await db.insert(subscriptions).values({
+    ...subscriptionData,
+    stripeCustomerId: null, // RevenueCat subscriptions don't have Stripe customer IDs
+  }).returning();
+  return inserted;
+}
+
+export async function updateRevenueCatSubscriptionStatus(
+  revenuecatAppUserId: string,
+  status: Subscription["status"],
+  expirationDate?: Date | null
+): Promise<Subscription | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const updateData: Record<string, unknown> = {
+    status,
+    updatedAt: new Date(),
+  };
+
+  if (expirationDate !== undefined) {
+    updateData.revenuecatExpirationDate = expirationDate;
+  }
+
+  const [updated] = await db
+    .update(subscriptions)
+    .set(updateData)
+    .where(eq(subscriptions.revenuecatAppUserId, revenuecatAppUserId))
+    .returning();
+
+  return updated;
 }
