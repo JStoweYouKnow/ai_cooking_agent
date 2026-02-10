@@ -45,6 +45,8 @@ export const recipes = pgTable("recipes", {
   source: varchar("source", { length: 100 }).default("user_import"),
   isFavorite: boolean("isFavorite").default(false),
   isShared: boolean("isShared").default(false),
+  cookedAt: timestamp("cookedAt"),
+  cookedCount: integer("cookedCount").default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   // Additional columns for imported recipes
@@ -64,6 +66,7 @@ export const recipes = pgTable("recipes", {
   cuisineIdx: index("recipes_cuisine_idx").on(table.cuisine),
   categoryIdx: index("recipes_category_idx").on(table.category),
   isFavoriteIdx: index("recipes_isFavorite_idx").on(table.isFavorite),
+  cookedAtIdx: index("recipes_cookedAt_idx").on(table.cookedAt),
 }));
 
 export type Recipe = typeof recipes.$inferSelect;
@@ -224,9 +227,21 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
 export const subscriptions = pgTable("subscriptions", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }).notNull().unique(),
+  // Stripe fields (for web/Android)
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }).unique(),
   stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }).unique(),
   stripePriceId: varchar("stripePriceId", { length: 255 }),
+  // RevenueCat fields (for iOS)
+  revenuecatAppUserId: varchar("revenuecatAppUserId", { length: 255 }),
+  revenuecatOriginalAppUserId: varchar("revenuecatOriginalAppUserId", { length: 255 }),
+  revenuecatProductId: varchar("revenuecatProductId", { length: 255 }),
+  revenuecatOriginalTransactionId: varchar("revenuecatOriginalTransactionId", { length: 255 }),
+  revenuecatPurchaseDate: timestamp("revenuecatPurchaseDate"),
+  revenuecatExpirationDate: timestamp("revenuecatExpirationDate"),
+  revenuecatEnvironment: varchar("revenuecatEnvironment", { length: 20 }).default("production"),
+  // Platform indicator: 'stripe' | 'revenuecat_ios'
+  subscriptionPlatform: varchar("subscriptionPlatform", { length: 20 }).default("stripe"),
+  // Common fields
   status: subscriptionStatusEnum("status").notNull().default("incomplete"),
   currentPeriodStart: timestamp("currentPeriodStart"),
   currentPeriodEnd: timestamp("currentPeriodEnd"),
@@ -241,6 +256,8 @@ export const subscriptions = pgTable("subscriptions", {
   stripeCustomerIdIdx: index("subscriptions_stripeCustomerId_idx").on(table.stripeCustomerId),
   stripeSubscriptionIdIdx: index("subscriptions_stripeSubscriptionId_idx").on(table.stripeSubscriptionId),
   statusIdx: index("subscriptions_status_idx").on(table.status),
+  revenuecatAppUserIdIdx: index("subscriptions_revenuecatAppUserId_idx").on(table.revenuecatAppUserId),
+  subscriptionPlatformIdx: index("subscriptions_subscriptionPlatform_idx").on(table.subscriptionPlatform),
 }));
 
 export type Subscription = typeof subscriptions.$inferSelect;
@@ -267,3 +284,23 @@ export const payments = pgTable("payments", {
 
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = typeof payments.$inferInsert;
+
+// Recipe photo journal for "I made this!" feature
+export const recipePhotos = pgTable("recipe_photos", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  recipeId: integer("recipeId").notNull().references(() => recipes.id, { onDelete: "cascade" }),
+  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  imageUrl: text("imageUrl").notNull(),
+  caption: text("caption"),
+  rating: integer("rating"), // 1-5 stars
+  notes: text("notes"),
+  cookedAt: timestamp("cookedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  recipeIdIdx: index("recipe_photos_recipeId_idx").on(table.recipeId),
+  userIdIdx: index("recipe_photos_userId_idx").on(table.userId),
+  cookedAtIdx: index("recipe_photos_cookedAt_idx").on(table.cookedAt),
+}));
+
+export type RecipePhoto = typeof recipePhotos.$inferSelect;
+export type InsertRecipePhoto = typeof recipePhotos.$inferInsert;
