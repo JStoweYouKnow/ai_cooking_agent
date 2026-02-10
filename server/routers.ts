@@ -4,6 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, optionalAuthProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "./db";
 import { users } from "../drizzle/schema-postgres";
@@ -42,6 +43,28 @@ async function sendExpoPushNotification(
     }
   } catch (error) {
     console.error("[Push] Error sending notification:", error);
+  }
+}
+
+// Normalize LLM response content (string | array) to string for JSON.parse etc.
+function llmContentToString(content: string | (unknown)[] | null | undefined): string {
+  if (content == null) return "";
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) return content.map((p) => (p as { text?: string }).text ?? "").join("");
+  return "";
+}
+
+// Helper function for safe JSON parsing
+function parseJsonSafe(jsonString: string | null | undefined, fallback: any = {}): any {
+  if (!jsonString || typeof jsonString !== 'string') {
+    console.warn("[parseJsonSafe] Invalid input:", jsonString);
+    return fallback;
+  }
+  try {
+    return JSON.parse(jsonString);
+  } catch (error) {
+    console.warn("[parseJsonSafe] JSON parse error:", error, "Input:", jsonString.substring(0, 100));
+    return fallback;
   }
 }
 
@@ -387,9 +410,7 @@ const recipeRouter = router({
               },
             },
           });
-          const content = llm.choices[0].message.content;
-          const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
-          const fallback = JSON.parse(contentStr ?? "{}");
+          const fallback = JSON.parse(llmContentToString(llm.choices[0].message.content) || "{}");
           if (!fallback?.name) {
             throw new Error("LLM parsing failed");
           }
@@ -937,7 +958,7 @@ const recipeRouter = router({
             },
           });
           
-          const recognized = JSON.parse(response.choices[0].message.content);
+          const recognized = JSON.parse(llmContentToString(response.choices[0]?.message?.content));
           ingredients = [...ingredients, ...recognized.ingredients];
         }
         
@@ -1019,7 +1040,7 @@ Format the response as valid JSON.`;
           },
         });
         
-        const recipeData = JSON.parse(response.choices[0].message.content);
+        const recipeData = JSON.parse(llmContentToString(response.choices[0]?.message?.content));
         
         // Save recipe to database
         const recipe = await db.createRecipe({
@@ -1073,9 +1094,10 @@ Format the response as valid JSON.`;
       })
     )
     .query(async ({ ctx, input }) => {
-      const { invokeLLM } = await import("./_core/llm");
-      
-      const prompt = `Suggest ingredient substitutions for "${input.ingredientName}".
+      try {
+        const { invokeLLM } = await import("./_core/llm");
+        
+        const prompt = `Suggest ingredient substitutions for "${input.ingredientName}".
 
 ${input.dietaryPreferences?.length ? `Dietary preferences: ${input.dietaryPreferences.join(", ")}` : ""}
 ${input.allergies?.length ? `Must avoid: ${input.allergies.join(", ")}` : ""}
@@ -1088,46 +1110,66 @@ Return a JSON array of substitution options, each with:
 
 Return at least 3-5 substitution options.`;
 
-      const response = await invokeLLM({
-        messages: [{ role: "user", content: prompt }],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "substitutions",
-            schema: {
-              type: "object",
-              properties: {
-                substitutions: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      name: { type: "string" },
-                      ratio: { type: "string" },
-                      reason: { type: "string" },
-                      bestFor: { type: "string" },
+        const response = await invokeLLM({
+          messages: [{ role: "user", content: prompt }],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "substitutions",
+              schema: {
+                type: "object",
+                properties: {
+                  substitutions: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        ratio: { type: "string" },
+                        reason: { type: "string" },
+                        bestFor: { type: "string" },
+                      },
+                      required: ["name", "ratio", "reason"],
                     },
-                    required: ["name", "ratio", "reason"],
                   },
                 },
+                required: ["substitutions"],
               },
-              required: ["substitutions"],
             },
           },
-        },
-      });
-      
-      const data = JSON.parse(response.choices[0].message.content);
-      return data.substitutions || [];
+        });
+        
+        const data = parseJsonSafe(llmContentToString(response.choices[0]?.message?.content), { substitutions: [] });
+        return data.substitutions || [];
+      } catch (error) {
+        console.error("[getSubstitutions] Error generating substitutions:", error, {
+          ingredientName: input.ingredientName,
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to generate substitutions",
+        });
+      }
     }),
 
   // Predict recipe difficulty
   predictDifficulty: optionalAuthProcedure
     .input(z.object({ recipeId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
       const recipe = await db.getRecipeById(input.recipeId);
       if (!recipe) {
-        throw new Error("Recipe not found");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Recipe not found",
+        });
+      }
+      // Verify access - user must own recipe or recipe must be shared
+      if (recipe.userId !== user.id && !recipe.isShared) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only view difficulty predictions for your own recipes or shared recipes",
+        });
       }
       
       const { invokeLLM } = await import("./_core/llm");
@@ -1175,7 +1217,7 @@ Return a JSON object with:
         },
       });
       
-      return JSON.parse(response.choices[0].message.content);
+      return parseJsonSafe(llmContentToString(response.choices[0]?.message?.content), { difficulty: 3, confidence: 0.5, reasoning: "Unable to analyze", skillLevel: "intermediate" });
     }),
 
   // Generate weekly meal plan
@@ -1283,7 +1325,7 @@ Ensure variety throughout the week and that meals are practical and achievable.`
         },
       });
       
-      const mealPlan = JSON.parse(response.choices[0].message.content);
+      const mealPlan = parseJsonSafe(llmContentToString(response.choices[0]?.message?.content), { days: [] });
       
       // Save meal plan recipes to database
       const savedRecipes: number[] = [];
@@ -1464,9 +1506,7 @@ Return a JSON object with an "ingredients" array. Each ingredient must have name
           },
         });
 
-        const content = response.choices[0].message.content;
-        const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
-        const parsed = JSON.parse(contentStr);
+        const parsed = JSON.parse(llmContentToString(response.choices[0].message.content) || "{}");
         const ingredients = parsed.ingredients || [];
 
         // Filter and normalize ingredients

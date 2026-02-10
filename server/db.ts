@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, or, ne, like, sql } from "drizzle-orm";
+import { eq, desc, asc, and, or, ne, like, sql, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 // Import all schema exports - using relative path for deployment compatibility
 import type {
@@ -486,7 +486,7 @@ export async function getRecentlyCookedRecipes(userId: number, limit = 10) {
   
   return db.select()
     .from(recipes)
-    .where(and(eq(recipes.userId, userId), ne(recipes.cookedAt, null)))
+    .where(and(eq(recipes.userId, userId), isNotNull(recipes.cookedAt)))
     .orderBy(desc(recipes.cookedAt))
     .limit(limit);
 }
