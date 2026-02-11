@@ -455,6 +455,12 @@ export async function updateRecipeTags(recipeId: number, tags: string[]) {
   return db.update(recipes).set({ tags }).where(eq(recipes.id, recipeId));
 }
 
+export async function updateRecipeImage(recipeId: number, imageUrl: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(recipes).set({ imageUrl }).where(eq(recipes.id, recipeId));
+}
+
 export async function deleteRecipe(recipeId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

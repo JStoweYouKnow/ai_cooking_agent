@@ -2431,8 +2431,90 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
 
         const parsed = JSON.parse(jsonString);
 
+        // Build instructions string from steps array
+        const instructionsText = (parsed.steps ?? [])
+          .map((step: string, i: number) => `${i + 1}. ${step}`)
+          .join("\n");
+
+        // Save recipe to database
+        const savedRecipe = await db.createRecipe({
+          name: parsed.name,
+          description: parsed.description,
+          instructions: instructionsText,
+          servings: parsed.servings ?? input.servings ?? 4,
+          cookingTime: parsed.cookingTime ?? null,
+          cuisine: input.cuisine ?? null,
+          category: (parsed.tags ?? [])[0] ?? null,
+          userId: user.id,
+          source: "ai_generated",
+          isShared: false,
+        });
+
+        // Add ingredients to the recipe
+        if (parsed.ingredients && Array.isArray(parsed.ingredients)) {
+          for (const ing of parsed.ingredients) {
+            try {
+              const ingredient = await db.getOrCreateIngredient(ing.name);
+              await db.addRecipeIngredient({
+                recipeId: savedRecipe.id,
+                ingredientId: ingredient.id,
+                quantity: ing.quantity || null,
+                unit: ing.unit || null,
+              });
+            } catch (ingErr) {
+              console.warn("[ai.generateRecipe] Failed to add ingredient:", ing.name, ingErr);
+            }
+          }
+        }
+
+        // Generate an image for the recipe (non-blocking — update recipe async)
+        (async () => {
+          try {
+            const imagePrompt = `Professional food photography of "${parsed.name}": ${parsed.description}. Overhead shot, natural lighting, styled on a rustic table, appetizing and vibrant.`;
+
+            if (!process.env.OPENAI_API_KEY) return;
+
+            const imgRes = await fetch("https://api.openai.com/v1/images/generations", {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: "dall-e-3",
+                prompt: imagePrompt,
+                n: 1,
+                size: "1024x1024",
+                quality: "standard",
+              }),
+            });
+
+            if (!imgRes.ok) {
+              console.warn("[ai.generateRecipe] DALL-E failed:", await imgRes.text().catch(() => ""));
+              return;
+            }
+
+            const imgData = (await imgRes.json()) as { data: Array<{ url: string }> };
+            const tempUrl = imgData.data?.[0]?.url;
+            if (!tempUrl) return;
+
+            // Download image and upload to S3 for permanent storage
+            const imgDownload = await fetch(tempUrl);
+            if (!imgDownload.ok) return;
+
+            const imgBuffer = Buffer.from(await imgDownload.arrayBuffer());
+            const { uploadImageToS3 } = await import("./_core/storage");
+            const s3Url = await uploadImageToS3(imgBuffer, `ai-recipe-${savedRecipe.id}.png`, "image/png");
+            await db.updateRecipeImage(savedRecipe.id, s3Url);
+            console.log(`[ai.generateRecipe] Image saved for recipe ${savedRecipe.id}`);
+          } catch (imgErr: any) {
+            console.warn("[ai.generateRecipe] Image generation failed (non-blocking):", imgErr?.message);
+          }
+        })();
+
         return {
           recipe: {
+            id: savedRecipe.id,
             name: parsed.name,
             description: parsed.description,
             servings: parsed.servings ?? input.servings ?? null,

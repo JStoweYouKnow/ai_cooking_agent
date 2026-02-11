@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, TextInput, Alert } from "react-native";
 import { trpc } from "../../api/trpc";
+import { queryClient } from "../../api/client";
 import AppLayout from "../../components/layout/AppLayout";
 import ScreenHeader from "../../components/layout/ScreenHeader";
 import GradientButton from "../../components/GradientButton";
@@ -18,6 +19,10 @@ const RecipeGeneratorScreen: React.FC<Props> = ({ navigation }) => {
   const [servings, setServings] = useState("");
 
   const generateRecipe = trpc.ai.generateRecipe.useMutation({
+    onSuccess: () => {
+      // Invalidate recipes list so the new recipe shows up in the library
+      queryClient.invalidateQueries({ queryKey: [["recipes"]] });
+    },
     onError: (error) => {
       Alert.alert("Unable to generate recipe", error.message || "Please try again.");
     },
@@ -48,6 +53,16 @@ const RecipeGeneratorScreen: React.FC<Props> = ({ navigation }) => {
       cuisine: cuisine.trim() || undefined,
       servings: parsedServings,
       ingredients: parsedIngredients.length ? parsedIngredients : undefined,
+    });
+  };
+
+  const handleViewRecipe = () => {
+    const recipeId = generateRecipe.data?.recipe?.id;
+    if (!recipeId) return;
+    // Navigate to Recipes tab → RecipeDetail
+    (navigation as any).navigate("Recipes", {
+      screen: "RecipeDetail",
+      params: { id: recipeId },
     });
   };
 
@@ -159,6 +174,12 @@ const RecipeGeneratorScreen: React.FC<Props> = ({ navigation }) => {
               {idx + 1}. {step}
             </Text>
           ))}
+
+          <GradientButton
+            title="View in Recipe Library"
+            onPress={handleViewRecipe}
+            style={{ marginTop: spacing.lg }}
+          />
         </GlassCard>
       )}
     </AppLayout>
@@ -249,4 +270,3 @@ const styles = StyleSheet.create({
 });
 
 export default RecipeGeneratorScreen;
-
