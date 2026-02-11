@@ -2297,7 +2297,7 @@ When suggesting recipes or meal ideas, prioritize using the ingredients the user
 Respond with actionable guidance and, when appropriate, bullet lists or short numbered steps.
 `;
 
-      const llmMessages: Parameters<typeof invokeLLM>[0]["messages"] = [
+      const llmMessages: InvokeParams["messages"] = [
         { role: "system", content: systemPrompt },
         ...input.messages.map((message) => ({
           role: message.role,
