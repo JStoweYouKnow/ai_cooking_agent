@@ -2,6 +2,7 @@ import "server-only";
 
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, optionalAuthProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -998,6 +999,7 @@ Return a JSON object with:
 Format the response as valid JSON.`;
 
         const response = await invokeLLM({
+          model: ENV.geminiProModel,
           messages: [
             {
               role: "user",
@@ -1261,6 +1263,7 @@ Return a JSON object with a "days" array. Each day should have:
 Ensure variety throughout the week and that meals are practical and achievable.`;
 
       const response = await invokeLLM({
+        model: ENV.geminiProModel,
         messages: [{ role: "user", content: prompt }],
         response_format: {
           type: "json_schema",
@@ -2261,6 +2264,26 @@ const aiRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user || (await db.getOrCreateAnonymousUser());
+
+      // Fetch user's pantry ingredients to give the AI real context
+      let pantryList = "none added yet";
+      try {
+        const userIngredients = await db.getUserIngredients(user.id);
+        if (userIngredients.length > 0) {
+          const names: string[] = [];
+          for (const ui of userIngredients.slice(0, 30)) {
+            const ingredient = await db.getIngredientById(ui.ingredientId);
+            if (ingredient?.name) {
+              const qty = ui.quantity ? `${ui.quantity}${ui.unit ? " " + ui.unit : ""}` : "";
+              names.push(qty ? `${ingredient.name} (${qty})` : ingredient.name);
+            }
+          }
+          if (names.length > 0) pantryList = names.join(", ");
+        }
+      } catch (e) {
+        console.warn("[ai.chat] Could not load pantry ingredients:", e);
+      }
+
       const systemPrompt = `
 You are Sous, a friendly AI cooking assistant for the Sous app.
 Provide concise, practical cooking advice rooted in user pantry items, dietary preferences, and goals.
@@ -2269,6 +2292,8 @@ User context:
 - Dietary preferences: ${user.dietaryPreferences ?? "not specified"}
 - Allergies: ${user.allergies ?? "not specified"}
 - Goals: ${user.goals ?? "not specified"}
+- Pantry ingredients: ${pantryList}
+When suggesting recipes or meal ideas, prioritize using the ingredients the user already has in their pantry.
 Respond with actionable guidance and, when appropriate, bullet lists or short numbered steps.
 `;
 
@@ -2280,13 +2305,14 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
         })),
       ];
 
-      const { invokeLLM } = await import("./_core/llm");
-      const response = await invokeLLM({
-        messages: llmMessages,
-        maxTokens: 700,
-      });
+      try {
+        const { invokeLLM } = await import("./_core/llm");
+        const response = await invokeLLM({
+          messages: llmMessages,
+          maxTokens: 700,
+        });
 
-      const rawContent = response.choices[0]?.message?.content ?? "";
+        const rawContent = response.choices[0]?.message?.content ?? "";
       const reply =
         typeof rawContent === "string"
           ? rawContent
@@ -2300,7 +2326,18 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
               .join("\n")
             : "";
 
-      return { reply: reply.trim() };
+        return { reply: reply.trim() };
+      } catch (err: any) {
+        console.error("[ai.chat] LLM error:", err?.message, err?.stack);
+        const msg = err?.message || "AI request failed";
+        if (msg.includes("API key") || msg.includes("not configured")) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI is not configured. Set GEMINI_API_KEY in server environment variables." });
+        }
+        if (msg.includes("429") || msg.includes("quota")) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "AI is temporarily rate-limited. Please try again in a moment." });
+        }
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
     }),
 
   generateRecipe: optionalAuthProcedure
@@ -2365,45 +2402,57 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
         .filter(Boolean)
         .join("\n");
 
-      const { invokeLLM } = await import("./_core/llm");
-      const response = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are Sous, an expert chef that crafts structured recipes for the Sous AI mobile app. Return flavorful, approachable dishes.",
+      try {
+        const { invokeLLM } = await import("./_core/llm");
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are Sous, an expert chef that crafts structured recipes for the Sous AI mobile app. Return flavorful, approachable dishes.",
+            },
+            {
+              role: "user",
+              content: `${input.prompt}\n${preferenceSummary}`,
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: schema,
           },
-          {
-            role: "user",
-            content: `${input.prompt}\n${preferenceSummary}`,
+          maxTokens: 900,
+        });
+
+        const rawContent = response.choices[0]?.message?.content;
+        const jsonString =
+          typeof rawContent === "string"
+            ? rawContent
+            : JSON.stringify(rawContent ?? { name: "", description: "", ingredients: [], steps: [] });
+
+        const parsed = JSON.parse(jsonString);
+
+        return {
+          recipe: {
+            name: parsed.name,
+            description: parsed.description,
+            servings: parsed.servings ?? input.servings ?? null,
+            cookingTime: parsed.cookingTime ?? null,
+            tags: parsed.tags ?? [],
+            ingredients: parsed.ingredients ?? [],
+            steps: parsed.steps ?? [],
           },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: schema,
-        },
-        maxTokens: 900,
-      });
-
-      const rawContent = response.choices[0]?.message?.content;
-      const jsonString =
-        typeof rawContent === "string"
-          ? rawContent
-          : JSON.stringify(rawContent ?? { name: "", description: "", ingredients: [], steps: [] });
-
-      const parsed = JSON.parse(jsonString);
-
-      return {
-        recipe: {
-          name: parsed.name,
-          description: parsed.description,
-          servings: parsed.servings ?? input.servings ?? null,
-          cookingTime: parsed.cookingTime ?? null,
-          tags: parsed.tags ?? [],
-          ingredients: parsed.ingredients ?? [],
-          steps: parsed.steps ?? [],
-        },
-      };
+        };
+      } catch (err: any) {
+        console.error("[ai.generateRecipe] LLM error:", err?.message, err?.stack);
+        const msg = err?.message || "Recipe generation failed";
+        if (msg.includes("API key") || msg.includes("not configured")) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI is not configured. Set GEMINI_API_KEY in server environment variables." });
+        }
+        if (msg.includes("429") || msg.includes("quota")) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "AI is temporarily rate-limited. Please try again in a moment." });
+        }
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
     }),
 });
 
@@ -2427,6 +2476,9 @@ const subscriptionRouter = router({
   }),
 
   hasActive: protectedProcedure.query(async ({ ctx }) => {
+    // Grant premium to owner and hackathon judges (dev + judge accounts)
+    if (ENV.ownerOpenId && ctx.user.openId === ENV.ownerOpenId) return true;
+    if (ENV.premiumOpenIds.includes(ctx.user.openId)) return true;
     return db.hasActiveSubscription(ctx.user.id);
   }),
 
