@@ -4,9 +4,18 @@ export const ENV = {
   databaseUrl: process.env.DATABASE_URL ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+  /** Comma-separated openIds that get premium (dev + hackathon judges). Also owner gets premium. */
+  premiumOpenIds: (process.env.HACKATHON_PREMIUM_OPEN_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Google Gemini (primary AI for the app)
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  geminiModel: process.env.GEMINI_MODEL ?? "gemini-3-flash-preview",
+  geminiProModel: process.env.GEMINI_PRO_MODEL ?? "gemini-3-pro-preview",
   // AWS S3 for image uploads
   awsRegion: process.env.AWS_REGION ?? "us-east-2",
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
@@ -32,4 +41,6 @@ export const ENV = {
   stripePriceFamilyMonthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY ?? "price_1SYtXU9rKYrAFwcoaKcT8wHL",
   stripePriceFamilyYearly: process.env.STRIPE_PRICE_FAMILY_YEARLY ?? "price_1SYtXV9rKYrAFwcoCTS4LWkj",
   stripePriceLifetime: process.env.STRIPE_PRICE_LIFETIME ?? "price_1SYtXF9rKYrAFwcoshbIFfKA",
+  // RevenueCat (iOS In-App Purchases)
+  revenuecatWebhookSecret: process.env.REVENUECAT_WEBHOOK_SECRET ?? "",
 };
