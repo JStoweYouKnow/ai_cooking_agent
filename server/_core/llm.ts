@@ -66,6 +66,8 @@ export type InvokeParams = {
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
   response_format?: ResponseFormat;
+  /** Override model (e.g. gemini-3-pro-preview for complex reasoning) */
+  model?: string;
 };
 
 export type ToolCall = {
@@ -209,19 +211,53 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+const GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai";
+const OPENAI_BASE = "https://api.openai.com";
 
-const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+type LLMProvider = { name: string; url: string; key: string; model: string };
+
+/**
+ * Build an ordered list of available LLM providers.
+ * The first entry is the preferred provider; the rest are fallbacks.
+ */
+const getProviders = (modelOverride?: string): LLMProvider[] => {
+  const providers: LLMProvider[] = [];
+
+  if (ENV.geminiApiKey) {
+    providers.push({
+      name: "Gemini",
+      url: `${GEMINI_OPENAI_BASE}/chat/completions`,
+      key: ENV.geminiApiKey,
+      model: modelOverride || ENV.geminiModel,
+    });
+  }
+
+  if (process.env.OPENAI_API_KEY) {
+    providers.push({
+      name: "OpenAI",
+      url: `${OPENAI_BASE}/v1/chat/completions`,
+      key: process.env.OPENAI_API_KEY,
+      model: modelOverride || process.env.OPENAI_MODEL || "gpt-4o-mini",
+    });
+  }
+
+  if (ENV.forgeApiKey && ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0) {
+    providers.push({
+      name: "Forge",
+      url: `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`,
+      key: ENV.forgeApiKey,
+      model: modelOverride || process.env.OPENAI_MODEL || "gpt-4o-mini",
+    });
+  }
+
+  return providers;
+};
 
 const assertApiKey = () => {
-  // Only assert API key when actually invoking LLM, not at module load time
-  // This allows the module to be imported during build without requiring API key
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured. Set BUILT_IN_FORGE_API_KEY environment variable.");
-  }
+  if (getProviders().length > 0) return;
+  throw new Error(
+    "API key is not configured. Set GEMINI_API_KEY (recommended), OPENAI_API_KEY, or BUILT_IN_FORGE_API_KEY."
+  );
 };
 
 const normalizeResponseFormat = ({
@@ -283,25 +319,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  const payload: Record<string, unknown> = {
-    model: DEFAULT_OPENAI_MODEL,
-    messages: messages.map(normalizeMessage),
-  };
-
-  if (tools && tools.length > 0) {
-    payload.tools = tools;
-  }
-
   const normalizedToolChoice = normalizeToolChoice(
     toolChoice || tool_choice,
     tools
   );
-  if (normalizedToolChoice) {
-    payload.tool_choice = normalizedToolChoice;
-  }
 
-  const MAX_OPENAI_TOKENS = Number(process.env.OPENAI_MAX_TOKENS ?? 8192);
-  payload.max_tokens = Math.min(MAX_OPENAI_TOKENS, 16000);
+  const maxTokens = Number(process.env.OPENAI_MAX_TOKENS ?? process.env.GEMINI_MAX_TOKENS ?? 8192);
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
@@ -310,25 +333,54 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
   });
 
-  if (normalizedResponseFormat) {
-    payload.response_format = normalizedResponseFormat;
+  const providers = getProviders(params.model);
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    const payload: Record<string, unknown> = {
+      model: provider.model,
+      messages: messages.map(normalizeMessage),
+    };
+
+    if (tools && tools.length > 0) {
+      payload.tools = tools;
+    }
+    if (normalizedToolChoice) {
+      payload.tool_choice = normalizedToolChoice;
+    }
+    payload.max_tokens = Math.min(maxTokens, 16000);
+    if (normalizedResponseFormat) {
+      payload.response_format = normalizedResponseFormat;
+    }
+
+    try {
+      const response = await fetch(provider.url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${provider.key}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const msg = `[${provider.name}] ${response.status} ${response.statusText} – ${errorText}`;
+        console.error(`[invokeLLM] Provider failed: ${msg}`);
+        errors.push(msg);
+        continue; // try next provider
+      }
+
+      return (await response.json()) as InvokeResult;
+    } catch (err: any) {
+      const msg = `[${provider.name}] ${err.message || "fetch failed"}`;
+      console.error(`[invokeLLM] Provider connection error: ${msg}`);
+      errors.push(msg);
+      continue; // try next provider
+    }
   }
 
-  const response = await fetch(resolveApiUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
-    );
-  }
-
-  return (await response.json()) as InvokeResult;
+  throw new Error(
+    `All LLM providers failed: ${errors.join("; ")}`
+  );
 }
