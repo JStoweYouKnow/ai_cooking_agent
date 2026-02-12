@@ -121,7 +121,9 @@ async function getS3Client(): Promise<S3Client> {
 export async function uploadImageToS3(
   imageData: Buffer | string,
   fileName: string,
-  contentType: string = "image/jpeg"
+  contentType: string = "image/jpeg",
+  /** Presigned URL expiry in seconds. Default 1hr. Use 2592000 (30 days) for recipe images. */
+  expiresIn: number = 3600
 ): Promise<string> {
   // Check S3 configuration
   if (!ENV.s3Bucket) {
@@ -216,7 +218,7 @@ export async function uploadImageToS3(
     Key: key,
   });
   
-  const presignedUrl = await getSignedUrl(client, getCommand, { expiresIn: 3600 }); // 1 hour expiry
+  const presignedUrl = await getSignedUrl(client, getCommand, { expiresIn });
   
   // Log to verify presigned URL is generated (contains query parameters)
   console.log(`[S3 Upload] Generated presigned URL for ${key}: ${presignedUrl.substring(0, 100)}...`);
