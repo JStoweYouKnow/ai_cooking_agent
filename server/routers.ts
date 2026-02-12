@@ -219,6 +219,15 @@ const recipeRouter = router({
       if (recipe.userId !== user.id && !recipe.isShared) {
         throw new Error("Unauthorized: You can only view your own recipes or shared recipes");
       }
+      // Use image proxy for AI-generated recipes so mobile can load S3 images reliably
+      const aiSource = recipe.source === "ai_chat" || recipe.source === "ai_generated";
+      if (aiSource && recipe.imageUrl) {
+        const base =
+          process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+          "https://sous.projcomfort.com";
+        return { ...recipe, imageUrl: `${base}/api/recipe-image/${recipe.id}` };
+      }
       return recipe;
     }),
 
@@ -2313,7 +2322,7 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
         });
 
         const rawContent = response.choices[0]?.message?.content ?? "";
-      const reply =
+      let reply =
         typeof rawContent === "string"
           ? rawContent
           : Array.isArray(rawContent)
@@ -2326,7 +2335,128 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
               .join("\n")
             : "";
 
-        return { reply: reply.trim() };
+        // Detect recipe request: create/give/suggest a recipe, dinner idea, etc.
+        const lastUserContent =
+          input.messages.length > 0
+            ? input.messages[input.messages.length - 1]?.content ?? ""
+            : "";
+        const recipeIntent =
+          /(?:create|give me|make me|suggest|recipe|dinner idea|meal idea|what can i (make|cook)|using (my )?pantry)/i.test(
+            lastUserContent
+          ) && lastUserContent.length >= 10;
+
+        let recipe: Awaited<ReturnType<typeof db.getRecipeById>> | undefined;
+        if (recipeIntent) {
+          try {
+            const prefSummary = [
+              user.dietaryPreferences ? `Dietary: ${user.dietaryPreferences}` : null,
+              user.allergies ? `Avoid: ${user.allergies}` : null,
+            ]
+              .filter(Boolean)
+              .join("; ");
+            const recipeRes = await invokeLLM({
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    "You are Sous, an expert chef. Return ONLY valid JSON (no markdown, no explanation) with this exact shape: " +
+                    '{"name":"string","description":"string","servings":number,"cookingTime":number,' +
+                    '"tags":["string"],"ingredients":[{"name":"string","quantity":"string","unit":"string"}],' +
+                    '"steps":["string"]}. ' +
+                    "All fields are required. Use empty string for unknown quantity/unit. " +
+                    "Include at least 4 ingredients and 3 steps.",
+                },
+                { role: "user", content: `${lastUserContent}\n${prefSummary || ""}` },
+              ],
+              response_format: { type: "json_object" },
+              maxTokens: 900,
+            });
+            const recipeJson =
+              typeof recipeRes.choices[0]?.message?.content === "string"
+                ? recipeRes.choices[0].message.content
+                : JSON.stringify(recipeRes.choices[0]?.message?.content ?? {});
+            const parsed = JSON.parse(recipeJson);
+            const instructionsText = (parsed.steps ?? [])
+              .map((s: string, i: number) => `${i + 1}. ${s}`)
+              .join("\n");
+            const savedRecipe = await db.createRecipe({
+              name: parsed.name,
+              description: parsed.description,
+              instructions: instructionsText,
+              servings: parsed.servings ?? 4,
+              cookingTime: parsed.cookingTime ?? null,
+              cuisine: (parsed.tags ?? [])[0] ?? null,
+              category: (parsed.tags ?? [])[1] ?? null,
+              userId: user.id,
+              source: "ai_chat",
+              isShared: false,
+            });
+            if (parsed.ingredients && Array.isArray(parsed.ingredients)) {
+              for (const ing of parsed.ingredients) {
+                try {
+                  const ingredient = await db.getOrCreateIngredient(ing.name);
+                  await db.addRecipeIngredient({
+                    recipeId: savedRecipe.id,
+                    ingredientId: ingredient.id,
+                    quantity: ing.quantity || null,
+                    unit: ing.unit || null,
+                  });
+                } catch {
+                  /* skip failed ingredient */
+                }
+              }
+            }
+
+            // Build proxy URL for the image (served via /api/recipe-image/[id])
+            const base =
+              process.env.NEXT_PUBLIC_APP_URL ||
+              (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+              "https://sous.projcomfort.com";
+            const proxyImageUrl = `${base}/api/recipe-image/${savedRecipe.id}`;
+
+            // Fire-and-forget image generation so the chat responds immediately
+            (async () => {
+              try {
+                const imagePrompt = `Professional food photography of "${parsed.name}": ${parsed.description}. Overhead shot, natural lighting, styled on a rustic table, appetizing and vibrant.`;
+                const { generateRecipeImage } = await import("./_core/geminiImage");
+                const imgBuffer = await Promise.race([
+                  generateRecipeImage(imagePrompt),
+                  new Promise<null>((_, reject) =>
+                    setTimeout(() => reject(new Error("Image generation timeout")), 25000)
+                  ),
+                ]);
+                if (imgBuffer) {
+                  const { uploadImageToS3 } = await import("./_core/storage");
+                  const s3Url = await uploadImageToS3(
+                    imgBuffer,
+                    `ai-recipe-${savedRecipe.id}.png`,
+                    "image/png",
+                    2592000
+                  );
+                  await db.updateRecipeImage(savedRecipe.id, s3Url);
+                  console.log(`[ai.chat] Image saved for recipe ${savedRecipe.id}`);
+                }
+              } catch (imgErr: any) {
+                console.warn("[ai.chat] Image generation failed (non-blocking):", imgErr?.message);
+              }
+            })();
+
+            // Return recipe immediately with proxy URL and parsed data
+            recipe = {
+              ...savedRecipe,
+              imageUrl: proxyImageUrl,
+              isFavorite: false,
+              tags: parsed.tags ?? [],
+              ingredients: parsed.ingredients ?? [],
+              steps: parsed.steps ?? [],
+            } as any;
+            reply += "\n\nI've saved a recipe for you — tap the card to see the full details.";
+          } catch (recipeErr: any) {
+            console.warn("[ai.chat] Recipe generation failed:", recipeErr?.message);
+          }
+        }
+
+        return { reply: reply.trim(), recipe: recipe ?? undefined };
       } catch (err: any) {
         console.error("[ai.chat] LLM error:", err?.message, err?.stack);
         const msg = err?.message || "AI request failed";
@@ -2351,45 +2481,6 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
     )
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user || (await db.getOrCreateAnonymousUser());
-      const schema = {
-        name: "generated_recipe",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            name: { type: "string" },
-            description: { type: "string" },
-            servings: { type: "integer" },
-            cookingTime: { type: "integer" },
-            tags: {
-              type: "array",
-              items: { type: "string" },
-            },
-            ingredients: {
-              type: "array",
-              minItems: 4,
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  quantity: { type: "string" },
-                  unit: { type: "string" },
-                },
-                required: ["name"],
-                additionalProperties: false,
-              },
-            },
-            steps: {
-              type: "array",
-              minItems: 3,
-              items: { type: "string" },
-            },
-          },
-          required: ["name", "description", "ingredients", "steps"],
-          additionalProperties: false,
-        },
-      } as const;
-
       const preferenceSummary = [
         input.cuisine ? `Preferred cuisine: ${input.cuisine}` : null,
         input.servings ? `Target servings: ${input.servings}` : null,
@@ -2409,17 +2500,20 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
             {
               role: "system",
               content:
-                "You are Sous, an expert chef that crafts structured recipes for the Sous AI mobile app. Return flavorful, approachable dishes.",
+                "You are Sous, an expert chef that crafts structured recipes for the Sous AI mobile app. " +
+                "Return ONLY valid JSON (no markdown, no explanation) with this exact shape: " +
+                '{"name":"string","description":"string","servings":number,"cookingTime":number,' +
+                '"tags":["string"],"ingredients":[{"name":"string","quantity":"string","unit":"string"}],' +
+                '"steps":["string"]}. ' +
+                "All fields are required. Use empty string for unknown quantity/unit. " +
+                "Include at least 4 ingredients and 3 steps. Return flavorful, approachable dishes.",
             },
             {
               role: "user",
               content: `${input.prompt}\n${preferenceSummary}`,
             },
           ],
-          response_format: {
-            type: "json_schema",
-            json_schema: schema,
-          },
+          response_format: { type: "json_object" },
           maxTokens: 900,
         });
 
@@ -2467,56 +2561,55 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
           }
         }
 
-        // Generate an image for the recipe (non-blocking — update recipe async)
-        (async () => {
-          try {
-            const imagePrompt = `Professional food photography of "${parsed.name}": ${parsed.description}. Overhead shot, natural lighting, styled on a rustic table, appetizing and vibrant.`;
-
-            if (!process.env.OPENAI_API_KEY) return;
-
-            const imgRes = await fetch("https://api.openai.com/v1/images/generations", {
-              method: "POST",
-              headers: {
-                "content-type": "application/json",
-                authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-              },
-              body: JSON.stringify({
-                model: "dall-e-3",
-                prompt: imagePrompt,
-                n: 1,
-                size: "1024x1024",
-                quality: "standard",
-              }),
-            });
-
-            if (!imgRes.ok) {
-              console.warn("[ai.generateRecipe] DALL-E failed:", await imgRes.text().catch(() => ""));
-              return;
+        // Generate image (blocking so client receives recipe with image)
+        const PLACEHOLDER_IMAGE =
+          "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800";
+        try {
+          const imagePrompt = `Professional food photography of "${parsed.name}": ${parsed.description}. Overhead shot, natural lighting, styled on a rustic table, appetizing and vibrant.`;
+          const { generateRecipeImage } = await import("./_core/geminiImage");
+          const imgBuffer = await Promise.race([
+            generateRecipeImage(imagePrompt),
+            new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error("Image generation timeout")), 25000)
+            ),
+          ]);
+          if (imgBuffer) {
+            try {
+              const { uploadImageToS3 } = await import("./_core/storage");
+              const s3Url = await uploadImageToS3(
+                imgBuffer,
+                `ai-recipe-${savedRecipe.id}.png`,
+                "image/png",
+                2592000
+              );
+              await db.updateRecipeImage(savedRecipe.id, s3Url);
+              console.log(`[ai.generateRecipe] Image saved for recipe ${savedRecipe.id}`);
+            } catch (s3Err: any) {
+              console.warn("[ai.generateRecipe] S3 upload failed, using placeholder:", s3Err?.message);
+              await db.updateRecipeImage(savedRecipe.id, PLACEHOLDER_IMAGE);
             }
-
-            const imgData = (await imgRes.json()) as { data: Array<{ url: string }> };
-            const tempUrl = imgData.data?.[0]?.url;
-            if (!tempUrl) return;
-
-            // Download image and upload to S3 for permanent storage
-            const imgDownload = await fetch(tempUrl);
-            if (!imgDownload.ok) return;
-
-            const imgBuffer = Buffer.from(await imgDownload.arrayBuffer());
-            const { uploadImageToS3 } = await import("./_core/storage");
-            const s3Url = await uploadImageToS3(imgBuffer, `ai-recipe-${savedRecipe.id}.png`, "image/png");
-            await db.updateRecipeImage(savedRecipe.id, s3Url);
-            console.log(`[ai.generateRecipe] Image saved for recipe ${savedRecipe.id}`);
-          } catch (imgErr: any) {
-            console.warn("[ai.generateRecipe] Image generation failed (non-blocking):", imgErr?.message);
+          } else {
+            console.warn("[ai.generateRecipe] No image from AI, using placeholder");
+            await db.updateRecipeImage(savedRecipe.id, PLACEHOLDER_IMAGE);
           }
-        })();
+        } catch (imgErr: any) {
+          console.warn("[ai.generateRecipe] Image generation failed, using placeholder:", imgErr?.message);
+          await db.updateRecipeImage(savedRecipe.id, PLACEHOLDER_IMAGE);
+        }
 
+        const finalRecipe = await db.getRecipeById(savedRecipe.id);
+        const imgBase =
+          process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+          "https://sous.projcomfort.com";
         return {
           recipe: {
             id: savedRecipe.id,
             name: parsed.name,
             description: parsed.description,
+            imageUrl: finalRecipe?.imageUrl
+              ? `${imgBase}/api/recipe-image/${savedRecipe.id}`
+              : null,
             servings: parsed.servings ?? input.servings ?? null,
             cookingTime: parsed.cookingTime ?? null,
             tags: parsed.tags ?? [],
