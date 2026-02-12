@@ -2483,7 +2483,7 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
                         imgBuffer,
                         `ai-recipe-${savedRecipe.id}.png`,
                         "image/png",
-                        2592000,
+                        604800, // 7 days (AWS S3 presigned URL max)
                         "recipes"
                       );
                       await db.updateRecipeImage(savedRecipe.id, s3Url);
@@ -2638,7 +2638,7 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
                 imgBuffer,
                 `ai-recipe-${savedRecipe.id}.png`,
                 "image/png",
-                2592000,
+                604800, // 7 days (AWS S3 presigned URL max)
                 "recipes"
               );
               await db.updateRecipeImage(savedRecipe.id, s3Url);

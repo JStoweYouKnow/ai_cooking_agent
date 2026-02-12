@@ -130,7 +130,7 @@ export async function uploadImageToS3(
   imageData: Buffer | string,
   fileName: string,
   contentType: string = "image/jpeg",
-  /** Presigned URL expiry in seconds. Default 1hr. Use 2592000 (30 days) for recipe images. */
+  /** Presigned URL expiry in seconds. Default 1hr. Max 604800 (7 days) for S3 SigV4 presigned URLs. */
   expiresIn: number = 3600,
   /** Which bucket to use: "ingredients" (sous-ingredients) or "recipes" (sous-recipe-images). Default: ingredients */
   bucketType: S3BucketType = "ingredients"
