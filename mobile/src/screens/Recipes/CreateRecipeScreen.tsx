@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { RecipeStackScreenProps } from "../../navigation/types";
 import { trpc } from "../../api/trpc";
 import GradientButton from "../../components/GradientButton";
 import GlassCard from "../../components/GlassCard";
+import EmptyState from "../../components/EmptyState";
+import { addBreadcrumb } from "../../utils/analytics";
 import AppLayout from "../../components/layout/AppLayout";
 import ScreenHeader from "../../components/layout/ScreenHeader";
 import { colors, spacing, typography, borderRadius } from "../../styles/theme";
@@ -31,7 +33,9 @@ interface Ingredient {
   unit: string;
 }
 
-const CreateRecipeScreen: React.FC<Props> = ({ navigation }) => {
+const CreateRecipeScreen: React.FC<Props> = ({ navigation, route }) => {
+  const initialUrl = route.params?.initialUrl ?? "";
+
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [method, setMethod] = useState<Method>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -52,8 +56,12 @@ const CreateRecipeScreen: React.FC<Props> = ({ navigation }) => {
   const [cookingTime, setCookingTime] = useState("");
   const [servings, setServings] = useState("");
 
-  // URL import
-  const [importUrl, setImportUrl] = useState("");
+  // URL import (pre-filled when navigating from creator featured)
+  const [importUrl, setImportUrl] = useState(initialUrl);
+
+  useEffect(() => {
+    if (initialUrl) setImportUrl(initialUrl);
+  }, [initialUrl]);
 
   const utils = trpc.useUtils();
   const createRecipe = trpc.recipes.create.useMutation({
@@ -70,8 +78,16 @@ const CreateRecipeScreen: React.FC<Props> = ({ navigation }) => {
 
   const parseFromUrl = trpc.recipes.parseFromUrl.useMutation({
     onSuccess: (response: any) => {
+      addBreadcrumb("import", "CreateRecipe: URL parsed", { hasName: !!response?.parsed?.name });
       // The response contains { parsed: { ... } } when autoSave is false
       const data = response.parsed || response;
+
+      console.log("[CreateRecipe] Parse from URL success:", {
+        hasName: !!data.name,
+        hasDescription: !!data.description,
+        hasInstructions: !!data.instructions,
+        ingredientsCount: data.ingredients?.length || 0,
+      });
 
       if (data.name) setName(data.name);
       if (data.description) setDescription(data.description);
@@ -93,7 +109,37 @@ const CreateRecipeScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert("Success", "Recipe parsed from URL! Review and edit the details.");
     },
     onError: (error: any) => {
-      Alert.alert("Error", error.message || "Failed to parse recipe from URL");
+      console.error("[CreateRecipe] Parse from URL error:", {
+        message: error.message,
+        data: error.data,
+        cause: error.cause,
+        stack: error.stack,
+      });
+      
+      // Extract more detailed error message
+      let errorMessage = error.message || "Failed to parse recipe from URL";
+      
+      // If it's a network error, provide helpful guidance
+      if (errorMessage.includes("Network request failed") || errorMessage.includes("timeout")) {
+        errorMessage = "Unable to connect to the server. Please check your internet connection and try again.";
+      } else if (errorMessage.includes("Failed to parse recipe from URL")) {
+        // The server now provides more details in the error message
+        errorMessage = errorMessage;
+      }
+      
+      Alert.alert(
+        "Import Failed", 
+        errorMessage,
+        [
+          { text: "OK" },
+          { 
+            text: "View Details", 
+            onPress: () => {
+              console.log("Full error details:", JSON.stringify(error, null, 2));
+            }
+          }
+        ]
+      );
     },
   });
 
@@ -301,6 +347,16 @@ const CreateRecipeScreen: React.FC<Props> = ({ navigation }) => {
             loading={parseFromUrl.isPending}
             style={{ marginTop: spacing.md }}
           />
+          {parseFromUrl.isError ? (
+            <EmptyState
+              variant="error"
+              title="Import failed"
+              description={parseFromUrl.error?.message ?? "Couldn't load that recipe. Check the URL and try again."}
+              primaryActionLabel="Retry"
+              onPrimaryAction={() => importUrl.trim() && parseFromUrl.mutate({ url: importUrl.trim(), autoSave: false })}
+              style={{ marginTop: spacing.md }}
+            />
+          ) : null}
           <TouchableOpacity onPress={() => setMethod("manual")} style={styles.switchMethod}>
             <Text style={styles.switchMethodText}>Or create manually instead</Text>
           </TouchableOpacity>

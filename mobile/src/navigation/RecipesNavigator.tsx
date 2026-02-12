@@ -1,9 +1,21 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { RecipeStackParamList } from "./types";
+import { createLazyScreen } from "../utils/lazyScreen";
+
+// Eager load - initial screen
 import RecipeListScreen from "../screens/Recipes/RecipeListScreen";
-import RecipeDetailScreen from "../screens/Recipes/RecipeDetailScreen";
-import CreateRecipeScreen from "../screens/Recipes/CreateRecipeScreen";
+
+// Lazy load - secondary screens
+const RecipeDetailScreen = createLazyScreen(
+  () => import("../screens/Recipes/RecipeDetailScreen")
+);
+const CreateRecipeScreen = createLazyScreen(
+  () => import("../screens/Recipes/CreateRecipeScreen")
+);
+const PantryRecipeGeneratorScreen = createLazyScreen(
+  () => import("../screens/Recipes/PantryGeneratorScreen")
+);
 
 const Stack = createNativeStackNavigator<RecipeStackParamList>();
 
@@ -36,6 +48,11 @@ const RecipesNavigator = () => {
         name="CreateRecipe"
         component={CreateRecipeScreen}
         options={{ title: "Add Recipe" }}
+      />
+      <Stack.Screen
+        name="PantryGenerator"
+        component={PantryRecipeGeneratorScreen}
+        options={{ title: "Cook with What You Have" }}
       />
     </Stack.Navigator>
   );

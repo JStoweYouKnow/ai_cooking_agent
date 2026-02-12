@@ -12,6 +12,61 @@ A full-stack web application that helps users manage recipes, ingredients, and s
 - **User Authentication**: Secure OAuth-based authentication (Manus platform)
 - **Responsive UI**: Built with React 19 and Tailwind CSS 4
 
+## 📱 Mobile App (iOS) — Sous
+
+The native iOS app is built with **React Native + Expo** and integrates **RevenueCat** for in-app subscriptions.
+
+### For Judges: Accessing All Features
+
+The app ships with **demo mode enabled** (`EXPO_PUBLIC_DEMO_MODE=true`), which automatically unlocks every premium feature so you can explore the full experience without purchasing. Below is a walkthrough of the monetization and subscription system you would see as a regular user.
+
+### Paywall & Subscription Flow
+
+1. **Usage-based paywall triggers**
+   - After **2 AI chat messages**, a paywall modal appears before the next message.
+   - After **1 URL recipe import**, a paywall modal appears before the next import.
+   - The paywall features a **creator endorsement** from Eitan Bernath with a hero section and personalized copy encouraging the upgrade.
+
+2. **Subscription plans** (Settings > Subscription)
+   - **Premium Monthly** / **Premium Yearly** — full access to AI chat, unlimited imports, meal planning, cooking mode, and more.
+   - **Family Monthly** / **Family Yearly** — everything in Premium, shared across family members.
+   - **Lifetime** — one-time purchase for permanent access.
+
+3. **Intro offer detection**
+   - On first visit to the Subscription screen, the app checks RevenueCat for **intro/trial eligibility** per product.
+   - Eligible plans display an **"Intro offer"** badge.
+   - A **countdown banner** ("Intro offer ends in X days") appears after the first view, creating urgency with a 3-day window.
+
+4. **Entitlement refresh**
+   - Entitlements are automatically refreshed every time the app comes to the **foreground** (in addition to a manual Refresh button on the Subscription screen).
+   - On init, the app logs the current entitlement state as a **Sentry breadcrumb** for observability.
+
+5. **Purchase flow**
+   - Tapping a plan triggers the native **App Store purchase sheet** via RevenueCat.
+   - On success, the customer info is updated immediately and premium features unlock.
+   - A **Restore Purchases** button is available for users who reinstall or switch devices.
+
+### Premium Features Unlocked
+
+| Feature | Free Tier | Premium |
+|---------|-----------|---------|
+| AI Chat | 2 messages | Unlimited |
+| URL Import | 1 recipe | Unlimited |
+| AI Meal Planning | — | Full weekly plans |
+| Cooking Mode | Basic | Undo/resume, step persistence |
+| Collections/Folders | — | Organize saved recipes |
+| Pantry Match | — | Auto-flag owned ingredients |
+
+### Technical Integration
+
+- **RevenueCat iOS SDK** — handles purchases, entitlements, intro eligibility, and receipt validation.
+- **Server-side entitlement check** — tRPC `subscription.hasActive` verifies status independently of the client.
+- **Stripe (web)** — parallel web subscription flow via Stripe Checkout + Customer Portal for non-iOS users.
+- **Breadcrumbs** — every purchase, entitlement refresh, and paywall trigger is logged to Sentry/analytics for debugging.
+- **Exponential backoff + jitter** — all critical mutations (purchases, AI chat, imports) retry with backoff to handle transient failures.
+
+---
+
 ## 📋 Tech Stack
 
 ### Frontend

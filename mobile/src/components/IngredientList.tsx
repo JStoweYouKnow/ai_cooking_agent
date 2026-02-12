@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors, spacing, borderRadius, typography } from '../styles/theme';
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { colors, spacing, borderRadius, typography } from "../styles/theme";
 
 export interface IngredientItem {
   id: string;
@@ -8,33 +9,50 @@ export interface IngredientItem {
   quantity?: string | null;
   unit?: string | null;
   category?: string | null;
+  /** When true, show as "in pantry" (e.g. checkbox pre-checked). */
+  inPantry?: boolean;
 }
 
 interface IngredientListProps {
   items: IngredientItem[];
   title?: string;
   showCategoryBadges?: boolean;
+  onIngredientPress?: (ingredient: IngredientItem) => void;
 }
 
-const IngredientList: React.FC<IngredientListProps> = ({ items, title = 'Ingredients', showCategoryBadges }) => {
+const IngredientList: React.FC<IngredientListProps> = ({ items, title = 'Ingredients', showCategoryBadges, onIngredientPress }) => {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
+      {title && <Text style={styles.title}>{title}</Text>}
       <View style={styles.listContainer}>
-        {items.map((item) => (
-          <View key={item.id} style={styles.row}>
-            <View style={styles.rowText}>
-              <Text style={styles.ingredientName} numberOfLines={0}>
-                {[item.quantity, item.unit, item.name].filter(Boolean).join(' ')}
-              </Text>
-            </View>
-            {showCategoryBadges && item.category && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.category}</Text>
+        {items.map((item) => {
+          const RowComponent = onIngredientPress ? require('react-native').TouchableOpacity : require('react-native').View;
+          return (
+            <RowComponent
+              key={item.id}
+              style={styles.row}
+              onPress={onIngredientPress ? () => onIngredientPress(item) : undefined}
+              disabled={!onIngredientPress}
+            >
+              {item.inPantry === true ? (
+                <View style={styles.pantryCheck}>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.olive} />
+                  <Text style={styles.pantryLabel}>In pantry</Text>
+                </View>
+              ) : null}
+              <View style={styles.rowText}>
+                <Text style={[styles.ingredientName, item.inPantry && styles.ingredientInPantry]} numberOfLines={0}>
+                  {[item.quantity, item.unit, item.name].filter(Boolean).join(" ")}
+                </Text>
               </View>
-            )}
-          </View>
-        ))}
+              {showCategoryBadges && item.category && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{item.category}</Text>
+                </View>
+              )}
+            </RowComponent>
+          );
+        })}
       </View>
     </View>
   );
@@ -67,6 +85,20 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: spacing.sm,
     flexShrink: 1,
+  },
+  pantryCheck: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginRight: spacing.sm,
+  },
+  pantryLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.olive,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  ingredientInPantry: {
+    opacity: 0.85,
   },
   ingredientName: {
     fontSize: typography.fontSize.md,

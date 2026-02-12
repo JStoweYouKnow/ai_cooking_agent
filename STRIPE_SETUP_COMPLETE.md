@@ -92,7 +92,7 @@ All Stripe products and prices have been successfully created and configured for
 - Update environment variables before production deployment
 
 ⚠️ **Webhook Secret**
-- Current webhook secret: `whsec_yeF9IRYTfpkOIQRd76OytSOMyjQR5Hki`
+- Current webhook secret: (set in .env from Stripe Dashboard)
 - For production, create new webhook endpoint and use its secret
 
 ## Files Created/Modified

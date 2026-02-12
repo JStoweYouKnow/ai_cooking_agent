@@ -1,9 +1,18 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ShoppingListStackParamList } from "./types";
+import { createLazyScreen } from "../utils/lazyScreen";
+
+// Eager load - initial screen
 import ShoppingListsListScreen from "../screens/ShoppingLists/ShoppingListsListScreen";
-import ShoppingListDetailScreen from "../screens/ShoppingLists/ShoppingListDetailScreen";
-import CreateShoppingListScreen from "../screens/ShoppingLists/CreateShoppingListScreen";
+
+// Lazy load - secondary screens
+const ShoppingListDetailScreen = createLazyScreen(
+  () => import("../screens/ShoppingLists/ShoppingListDetailScreen")
+);
+const CreateShoppingListScreen = createLazyScreen(
+  () => import("../screens/ShoppingLists/CreateShoppingListScreen")
+);
 
 const Stack = createNativeStackNavigator<ShoppingListStackParamList>();
 

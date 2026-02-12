@@ -1,0 +1,29 @@
+# Monkey-style stress: rapid tab switching with optional content taps
+# Run with: maestro test .maestro/stress-monkey.yaml
+appId: com.aicookingagent.app
+---
+- launchApp
+- waitForAnimationToEnd
+- repeat:
+    times: 25
+    flow:
+      - tapOn:
+          text: "Recipes"
+          optional: true
+      - waitForAnimationToEnd
+      - tapOn:
+          text: "Dashboard"
+          optional: true
+      - waitForAnimationToEnd
+      - tapOn:
+          text: "Ingredients"
+          optional: true
+      - waitForAnimationToEnd
+      - tapOn:
+          text: "More"
+          optional: true
+      - waitForAnimationToEnd
+      - tapOn:
+          text: "Shopping"
+          optional: true
+      - waitForAnimationToEnd

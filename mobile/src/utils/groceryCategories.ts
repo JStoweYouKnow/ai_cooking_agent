@@ -162,7 +162,7 @@ export function getGroceryCategory(ingredientCategory?: string | null, ingredien
       return 'Spices & Seasonings';
     }
     // Comprehensive spice and herb patterns
-    if (/(salt|sea salt|kosher salt|table salt|pepper|black pepper|white pepper|red pepper|pink pepper|green pepper|ground pepper|whole pepper|peppercorn|paprika|smoked paprika|hungarian paprika|sweet paprika|cumin|cumin seed|ground cumin|oregano|basil|thyme|rosemary|cinnamon|ground cinnamon|cinnamon stick|nutmeg|ground nutmeg|mace|ginger|ground ginger|fresh ginger|garlic powder|garlic salt|onion powder|onion salt|cayenne|cayenne pepper|chili powder|chili flakes|red pepper flakes|curry|curry powder|turmeric|ground turmeric|cardamom|cardamom pod|cardamom seed|clove|whole clove|ground clove|allspice|ground allspice|bay leaf|bay leaves|sage|dill|dill weed|dill seed|parsley|cilantro|coriander|ground coriander|coriander seed|coriander seeds|fennel|fennel seed|star anise|saffron|sumac|anise|aniseed|caraway|caraway seed|celery seed|celery salt|fenugreek|fenugreek seed|juniper|juniper berry|mustard seed|mustard powder|dry mustard|nigella|nigella seed|black seed|poppy seed|sesame seed|sesame|toasted sesame|chives|chive|tarragon|marjoram|sprig|spearmint|mint|peppermint|lemongrass|kaffir lime|kaffir lime leaf|galangal|lemongrass|korean chili|gochugaru|aleppo pepper|urfa biber|chipotle|chipotle powder|smoked paprika|pimenton|annatto|achiote|asafoetida|hing|ajwain|carom|epazote|hoja santa|lavender|rose petals|dried rose|vanilla bean|vanilla extract|vanilla|extract|essence)/i.test(name)) {
+    if (/(salt|sea salt|kosher salt|table salt|pepper|black pepper|white pepper|red pepper|pink pepper|green pepper|ground pepper|whole pepper|peppercorn|paprika|smoked paprika|hungarian paprika|sweet paprika|cumin|cumin seed|ground cumin|oregano|basil|thyme|rosemary|cinnamon|ground cinnamon|cinnamon stick|nutmeg|ground nutmeg|mace|ginger|ground ginger|fresh ginger|garlic powder|garlic salt|onion powder|onion salt|cayenne|cayenne pepper|chili powder|chili flakes|red pepper flakes|curry|curry powder|turmeric|ground turmeric|cardamom|cardamom pod|cardamom seed|clove|whole clove|ground clove|allspice|ground allspice|bay leaf|bay leaves|sage|dill|dill weed|dill seed|parsley|cilantro|coriander|ground coriander|coriander seed|coriander seeds|fennel|fennel seed|star anise|saffron|sumac|anise|aniseed|caraway|caraway seed|celery seed|celery salt|fenugreek|fenugreek seed|juniper|juniper berry|mustard seed|mustard powder|dry mustard|nigella|nigella seed|black seed|poppy seed|sesame seed|sesame|toasted sesame|chives|chive|tarragon|marjoram|sprig|spearmint|mint|peppermint|lemongrass|kaffir lime|kaffir lime leaf|galangal|korean chili|gochugaru|aleppo pepper|urfa biber|chipotle|chipotle powder|pimenton|annatto|achiote|asafoetida|hing|ajwain|carom|epazote|hoja santa|lavender|rose petals|dried rose|vanilla bean|vanilla extract|vanilla|extract|essence)/i.test(name)) {
       return 'Spices & Seasonings';
     }
 
@@ -240,8 +240,12 @@ export function groupItemsByCategory<T extends { ingredientName?: string; catego
   // Group items
   items.forEach(item => {
     const category = getGroceryCategory(item.category, item.ingredientName);
-    const existing = grouped.get(category) || [];
-    grouped.set(category, [...existing, item]);
+    const existing = grouped.get(category);
+    if (existing) {
+      existing.push(item);
+    } else {
+      grouped.set(category, [item]);
+    }
   });
 
   // Remove empty categories

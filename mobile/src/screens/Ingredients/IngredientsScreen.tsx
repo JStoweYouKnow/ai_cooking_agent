@@ -73,12 +73,20 @@ const IngredientsScreen: React.FC = () => {
       // Invalidate ingredients list to ensure new ingredient is available for lookup
       utils.ingredients.list.invalidate();
     },
+    onError: (error) => {
+      console.error("[Ingredients] Get or create ingredient failed:", error);
+      // Don't show alert here as it's usually followed by addToUserList
+    },
   });
   const addToUserListMutation = trpc.ingredients.addToUserList.useMutation({
     onSuccess: () => {
       utils.ingredients.getUserIngredients.invalidate();
       // Also invalidate ingredients list to ensure consistency
       utils.ingredients.list.invalidate();
+    },
+    onError: (error) => {
+      console.error("[Ingredients] Add to user list failed:", error);
+      Alert.alert("Error", "Failed to add ingredient to your list. Please try again.");
     },
   });
   const removeFromUserListMutation = trpc.ingredients.removeFromUserList.useMutation({
@@ -94,14 +102,26 @@ const IngredientsScreen: React.FC = () => {
       return { previous };
     },
     onError: (_err, _vars, context) => {
+      console.error("[Ingredients] Remove from user list failed:", _err);
       if (context?.previous) {
         utils.ingredients.getUserIngredients.setData(undefined, context.previous);
       }
+      Alert.alert("Error", "Failed to remove ingredient. Please try again.");
     },
     onSettled: () => utils.ingredients.getUserIngredients.invalidate(),
   });
-  const uploadImageMutation = trpc.ingredients.uploadImage.useMutation();
-  const recognizeFromImageMutation = trpc.ingredients.recognizeFromImage.useMutation();
+  const uploadImageMutation = trpc.ingredients.uploadImage.useMutation({
+    onError: (error) => {
+      console.error("[Ingredients] Image upload failed:", error);
+      Alert.alert("Error", "Failed to upload image. Please try again.");
+    },
+  });
+  const recognizeFromImageMutation = trpc.ingredients.recognizeFromImage.useMutation({
+    onError: (error) => {
+      console.error("[Ingredients] Image recognition failed:", error);
+      Alert.alert("Error", "Failed to recognize ingredients from image. Please try again.");
+    },
+  });
 
   const enrichedIngredients: EnrichedIngredient[] = useMemo(() => {
     if (!userIngredients || !allIngredients) return [];

@@ -8,6 +8,7 @@ import {
   Dimensions,
   ScrollView,
   Pressable,
+  Alert,
 } from "react-native";
 import { Image } from "expo-image";
 import { resolveImageUrl } from "../../utils/imageUrl";
@@ -22,8 +23,10 @@ import RecipeGrid from "../../components/RecipeGrid";
 import IconButton from "../../components/IconButton";
 import AppLayout from "../../components/layout/AppLayout";
 import ScreenHeader from "../../components/layout/ScreenHeader";
+import CookingStats from "../../components/CookingStats";
 import { colors, spacing, typography, borderRadius } from "../../styles/theme";
 import { Recipe } from "../../types";
+import { CREATOR_CONFIG } from "../../constants/creator";
 
 const { width } = Dimensions.get("window");
 
@@ -177,6 +180,15 @@ const DashboardScreen = () => {
             screen: "AIAssistant",
           } as never),
       },
+      {
+        label: "Cook with What You Have",
+        icon: "camera" as const,
+        color: colors.olive,
+        onPress: () =>
+          navigation.navigate("Recipes" as never, {
+            screen: "PantryGenerator",
+          } as never),
+      },
     ],
     [navigation]
   );
@@ -279,6 +291,72 @@ const DashboardScreen = () => {
         onActionPress={() => navigation.navigate("Settings" as never)}
         showSearch
       />
+
+      {/* Cooking Stats & Streak */}
+      <CookingStats style={styles.cookingStats} />
+
+      {/* Featured by Eitan - creator-branded row */}
+      {CREATOR_CONFIG.featuredRecipes && CREATOR_CONFIG.featuredRecipes.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Featured by {CREATOR_CONFIG.name}</Text>
+            <Text style={styles.sectionSubtitle}>{CREATOR_CONFIG.handle}</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.creatorFeaturedScroll}
+          >
+            {CREATOR_CONFIG.featuredRecipes.map((item, index) => {
+              const onPress = () => {
+                if (item.sourceUrl) {
+                  navigation.navigate("Recipes" as never, {
+                    screen: "CreateRecipe",
+                    params: { initialUrl: item.sourceUrl } as never,
+                  } as never);
+                } else {
+                  navigation.navigate("Recipes" as never, { screen: "RecipeListScreen" } as never);
+                }
+              };
+              return (
+                <TouchableOpacity
+                  key={`creator-featured-${index}`}
+                  style={styles.creatorFeaturedCard}
+                  onPress={onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.name}, featured by ${CREATOR_CONFIG.name}. Import recipe`}
+                >
+                  <GlassCard style={styles.creatorFeaturedGlass}>
+                    {item.imageUrl ? (
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={styles.creatorFeaturedImage}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                      />
+                    ) : (
+                      <View style={styles.creatorFeaturedPlaceholder}>
+                        <Ionicons name="restaurant" size={32} color={colors.olive} />
+                      </View>
+                    )}
+                    <View style={styles.creatorFeaturedContent}>
+                      <Text style={styles.creatorFeaturedName} numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      {item.description ? (
+                        <Text style={styles.creatorFeaturedDesc} numberOfLines={2}>
+                          {item.description}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.creatorFeaturedCta}>Import recipe →</Text>
+                    </View>
+                  </GlassCard>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Featured Recipe */}
       {featuredRecipe && (
@@ -508,6 +586,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
   },
+  cookingStats: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+  },
   section: {
     marginBottom: spacing.xl,
   },
@@ -594,6 +676,49 @@ const styles = StyleSheet.create({
   },
   recsScroll: {
     paddingRight: spacing.md,
+  },
+  creatorFeaturedScroll: {
+    paddingRight: spacing.md,
+    gap: spacing.md,
+  },
+  creatorFeaturedCard: {
+    width: width * 0.65,
+    marginRight: spacing.md,
+  },
+  creatorFeaturedGlass: {
+    overflow: "hidden",
+    padding: 0,
+  },
+  creatorFeaturedImage: {
+    width: "100%",
+    height: 100,
+    borderRadius: borderRadius.md,
+  },
+  creatorFeaturedPlaceholder: {
+    width: "100%",
+    height: 100,
+    backgroundColor: colors.olive + "15",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  creatorFeaturedContent: {
+    padding: spacing.sm,
+  },
+  creatorFeaturedName: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.navy,
+    marginBottom: spacing.xs,
+  },
+  creatorFeaturedDesc: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  creatorFeaturedCta: {
+    fontSize: typography.fontSize.xs,
+    color: colors.olive,
+    fontWeight: typography.fontWeight.semibold,
   },
   recCard: {
     width: width * 0.7,

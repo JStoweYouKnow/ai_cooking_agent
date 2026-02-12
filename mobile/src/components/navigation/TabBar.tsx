@@ -32,7 +32,9 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
         return (
           <TouchableOpacity
             key={route.key}
+            testID={`tab-${route.name.toLowerCase()}`}
             accessibilityRole="button"
+            accessibilityLabel={label}
             accessibilityState={isFocused ? { selected: true } : {}}
             onPress={onPress}
             style={[styles.item, isFocused && styles.itemFocused]}

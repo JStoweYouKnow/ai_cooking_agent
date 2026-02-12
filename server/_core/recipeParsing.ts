@@ -637,6 +637,28 @@ function resolveUrl(url: string, baseUrl: string): string {
 }
 
 export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe | null> {
+	// Check if this is a video URL first
+	const { isVideoUrl, parseRecipeFromVideoUrl } = await import("./videoParser");
+	if (isVideoUrl(url)) {
+		console.log(`[RECIPE PARSE] Detected video URL, using video parser: ${url}`);
+		try {
+			const videoRecipe = await parseRecipeFromVideoUrl(url);
+			if (videoRecipe) {
+				videoRecipe.sourceUrl = url;
+				videoRecipe.source = "video_import";
+				return videoRecipe;
+			}
+			console.log("[RECIPE PARSE] Video parsing failed, falling back to standard parsing");
+		} catch (videoError) {
+			console.error("[RECIPE PARSE] Error parsing video URL:", videoError);
+			console.error("[RECIPE PARSE] Error type:", videoError?.constructor?.name);
+			console.error("[RECIPE PARSE] Error message:", videoError instanceof Error ? videoError.message : String(videoError));
+			// Re-throw with more context
+			const errorMsg = videoError instanceof Error ? videoError.message : String(videoError);
+			throw new Error(`Failed to parse video recipe from ${url}: ${errorMsg}`);
+		}
+	}
+
 	const res = await fetch(url, { redirect: "follow" });
 	if (!res.ok) return null;
 	const html = await res.text();

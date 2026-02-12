@@ -109,7 +109,11 @@
     },
     "vite": {
       "esbuild": "^0.25.0"
-    }
+    },
+    "rimraf": "^5.0.0",
+    "glob": "^11.0.0",
+    "@xmldom/xmldom": "^0.8.10",
+    "tar": "^7.4.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
@@ -149,7 +153,11 @@
       "tailwindcss>nanoid": "3.3.7",
       "esbuild": "^0.25.0",
       "@esbuild-kit/core-utils>esbuild": "^0.25.0",
-      "vite>esbuild": "^0.25.0"
+      "vite>esbuild": "^0.25.0",
+      "rimraf": "^5.0.0",
+      "glob": "^11.0.0",
+      "@xmldom/xmldom": "^0.8.10",
+      "tar": "^7.4.0"
     },
     "ignoredBuiltDependencies": [
       "lightningcss"

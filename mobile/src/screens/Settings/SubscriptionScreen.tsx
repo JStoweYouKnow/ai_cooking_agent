@@ -1,7 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Linking, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../contexts/AuthContext";
+import { useRevenueCat } from "../../contexts/RevenueCatContext";
 import GlassCard from "../../components/GlassCard";
 import GradientButton from "../../components/GradientButton";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
@@ -10,48 +13,121 @@ import { trpc } from "../../api/trpc";
 import { MoreStackScreenProps } from "../../navigation/types";
 import AppLayout from "../../components/layout/AppLayout";
 import ScreenHeader from "../../components/layout/ScreenHeader";
-import { STRIPE_PRODUCTS_CONFIG, type StripeProduct } from "../../constants/subscriptions";
+import { STRIPE_PRODUCTS_CONFIG, STRIPE_PRICE_IDS, type StripeProduct } from "../../constants/subscriptions";
 import { getBaseUrl } from "../../api/client";
+import { REVENUECAT_PRODUCT_IDS, INTRO_ELIGIBILITY_STATUS } from "../../services/revenueCat";
+import { CREATOR_CONFIG, getCreatorEndorsement } from "../../constants/creator";
+
+const INTRO_OFFER_VIEWED_KEY = "intro_offer_screen_viewed_at";
+const INTRO_OFFER_DAYS = 3;
+
+// Map Stripe price IDs to RevenueCat product IDs for iOS
+const STRIPE_TO_REVENUECAT_MAP: Record<string, string> = {
+  [STRIPE_PRICE_IDS.PREMIUM_MONTHLY]: REVENUECAT_PRODUCT_IDS.PREMIUM_MONTHLY,
+  [STRIPE_PRICE_IDS.PREMIUM_YEARLY]: REVENUECAT_PRODUCT_IDS.PREMIUM_YEARLY,
+  [STRIPE_PRICE_IDS.FAMILY_MONTHLY]: REVENUECAT_PRODUCT_IDS.FAMILY_MONTHLY,
+  [STRIPE_PRICE_IDS.FAMILY_YEARLY]: REVENUECAT_PRODUCT_IDS.FAMILY_YEARLY,
+  [STRIPE_PRICE_IDS.LIFETIME]: REVENUECAT_PRODUCT_IDS.LIFETIME,
+};
 
 type Props = MoreStackScreenProps<"Subscription">;
 
 const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuth();
+  const utils = trpc.useUtils();
   const { data: subscription, isLoading: isLoadingSubscription } = trpc.subscription.get.useQuery();
   const { data: hasActive, isLoading: isLoadingActive } = trpc.subscription.hasActive.useQuery();
   const createCheckoutSession = trpc.subscription.createCheckoutSession.useMutation();
   const createPortalSession = trpc.subscription.createCustomerPortalSession.useMutation();
 
+  // RevenueCat for iOS purchases
+  const {
+    isInitialized: isRevenueCatReady,
+    isLoading: isRevenueCatLoading,
+    hasActiveSubscription: hasIOSSubscription,
+    introEligibility,
+    purchaseByProductId,
+    restorePurchases: restoreIOSPurchases,
+    refreshCustomerInfo,
+  } = useRevenueCat();
+
   const [selectedProduct, setSelectedProduct] = useState<StripeProduct | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [introCountdownDays, setIntroCountdownDays] = useState<number | null>(null);
+
+  // Persist first view and compute countdown for intro offer (e.g. 3 days)
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(INTRO_OFFER_VIEWED_KEY);
+        const now = Date.now();
+        if (raw == null) {
+          await AsyncStorage.setItem(INTRO_OFFER_VIEWED_KEY, String(now));
+          setIntroCountdownDays(INTRO_OFFER_DAYS);
+          return;
+        }
+        const firstViewed = parseInt(raw, 10);
+        const daysSince = Math.floor((now - firstViewed) / 86400000);
+        const left = Math.max(0, INTRO_OFFER_DAYS - daysSince);
+        setIntroCountdownDays(left);
+      } catch {
+        setIntroCountdownDays(null);
+      }
+    })();
+  }, []);
+
+  const isIntroEligibleForProduct = (priceId: string) => {
+    const rcId = STRIPE_TO_REVENUECAT_MAP[priceId];
+    return rcId && introEligibility[rcId]?.status === INTRO_ELIGIBILITY_STATUS.ELIGIBLE;
+  };
+  const hasAnyIntroEligible = STRIPE_PRODUCTS_CONFIG.some((p) => isIntroEligibleForProduct(p.priceId));
 
   const handlePurchase = async (product: StripeProduct) => {
+    // iOS: Use RevenueCat for App Store purchases
     if (Platform.OS === "ios") {
-      // On iOS, redirect to App Store for In-App Purchase
-      Alert.alert(
-        "In-App Purchase",
-        "For iOS, subscriptions are managed through the App Store. Please use the App Store subscription options.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Learn More",
-            onPress: () => {
-              // You can add a link to your App Store subscription page here
-              Alert.alert("Info", "iOS subscriptions are handled through Apple's In-App Purchase system.");
-            },
-          },
-        ]
-      );
+      if (!isRevenueCatReady) {
+        Alert.alert(
+          "Not Ready",
+          "The subscription service is still loading. Please wait a moment and try again."
+        );
+        return;
+      }
+
+      const revenueCatProductId = STRIPE_TO_REVENUECAT_MAP[product.priceId];
+      if (!revenueCatProductId) {
+        Alert.alert("Error", "This product is not available for iOS.");
+        return;
+      }
+
+      setIsProcessing(true);
+      setSelectedProduct(product);
+
+      try {
+        const success = await purchaseByProductId(revenueCatProductId);
+        if (success) {
+          Alert.alert("Success", "Your subscription is now active! Thank you for your purchase.");
+          // Refresh backend subscription status
+          utils.subscription.get.invalidate();
+          utils.subscription.hasActive.invalidate();
+        }
+        // If success is false, user cancelled - no need to show alert
+      } catch (error: any) {
+        Alert.alert("Purchase Failed", error.message || "Unable to complete purchase. Please try again.");
+      } finally {
+        setIsProcessing(false);
+        setSelectedProduct(null);
+      }
       return;
     }
 
+    // Android/Web: Use Stripe
     setIsProcessing(true);
     setSelectedProduct(product);
 
     try {
       // Get base URL from API client
       const baseUrl = getBaseUrl();
-      
+
       const result = await createCheckoutSession.mutateAsync({
         priceId: product.priceId,
         successUrl: `${baseUrl}/settings?session_id={CHECKOUT_SESSION_ID}`,
@@ -94,6 +170,53 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const handleRestorePurchases = async () => {
+    // iOS: Use RevenueCat to restore purchases
+    if (Platform.OS === "ios") {
+      if (!isRevenueCatReady) {
+        Alert.alert(
+          "Not Ready",
+          "The subscription service is still loading. Please wait a moment and try again."
+        );
+        return;
+      }
+
+      setIsProcessing(true);
+      try {
+        const success = await restoreIOSPurchases();
+        if (success) {
+          Alert.alert("Success", "Your purchases have been restored!");
+          // Refresh backend subscription status
+          utils.subscription.get.invalidate();
+          utils.subscription.hasActive.invalidate();
+        } else {
+          Alert.alert(
+            "No Purchases Found",
+            "No previous purchases were found to restore. If you believe this is an error, please contact support."
+          );
+        }
+      } catch (error: any) {
+        Alert.alert("Error", error.message || "Failed to restore purchases. Please try again.");
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    // Android/Web: Check with our backend
+    setIsProcessing(true);
+    try {
+      // Invalidate subscription cache to fetch latest from Stripe
+      await utils.subscription.get.invalidate();
+      await utils.subscription.hasActive.invalidate();
+      Alert.alert("Success", "Your subscription status has been refreshed.");
+    } catch (error: any) {
+      Alert.alert("Error", "Failed to restore purchases. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const formatPrice = (price: number, period: string) => {
     if (period === "lifetime") {
       return `$${price.toFixed(2)}`;
@@ -109,12 +232,15 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
       return null;
     }
 
-    if (hasActive && subscription) {
+    // Check both server subscription and iOS RevenueCat subscription
+    const isSubscriptionActive = hasActive || (Platform.OS === "ios" && hasIOSSubscription);
+
+    if (isSubscriptionActive) {
       return (
         <View style={styles.statusBadge}>
           <Ionicons name="checkmark-circle" size={16} color={colors.success} />
           <Text style={styles.statusText}>
-            {subscription.status === "trialing" ? "Trial" : "Active"}
+            {subscription?.status === "trialing" ? "Trial" : "Active"}
           </Text>
         </View>
       );
@@ -140,6 +266,48 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
         subtitle="Unlock premium features and support Sous"
         onBackPress={() => navigation.goBack()}
       />
+
+      {/* Creator Endorsement Hero Section */}
+      <View style={styles.heroSection}>
+        <LinearGradient
+          colors={[CREATOR_CONFIG.brandColors.primary, CREATOR_CONFIG.brandColors.secondary]}
+          style={styles.heroGradient}
+        >
+          <View style={styles.heroContent}>
+            <Ionicons name="restaurant" size={48} color={colors.text.inverse} />
+            <Text style={styles.heroTitle}>Trusted by {CREATOR_CONFIG.name}</Text>
+            <Text style={styles.heroEndorsement}>"{getCreatorEndorsement()}"</Text>
+            <Text style={styles.heroAuthor}>- {CREATOR_CONFIG.name}</Text>
+          </View>
+        </LinearGradient>
+      </View>
+
+      {/* Value Proposition */}
+      <GlassCard style={styles.valueCard}>
+        <Text style={styles.valueTitle}>Why Upgrade?</Text>
+        <View style={styles.valueList}>
+          <View style={styles.valueItem}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.olive} />
+            <Text style={styles.valueText}>Unlimited recipe saves</Text>
+          </View>
+          <View style={styles.valueItem}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.olive} />
+            <Text style={styles.valueText}>Import from any recipe website</Text>
+          </View>
+          <View style={styles.valueItem}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.olive} />
+            <Text style={styles.valueText}>AI-powered meal planning</Text>
+          </View>
+          <View style={styles.valueItem}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.olive} />
+            <Text style={styles.valueText}>Advanced shopping lists</Text>
+          </View>
+          <View style={styles.valueItem}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.olive} />
+            <Text style={styles.valueText}>Ad-free experience</Text>
+          </View>
+        </View>
+      </GlassCard>
 
       {/* Current Status */}
       <GlassCard style={styles.card}>
@@ -176,6 +344,16 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
         )}
       </GlassCard>
 
+      {/* Intro offer countdown */}
+      {Platform.OS === "ios" && hasAnyIntroEligible && introCountdownDays != null && introCountdownDays > 0 && (
+        <GlassCard style={styles.introCountdownCard}>
+          <Ionicons name="time" size={20} color={colors.olive} />
+          <Text style={styles.introCountdownText}>
+            Intro offer ends in {introCountdownDays} day{introCountdownDays !== 1 ? "s" : ""}
+          </Text>
+        </GlassCard>
+      )}
+
       {/* Premium Plans */}
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Premium Plans</Text>
@@ -187,6 +365,11 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             {product.isPopular && (
               <View style={styles.popularBadge}>
                 <Text style={styles.popularText}>Most Popular</Text>
+              </View>
+            )}
+            {Platform.OS === "ios" && isIntroEligibleForProduct(product.priceId) && (
+              <View style={styles.introBadge}>
+                <Text style={styles.introBadgeText}>Intro offer</Text>
               </View>
             )}
             <View style={styles.productHeader}>
@@ -206,14 +389,12 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <GradientButton
               title={
-                isProcessing && selectedProduct?.priceId === product.priceId
+                (isProcessing || isRevenueCatLoading) && selectedProduct?.priceId === product.priceId
                   ? "Processing..."
-                  : Platform.OS === "ios"
-                  ? "Available on App Store"
                   : "Subscribe"
               }
               onPress={() => handlePurchase(product)}
-              disabled={isProcessing || (hasActive && subscription?.status === "active")}
+              disabled={isProcessing || isRevenueCatLoading || (hasActive && subscription?.status === "active") || (Platform.OS === "ios" && hasIOSSubscription)}
               style={{ marginTop: spacing.md }}
             />
           </GlassCard>
@@ -226,6 +407,11 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.sectionHeader}>Family Plans</Text>
           {familyProducts.map((product) => (
             <GlassCard key={product.priceId} style={styles.productCard}>
+              {Platform.OS === "ios" && isIntroEligibleForProduct(product.priceId) && (
+                <View style={styles.introBadge}>
+                  <Text style={styles.introBadgeText}>Intro offer</Text>
+                </View>
+              )}
               <View style={styles.productHeader}>
                 <View style={styles.productTitleRow}>
                   <Text style={styles.productName}>{product.name}</Text>
@@ -243,14 +429,12 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
               </View>
               <GradientButton
                 title={
-                  isProcessing && selectedProduct?.priceId === product.priceId
+                  (isProcessing || isRevenueCatLoading) && selectedProduct?.priceId === product.priceId
                     ? "Processing..."
-                    : Platform.OS === "ios"
-                    ? "Available on App Store"
                     : "Subscribe"
                 }
                 onPress={() => handlePurchase(product)}
-                disabled={isProcessing || (hasActive && subscription?.status === "active")}
+                disabled={isProcessing || isRevenueCatLoading || (hasActive && subscription?.status === "active") || (Platform.OS === "ios" && hasIOSSubscription)}
                 style={{ marginTop: spacing.md }}
               />
             </GlassCard>
@@ -280,28 +464,66 @@ const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <GradientButton
               title={
-                isProcessing && selectedProduct?.priceId === lifetimeProduct.priceId
+                (isProcessing || isRevenueCatLoading) && selectedProduct?.priceId === lifetimeProduct.priceId
                   ? "Processing..."
-                  : Platform.OS === "ios"
-                  ? "Available on App Store"
                   : "Purchase"
               }
               onPress={() => handlePurchase(lifetimeProduct)}
-              disabled={isProcessing}
+              disabled={isProcessing || isRevenueCatLoading || (Platform.OS === "ios" && hasIOSSubscription)}
               style={{ marginTop: spacing.md }}
             />
           </GlassCard>
         </View>
       )}
 
-      {Platform.OS === "ios" && (
+      {Platform.OS === "ios" && !isRevenueCatReady && (
         <GlassCard style={styles.card}>
           <Text style={styles.infoText}>
-            <Ionicons name="information-circle" size={16} color={colors.info} /> On iOS, subscriptions are
-            managed through Apple's App Store. Please use the App Store subscription options.
+            <Ionicons name="information-circle" size={16} color={colors.info} /> Loading subscription options...
           </Text>
         </GlassCard>
       )}
+
+      {/* Restore Purchases - Required by App Store */}
+      <GlassCard style={styles.card}>
+        <Text style={styles.sectionTitle}>Already Purchased?</Text>
+        <Text style={styles.restoreDescription}>
+          If you've previously purchased a subscription on another device or after reinstalling the app,
+          you can restore your purchases here.
+        </Text>
+        <GradientButton
+          title={isProcessing ? "Restoring..." : "Restore Purchases"}
+          variant="secondary"
+          onPress={handleRestorePurchases}
+          disabled={isProcessing}
+          style={{ marginTop: spacing.sm }}
+          accessibilityLabel="Restore previous purchases"
+          accessibilityHint="Restores any subscriptions purchased on another device"
+        />
+      </GlassCard>
+
+      {/* Refresh entitlements */}
+      <GlassCard style={styles.card}>
+        <Text style={styles.sectionTitle}>Trouble accessing Premium?</Text>
+        <Text style={styles.restoreDescription}>
+          Refresh your access to re-fetch your subscription status from RevenueCat.
+        </Text>
+        <GradientButton
+          title="Refresh Access"
+          variant="secondary"
+          onPress={async () => {
+            try {
+              await refreshCustomerInfo();
+              Alert.alert("Refreshed", "Subscription status has been refreshed.");
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Could not refresh access.");
+            }
+          }}
+          style={{ marginTop: spacing.sm }}
+          accessibilityLabel="Refresh access"
+          accessibilityHint="Re-fetches your subscription status"
+        />
+      </GlassCard>
     </AppLayout>
   );
 };
@@ -390,6 +612,33 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
   },
+  introCountdownCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+  },
+  introCountdownText: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.primary,
+  },
+  introBadge: {
+    position: "absolute",
+    top: -spacing.xs,
+    left: spacing.md,
+    backgroundColor: colors.russet,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    zIndex: 1,
+  },
+  introBadgeText: {
+    color: colors.text.inverse,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
   productHeader: {
     marginBottom: spacing.md,
   },
@@ -431,6 +680,65 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.text.secondary,
     lineHeight: typography.lineHeight.relaxed * typography.fontSize.sm,
+  },
+  restoreDescription: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
+  },
+  heroSection: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+    borderRadius: borderRadius.lg,
+    overflow: "hidden",
+  },
+  heroGradient: {
+    padding: spacing.xl,
+  },
+  heroContent: {
+    alignItems: "center",
+  },
+  heroTitle: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.text.inverse,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  heroEndorsement: {
+    fontSize: typography.fontSize.md,
+    color: colors.text.inverse,
+    fontStyle: "italic",
+    textAlign: "center",
+    lineHeight: typography.lineHeight.relaxed * typography.fontSize.md,
+    marginBottom: spacing.sm,
+  },
+  heroAuthor: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.inverse,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  valueCard: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  valueTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.navy,
+    marginBottom: spacing.md,
+  },
+  valueList: {
+    gap: spacing.sm,
+  },
+  valueItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  valueText: {
+    fontSize: typography.fontSize.md,
+    color: colors.text.primary,
   },
 });
 

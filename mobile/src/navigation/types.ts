@@ -16,7 +16,8 @@ export type IngredientsStackParamList = {
 export type RecipeStackParamList = {
   RecipeList: undefined;
   RecipeDetail: { id: number };
-  CreateRecipe: undefined;
+  CreateRecipe: { initialUrl?: string } | undefined;
+  PantryGenerator: undefined;
 };
 
 // Shopping List Stack Navigator
@@ -33,7 +34,9 @@ export type MoreStackParamList = {
   Notifications: undefined;
   AIAssistant: undefined;
   RecipeGenerator: undefined;
+  MealPlanning: undefined;
   Subscription: undefined;
+  ButtonShowcase: undefined;
 };
 
 // Main Tab Navigator

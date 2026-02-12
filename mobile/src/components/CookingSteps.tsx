@@ -8,14 +8,20 @@ interface CookingStepsProps {
 }
 
 const CookingSteps: React.FC<CookingStepsProps> = ({ steps, onStepPress }) => (
-  <View style={styles.container}>
-    <Text style={styles.title}>Cooking Steps</Text>
+  <View style={styles.container} accessibilityLabel="Cooking steps" accessible>
+    <Text style={styles.title} accessibilityRole="header">Cooking Steps</Text>
     <FlatList
       data={steps}
       keyExtractor={(_, index) => `step-${index}`}
       scrollEnabled={false}
       renderItem={({ item, index }) => (
-        <View style={styles.stepContainer}>
+        <View
+          style={styles.stepContainer}
+          accessible
+          accessibilityLabel={`Step ${index + 1} of ${steps.length}. ${item.trim()}`}
+          accessibilityRole="button"
+          accessibilityHint={onStepPress ? "Double tap to start cooking mode from this step" : undefined}
+        >
           <View style={styles.stepNumber}>
             <Text style={styles.stepNumberText}>{index + 1}</Text>
           </View>

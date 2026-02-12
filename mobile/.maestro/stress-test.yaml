@@ -1,0 +1,60 @@
+# Sous iOS App - Navigation Stress Test
+# Run with: maestro test mobile/.maestro/stress-test.yaml
+# Uses coordinates for tab bar (works without testID/accessibility)
+
+appId: com.aicookingagent.app
+---
+- launchApp
+- waitForAnimationToEnd
+# Dismiss onboarding on first launch
+- tapOn:
+    text: "Skip"
+    optional: true
+- waitForAnimationToEnd
+# Tab bar: 5 tabs, ~equal width. Y ~92% (bottom). X: 10%, 30%, 50%, 70%, 90%
+# Order: Dashboard, Recipes, Shopping, Ingredients, More
+- tapOn:
+    point: "30%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "70%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "90%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "10%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "30%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "70%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "90%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "10%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "30%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "70%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "90%, 92%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "10%, 92%"
+- waitForAnimationToEnd

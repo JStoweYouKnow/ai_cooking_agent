@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
 import { Alert } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { AuthUser } from "../types";
-import { trpcClient } from "../api/client";
+import { trpcClient, setOnUnauthorizedCallback, clearOnUnauthorizedCallback } from "../api/client";
+import { identifyUser, setAnalyticsUser, track } from "../utils/analytics";
+import { isDemoMode, DEMO_USER_OPEN_ID } from "../constants/demo";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -41,6 +43,36 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const isMountedRef = useRef(true);
+
+  // Handle forced logout from API unauthorized errors
+  const handleUnauthorized = useCallback(async () => {
+    console.log("[AuthProvider] Unauthorized callback triggered - logging out");
+    try {
+      await SecureStore.deleteItemAsync("auth_token");
+    } catch (e) {
+      console.error("[AuthProvider] Error clearing token on unauthorized:", e);
+    }
+    if (isMountedRef.current) {
+      setUser(null);
+      Alert.alert(
+        "Session Expired",
+        "Your session has expired. Please log in again.",
+        [{ text: "OK" }]
+      );
+    }
+  }, []);
+
+  // Register unauthorized callback on mount
+  useEffect(() => {
+    isMountedRef.current = true;
+    setOnUnauthorizedCallback(handleUnauthorized);
+
+    return () => {
+      isMountedRef.current = false;
+      clearOnUnauthorizedCallback();
+    };
+  }, [handleUnauthorized]);
 
   useEffect(() => {
     console.log("[AuthProvider] Component mounted, calling loadUser...");
@@ -70,6 +102,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Check if cancelled before starting
           if (abortController.signal.aborted) {
             throw new Error("Operation cancelled");
+          }
+
+          // Demo mode: skip token check, auto-login as demo user
+          if (isDemoMode()) {
+            console.log("[AuthProvider] Demo mode - auto-logging in as demo user");
+            await login(DEMO_USER_OPEN_ID);
+            return;
           }
 
           console.log("[AuthProvider] Checking SecureStore for auth token...");
@@ -213,8 +252,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
-      console.log("[AuthProvider] loadUser completed, setting isLoading to false");
-      setIsLoading(false);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        console.log("[AuthProvider] loadUser completed, setting isLoading to false");
+        setIsLoading(false);
+      } else {
+        console.log("[AuthProvider] loadUser completed but component unmounted, skipping state update");
+      }
     }
   };
 
@@ -256,6 +300,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.log("[Auth] User loaded successfully:", { id: authUser.id, openId: authUser.openId, name: authUser.name });
           // Set user state - this should trigger navigation update
           setUser(authUser);
+
+          // Identify user for analytics (fire-and-forget)
+          try {
+            await identifyUser(authUser.id, {
+              email: authUser.email || null,
+              name: authUser.name || null,
+              role: authUser.role,
+            });
+            track("login", { method: "openid" });
+          } catch (error) {
+            console.warn("[Auth] Analytics error during login (non-blocking):", error);
+            // Continue login flow even if analytics fails
+          }
+
           // Small delay to ensure state update propagates
           await new Promise(resolve => setTimeout(resolve, 100));
           console.log("[Auth] User state set, navigation should update");
@@ -376,6 +434,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.error("[Auth] Error clearing token from SecureStore:", storeError);
         // Continue with logout even if SecureStore fails
       }
+
+      // Clear analytics user and track logout
+      track("logout", {});
+      try {
+        await setAnalyticsUser(null);
+      } catch (error) {
+        console.error("[Auth] Error clearing analytics user (non-blocking):", error);
+        // Continue logout flow even if analytics fails
+      }
+
       setUser(null);
       console.log("[Auth] User logged out successfully");
     } catch (error) {

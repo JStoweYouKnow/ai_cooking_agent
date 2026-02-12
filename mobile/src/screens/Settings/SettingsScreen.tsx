@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, Platform } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, Platform, Switch } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { useAuth } from "../../contexts/AuthContext";
+import { useTheme, ThemeMode } from "../../contexts/ThemeContext";
 import GlassCard from "../../components/GlassCard";
 import GradientButton from "../../components/GradientButton";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
@@ -12,6 +13,7 @@ import { trpc } from "../../api/trpc";
 import { MoreStackScreenProps } from "../../navigation/types";
 import AppLayout from "../../components/layout/AppLayout";
 import ScreenHeader from "../../components/layout/ScreenHeader";
+import LegalLinks from "../../components/LegalLinks";
 
 const DIETARY_PRESETS = ["Vegetarian", "Vegan", "Pescatarian", "Keto", "Paleo", "Mediterranean", "Low Carb", "High Protein"];
 const ALLERGY_PRESETS = ["Gluten", "Dairy", "Peanuts", "Tree Nuts", "Soy", "Eggs", "Shellfish", "Sesame"];
@@ -26,6 +28,7 @@ type Props = MoreStackScreenProps<"SettingsMain">;
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const { user, logout } = useAuth();
+  const { mode, isDark, setTheme } = useTheme();
   // @ts-ignore - tRPC types are complex, runtime works correctly
   const utils = trpc.useUtils();
   const { data: preferences, isLoading } = trpc.user.getPreferences.useQuery();
@@ -217,6 +220,52 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       </GlassCard>
 
       <GlassCard style={styles.card}>
+        <Text style={styles.sectionTitle}>Meal Planning</Text>
+        <Text style={styles.label}>AI-powered weekly meal plans tailored to your schedule</Text>
+        <GradientButton
+          title="Open Meal Planner"
+          onPress={() => navigation.navigate("MealPlanning")}
+          style={{ marginTop: spacing.sm }}
+        />
+      </GlassCard>
+
+      <GlassCard style={styles.card}>
+        <Text style={styles.sectionTitle}>Appearance</Text>
+        <Text style={styles.label}>Theme</Text>
+        <View style={styles.themeOptions}>
+          {(['light', 'dark', 'system'] as ThemeMode[]).map((themeMode) => {
+            const isSelected = mode === themeMode;
+            const icon = themeMode === 'light' ? 'sunny' : themeMode === 'dark' ? 'moon' : 'phone-portrait';
+            const label = themeMode.charAt(0).toUpperCase() + themeMode.slice(1);
+            return (
+              <TouchableOpacity
+                key={themeMode}
+                style={[styles.themeOption, isSelected && styles.themeOptionSelected]}
+                onPress={() => setTheme(themeMode)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                accessibilityLabel={`${label} theme`}
+              >
+                <Ionicons
+                  name={icon as any}
+                  size={20}
+                  color={isSelected ? colors.text.inverse : colors.text.primary}
+                />
+                <Text style={[styles.themeOptionText, isSelected && styles.themeOptionTextSelected]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.themeHint}>
+          {mode === 'system' 
+            ? `Currently: ${isDark ? 'Dark' : 'Light'} (following system)`
+            : `${isDark ? 'Dark' : 'Light'} mode active`}
+        </Text>
+      </GlassCard>
+
+      <GlassCard style={styles.card}>
         <Text style={styles.sectionTitle}>Push Notifications</Text>
         <Text style={styles.label}>
           {hasPushDevice
@@ -353,8 +402,25 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         title={updatePreferences.isPending ? "Saving..." : "Save Preferences"}
         onPress={handleSave}
         disabled={!canSave}
-        style={{ marginBottom: spacing.xl }}
+        style={{ marginBottom: spacing.lg }}
       />
+
+      <GlassCard style={styles.card}>
+        <Text style={styles.sectionTitle}>Component Library</Text>
+        <TouchableOpacity
+          style={styles.quickLink}
+          onPress={() => navigation.navigate("ButtonShowcase")}
+          accessibilityRole="button"
+          accessibilityLabel="Open Button Showcase"
+        >
+          <Ionicons name="square-outline" size={18} color={colors.olive} />
+          <Text style={styles.quickLinkText}>Button Showcase</Text>
+        </TouchableOpacity>
+      </GlassCard>
+
+      <View style={{ marginHorizontal: spacing.md }}>
+        <LegalLinks showHeader showSupport />
+      </View>
     </AppLayout>
   );
 };
@@ -465,6 +531,42 @@ const styles = StyleSheet.create({
   },
   goalChipTextSelected: {
     color: colors.text.inverse,
+  },
+  themeOptions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginVertical: spacing.sm,
+  },
+  themeOption: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
+    backgroundColor: colors.glass.background,
+  },
+  themeOptionSelected: {
+    backgroundColor: colors.olive,
+    borderColor: colors.olive,
+  },
+  themeOptionText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.text.primary,
+  },
+  themeOptionTextSelected: {
+    color: colors.text.inverse,
+  },
+  themeHint: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.tertiary,
+    marginTop: spacing.xs,
+    fontStyle: "italic",
   },
 });
 

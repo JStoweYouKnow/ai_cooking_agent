@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { RootStackParamList } from "./types";
 import LoginScreen from "../screens/Auth/LoginScreen";
 import MainNavigator from "./MainNavigator";
+import DemoBanner from "../components/DemoBanner";
 import { ActivityIndicator, View, Text } from "react-native";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -56,15 +57,18 @@ const RootNavigator = () => {
     console.log("[RootNavigator] User is authenticated, rendering MainNavigator");
     try {
       return (
-        <NavigationContainer>
-          <Stack.Navigator
-            screenOptions={{
-              headerShown: false,
-            }}
-          >
-            <Stack.Screen name="Main" component={MainNavigator} />
-          </Stack.Navigator>
-        </NavigationContainer>
+        <View style={{ flex: 1 }}>
+          <DemoBanner />
+          <NavigationContainer>
+            <Stack.Navigator
+              screenOptions={{
+                headerShown: false,
+              }}
+            >
+              <Stack.Screen name="Main" component={MainNavigator} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </View>
       );
     } catch (error) {
       console.error("[RootNavigator] Error rendering authenticated navigator:", error);

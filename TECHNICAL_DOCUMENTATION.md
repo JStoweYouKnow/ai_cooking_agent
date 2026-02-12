@@ -206,20 +206,129 @@ subscriptionPlatform          VARCHAR(20)  -- 'stripe' | 'revenuecat_ios'
 
 **Feature gating:** `checkPremiumFeature()` in `useSubscription` enforces free-tier limits (e.g., 10 recipes) and premium-only features (URL import, meal planning).
 
-### 6. Restore Purchases
+### 6. Paywall Triggers & Usage Gating
+
+The app uses a **usage-based paywall** that shows a modal after free-tier thresholds are hit:
+
+| Action | Free Threshold | After Threshold |
+|--------|---------------|-----------------|
+| AI Chat messages | 2 | Paywall modal with creator endorsement |
+| URL recipe imports | 1 | Paywall modal with creator endorsement |
+
+**Key file:** `mobile/src/utils/usagePaywall.ts`
+
+- Counters are stored in `AsyncStorage` (per-device, persists across sessions).
+- The paywall modal (`PaywallPrompt.tsx`) features an Eitan Bernath hero section with a personalized endorsement to drive conversion.
+- Screens that trigger paywalls: `AIAssistantScreen` (before sending), `RecipeListScreen` (after URL import).
+
+### 7. Intro Offer & Countdown
+
+- On the Subscription screen, the app calls `revenueCatService.checkIntroEligibility()` for all product IDs.
+- Products with active intro/trial eligibility display an **"Intro offer"** badge.
+- The first time the Subscription screen is viewed, a timestamp is saved to `AsyncStorage`.
+- A **3-day countdown banner** ("Intro offer ends in X days") is shown on subsequent visits until the window expires.
+
+**Key file:** `mobile/src/screens/Settings/SubscriptionScreen.tsx`
+
+### 8. Entitlement Auto-Refresh
+
+- `RevenueCatContext` subscribes to `AppState` changes.
+- When the app transitions to `active` (foreground), `refreshCustomerInfo()` is called automatically.
+- This ensures entitlements are current after background purchases, family sharing changes, or subscription renewals without requiring the user to manually refresh.
+
+### 9. Demo Mode (Hackathon Judging)
+
+Set `EXPO_PUBLIC_DEMO_MODE=true` in `mobile/.env` to unlock all premium features without a real subscription. When enabled:
+- `useSubscription().isPremium` always returns `true`
+- `checkPremiumFeature()` always returns `true`
+- All paywall triggers are bypassed
+
+**Key file:** `mobile/src/constants/demo.ts`
+
+### 10. Observability & Breadcrumbs
+
+All critical monetization events are logged as Sentry breadcrumbs via `addBreadcrumb()`:
+
+| Event | Category | Data |
+|-------|----------|------|
+| RevenueCat init | `entitlement` | `hasActive`, active entitlement keys |
+| Package purchased | `purchase` | `active` status |
+| Product ID purchased | `purchase` | `productId`, `active` status |
+| AI chat sent/received | `ai` | message metadata |
+| URL import success | `import` | recipe name presence |
+
+**Key file:** `mobile/src/utils/analytics.ts`
+
+### 11. Restore Purchases
 
 - `RevenueCatContext.restorePurchases()` calls `Purchases.restorePurchases()`
 - After restore, `refreshCustomerInfo()` updates local state
 - Webhook updates server `subscriptions` asynchronously
 - UI can also call `trpc.subscription.get.invalidate()` to refetch from server
 
-### 7. Environment Variables
+### 12. Environment Variables
 
 **iOS app (EAS / app.json):**
 - `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` – RevenueCat public iOS API key
 
 **Server:**
 - `REVENUECAT_WEBHOOK_SECRET` – Bearer token for webhook authentication
+
+---
+
+## Additional Features
+
+### Offline Image Cache
+
+Recipe images are cached to the device filesystem using `expo-file-system`. When a recipe card or detail screen loads an image, the resolved URL is hashed and stored locally. On subsequent loads, the cached file is served if available.
+
+**Key file:** `mobile/src/utils/imageUrl.ts` (`resolveImageUrl`, `getImageUriForDisplay`, `cacheImageAfterLoad`)
+
+### Cooking Mode Guardrails
+
+When a user leaves Cooking Mode mid-recipe, the current step index is persisted to `AsyncStorage`. On reopen, a banner offers **"Resume"** (jump to last step) or **"Undo last step"** (go back one). The saved step is cleared when the recipe is marked as cooked.
+
+**Key file:** `mobile/src/screens/Recipes/CookingModeScreen.tsx`
+
+### Smart Pantry Match
+
+When viewing a recipe, the server compares recipe ingredients against the user's pantry (`user_ingredients`). Matches are returned as a `pantryMatch: boolean[]` array. The ingredient list displays a green **"In pantry"** badge with a checkmark next to matched items.
+
+**Key files:** `server/db.ts` (`getPantryIngredientNames`, `getById`), `mobile/src/components/IngredientList.tsx`
+
+### Social Proof Badges
+
+Recipe cards show **"Cooked N times"** when `cookedCount > 0`. The recipe detail screen shows **"Cooked N times by home cooks"** below the description. The count is derived from the `cookedAt` tracking in the database.
+
+**Key files:** `mobile/src/components/RecipeCard.tsx`, `mobile/src/screens/Recipes/RecipeDetailScreen.tsx`
+
+### AI Meal Planning
+
+A tRPC mutation `recipes.generateMealPlan` uses Gemini to generate a weekly meal plan based on saved recipes and user preferences. The Meal Planning screen calls this and renders a day-by-day plan with recipe links.
+
+**Key files:** `server/routers.ts`, `mobile/src/screens/MealPlanning/MealPlanningScreen.tsx`
+
+### Background Prefetch
+
+When recipe cards enter the viewport (40% visibility threshold), `RecipeGrid` automatically:
+1. Prefetches the recipe detail via `trpc.recipes.getById.prefetch()`
+2. Warms the image cache via `cacheImageAfterLoad()`
+
+This ensures recipe detail screens and images load instantly on tap.
+
+**Key file:** `mobile/src/components/RecipeGrid.tsx`
+
+### Exponential Backoff + Jitter
+
+All tRPC mutations are configured with `retry: 2` and a delay function: `min(1000 * 2^attempt + random jitter, 10000ms)`. This covers AI chat, recipe imports, mark-as-cooked, and purchase-related mutations.
+
+**Key file:** `mobile/src/api/client.ts`
+
+### Cook Nudge Notifications
+
+A daily cron job (`/api/cron/cook-nudge`) finds recipes created 3+ days ago that have never been cooked and sends a push notification via Expo Push. Each recipe is tagged after notification to prevent duplicates.
+
+**Key files:** `app/api/cron/cook-nudge/route.ts`, `server/services/push.ts`, `server/db.ts`
 
 ---
 

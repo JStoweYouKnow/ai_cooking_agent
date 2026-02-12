@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useDebounce } from "../../hooks/useDebounce";
 import {
   View,
   Text,
@@ -12,9 +13,9 @@ import {
   TextInput,
   FlatList,
 } from "react-native";
-import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { resolveImageUrl } from "../../utils/imageUrl";
+import { RecipeHeroImage } from "../../components/CachedImage";
 import { Ionicons } from "@expo/vector-icons";
 import { RecipeStackScreenProps } from "../../navigation/types";
 import { trpc } from "../../api/trpc";
@@ -25,8 +26,12 @@ import RecipeTags from "../../components/RecipeTags";
 import GradientButton from "../../components/GradientButton";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
 import CookingModeScreen from "./CookingModeScreen";
+import IngredientSubstitutionPanel from "../../components/IngredientSubstitutionPanel";
+import ARCookingAssistant from "../../components/ARCookingAssistant";
 import { colors, spacing, typography, borderRadius } from "../../styles/theme";
 import { normalizeIsFavorite } from "../../utils/favorites";
+import { mediumImpact, successNotification } from "../../utils/haptics";
+import { useSubscription } from "../../hooks/useSubscription";
 
 type Props = RecipeStackScreenProps<"RecipeDetail">;
 const { width } = Dimensions.get("window");
@@ -39,17 +44,36 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRecipient, setSelectedRecipient] = useState<number | null>(null);
+  const [imageLoadError, setImageLoadError] = useState(false);
+  const [substitutionVisible, setSubstitutionVisible] = useState(false);
+  const [selectedIngredientForSub, setSelectedIngredientForSub] = useState<string | null>(null);
+  const [arAssistantVisible, setArAssistantVisible] = useState(false);
+  const { isPremium } = useSubscription();
 
   const { data: recipe, isLoading } = trpc.recipes.getById.useQuery({ id });
   const { data: recipeIngredients, isLoading: ingredientsLoading } = trpc.recipes.getRecipeIngredients.useQuery({
     recipeId: id,
   });
   const { data: shoppingLists } = trpc.shoppingLists.list.useQuery();
+  const { data: collections } = trpc.recipes.getCollections.useQuery();
+  const setCollectionMutation = trpc.recipes.setCollection.useMutation({
+    onSuccess: () => {
+      utils.recipes.getById.invalidate({ id });
+      utils.recipes.list.invalidate();
+    },
+  });
 
   const toggleFavorite = trpc.recipes.toggleFavorite.useMutation({
     onSuccess: () => {
       utils.recipes.getById.invalidate({ id });
       utils.recipes.list.invalidate();
+    },
+    onError: (error) => {
+      console.error("[RecipeDetail] Toggle favorite failed:", error);
+      Alert.alert("Error", "Failed to update favorite. Please try again.", [
+        { text: "Retry", onPress: () => toggleFavorite.mutate({ id }) },
+        { text: "OK", style: "cancel" },
+      ]);
     },
   });
 
@@ -58,11 +82,21 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       navigation.goBack();
       utils.recipes.list.invalidate();
     },
+    onError: (error) => {
+      console.error("[RecipeDetail] Delete recipe failed:", error);
+      Alert.alert("Error", "Failed to delete recipe. Please try again.", [
+        { text: "Retry", onPress: () => deleteRecipe.mutate({ id }) },
+        { text: "OK", style: "cancel" },
+      ]);
+    },
   });
 
+  // Debounce search query to avoid excessive API calls
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
   const { data: searchResults } = trpc.messages.searchUsers.useQuery(
-    { query: searchQuery },
-    { enabled: shareModalVisible && searchQuery.length > 0 }
+    { query: debouncedSearchQuery },
+    { enabled: shareModalVisible && debouncedSearchQuery.length > 0 }
   );
 
   const shareRecipeMutation = trpc.messages.shareRecipe.useMutation({
@@ -87,7 +121,11 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       utils.shoppingLists.list.invalidate();
     },
     onError: (error) => {
-      Alert.alert("Error", error.message || "Failed to add ingredients to shopping list");
+      Alert.alert(
+        "Error",
+        error.message || "Failed to add ingredients to shopping list. Try again.",
+        [{ text: "OK" }]
+      );
     },
   });
 
@@ -143,22 +181,25 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     return cleaned;
   };
 
+  const pantryMatch = (recipe as { pantryMatch?: boolean[] } | undefined)?.pantryMatch ?? [];
+
   // Get ingredients from either the junction table OR the JSONB column
   const ingredientItems = useMemo(() => {
     // First try the junction table (for manually created recipes)
     if (recipeIngredients && recipeIngredients.length > 0) {
-      return recipeIngredients.map((ing: any) => ({
+      return recipeIngredients.map((ing: any, idx: number) => ({
         id: String(ing.id || ing.ingredientId),
         name: cleanIngredientName(ing.name || ing.ingredientName || "Ingredient"),
         quantity: ing.quantity,
         unit: ing.unit,
         category: ing.category,
+        inPantry: pantryMatch[idx] ?? false,
       }));
     }
     // Fall back to JSONB ingredients column (for imported recipes)
     const jsonbIngredients = recipe?.ingredients;
     if (jsonbIngredients && Array.isArray(jsonbIngredients)) {
-      const mapped = jsonbIngredients.map((ing: any, idx: number) => {
+      return jsonbIngredients.map((ing: any, idx: number) => {
         const rawName = ing.raw || ing.ingredient || ing.name || String(ing);
         const cleanedName = cleanIngredientName(rawName);
         return {
@@ -166,12 +207,12 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           name: cleanedName,
           quantity: ing.quantity || ing.quantity_float || null,
           unit: ing.unit || null,
+          inPantry: pantryMatch[idx] ?? false,
         };
       });
-      return mapped;
     }
     return [];
-  }, [recipeIngredients, recipe?.ingredients]);
+  }, [recipeIngredients, recipe?.ingredients, pantryMatch]);
 
   // Parse recipe steps from instructions TEXT or steps JSONB
   const instructionSteps = useMemo(() => {
@@ -192,6 +233,50 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
     return [];
   }, [recipe?.instructions, recipe?.steps]);
+
+  const currentCollection = recipe?.tags?.find((t: string) => typeof t === "string" && t.startsWith("collection:"))
+    ?.replace(/^collection:/, "") ?? null;
+
+  const handleCollectionPress = () => {
+    const collectionList = collections || [];
+    const buttons: { text: string; onPress?: () => void }[] = [];
+    if (currentCollection) {
+      buttons.push({
+        text: "Remove from collection",
+        onPress: () => setCollectionMutation.mutate({ id, collection: null }),
+      });
+    }
+    collectionList.forEach((name) => {
+      if (name !== currentCollection) {
+        buttons.push({
+          text: name,
+          onPress: () => setCollectionMutation.mutate({ id, collection: name }),
+        });
+      }
+    });
+    buttons.push({
+      text: "New collection...",
+      onPress: () => {
+        Alert.prompt(
+          "New collection",
+          "Enter a name for this collection",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Add",
+              onPress: (value) => {
+                const name = value?.trim();
+                if (name) setCollectionMutation.mutate({ id, collection: name });
+              },
+            },
+          ],
+          "plain-text"
+        );
+      },
+    });
+    buttons.push({ text: "Cancel", style: "cancel" as const });
+    Alert.alert("Add to collection", currentCollection ? `In: ${currentCollection}` : "Choose a collection or create one", buttons);
+  };
 
   const handleShare = async () => {
     if (!recipe) return;
@@ -327,20 +412,19 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.heroWrapper}>
           {(() => {
             const imageUri = resolveImageUrl(recipe.imageUrl);
-            return imageUri ? (
-              <Image
-                source={{ uri: imageUri }}
+            if (!imageUri || imageLoadError) {
+              return (
+                <View style={styles.heroPlaceholder}>
+                  <Ionicons name="restaurant" size={48} color={colors.olive} />
+                </View>
+              );
+            }
+            return (
+              <RecipeHeroImage
+                uri={imageUri}
                 style={styles.heroImage}
-                contentFit="cover"
-                transition={200}
-                onError={(error) => {
-                  console.error("[RecipeDetail] Image load error:", error, "URL:", imageUri);
-                }}
+                onError={() => setImageLoadError(true)}
               />
-            ) : (
-              <View style={styles.heroPlaceholder}>
-                <Ionicons name="restaurant" size={48} color={colors.olive} />
-              </View>
             );
           })()}
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -352,8 +436,15 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.titleRow}>
             <Text style={styles.title}>{recipe.name}</Text>
             <View style={styles.titleActions}>
+              {recipe.cookedAt && (
+                <View style={styles.cookedBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.text.inverse} />
+                  <Text style={styles.cookedBadgeText}>Cooked</Text>
+                </View>
+              )}
               <TouchableOpacity
-                onPress={() => {
+                onPress={async () => {
+                  await mediumImpact();
                   const nextFavoriteState = !isFavorite;
                   toggleFavorite.mutate({ id, isFavorite: nextFavoriteState });
                 }}
@@ -365,16 +456,31 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   color={isFavorite ? colors.russet : colors.text.secondary}
                 />
               </TouchableOpacity>
+              <TouchableOpacity onPress={handleCollectionPress}>
+                <Ionicons
+                  name={currentCollection ? "folder" : "folder-outline"}
+                  size={22}
+                  color={currentCollection ? colors.olive : colors.text.primary}
+                />
+              </TouchableOpacity>
               <TouchableOpacity onPress={handleShare}>
                 <Ionicons name="share-social-outline" size={22} color={colors.text.primary} />
               </TouchableOpacity>
             </View>
           </View>
-          {recipe.description ? (
+              {recipe.description ? (
             <Text style={styles.description}>{recipe.description}</Text>
           ) : (
             <Text style={styles.descriptionMuted}>No description available.</Text>
           )}
+          {(recipe as { cookedCount?: number }).cookedCount != null && (recipe as { cookedCount?: number }).cookedCount > 0 ? (
+            <View style={styles.socialProofRow}>
+              <Ionicons name="people" size={16} color={colors.text.secondary} />
+              <Text style={styles.socialProofText}>
+                Cooked {(recipe as { cookedCount?: number }).cookedCount} time{((recipe as { cookedCount?: number }).cookedCount ?? 0) !== 1 ? "s" : ""} by home cooks
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.metaRow}>
             {recipe.cuisine ? (
               <View style={styles.metaPill}>
@@ -470,8 +576,27 @@ const RecipeDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       <CookingModeScreen
         visible={cookingModeVisible}
         steps={instructionSteps}
+        recipeId={recipe?.id}
+        recipeName={recipe?.name}
         onClose={() => setCookingModeVisible(false)}
+        onCookingComplete={() => {
+          utils.recipes.getById.invalidate({ id });
+          utils.recipes.list.invalidate();
+        }}
       />
+
+      {recipe && ingredientItems.length > 0 && (
+        <ARCookingAssistant
+          recipeId={recipe.id}
+          ingredients={ingredientItems.map((ing) => ({
+            name: ing.name,
+            quantity: ing.quantity,
+            unit: ing.unit,
+          }))}
+          visible={arAssistantVisible}
+          onClose={() => setArAssistantVisible(false)}
+        />
+      )}
 
       {/* Share Recipe Modal */}
       {shareModalVisible && (
@@ -630,6 +755,30 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     fontSize: typography.fontSize.sm,
   },
+  cookedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.olive,
+  },
+  cookedBadgeText: {
+    color: colors.text.inverse,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  socialProofRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  socialProofText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+  },
   sectionTitle: {
     fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
@@ -781,6 +930,44 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.text.secondary,
     marginTop: 2,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  arButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.olive + "20",
+    borderRadius: borderRadius.md,
+  },
+  arButtonText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.olive,
+    fontWeight: typography.fontWeight.medium,
+  },
+  substitutionContainer: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.glass.background,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  closeSubstitutionButton: {
+    marginTop: spacing.md,
+    padding: spacing.sm,
+    alignItems: "center",
+  },
+  closeSubstitutionText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    fontWeight: typography.fontWeight.medium,
   },
   emptyState: {
     padding: spacing.xl,

@@ -9,6 +9,12 @@
       "maxDuration": 60
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/cook-nudge",
+      "schedule": "0 12 * * *"
+    }
+  ],
   "env": {
     "NODE_ENV": "production"
   },

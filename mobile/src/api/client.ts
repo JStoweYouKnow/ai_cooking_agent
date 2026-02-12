@@ -37,13 +37,32 @@ export const getBaseUrl = () => {
   return process.env.EXPO_PUBLIC_API_URL || "https://sous.projcomfort.com";
 };
 
-// Create a query client
+// Callback for handling unauthorized errors (set by AuthContext)
+let onUnauthorizedCallback: (() => void) | null = null;
+
+export const setOnUnauthorizedCallback = (callback: () => void) => {
+  onUnauthorizedCallback = callback;
+};
+
+export const clearOnUnauthorizedCallback = () => {
+  onUnauthorizedCallback = null;
+};
+
+// Create a query client with timeout and retry configuration
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 2,
       staleTime: 1000 * 60 * 5, // 5 minutes
       gcTime: 1000 * 60 * 10,
+    },
+    mutations: {
+      retry: 2, // Retry critical mutations up to 2 times
+      retryDelay: (attemptIndex) => {
+        const baseMs = 1000 * Math.pow(2, attemptIndex);
+        const jitter = Math.random() * 500;
+        return Math.min(baseMs + jitter, 10000);
+      },
     },
   },
 });
@@ -62,13 +81,20 @@ persistQueryClient({
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
 
-  const isUnauthorized = error.message === "Unauthorized" || error.data?.code === "UNAUTHORIZED";
+  const isUnauthorized =
+    error.message === "Unauthorized" ||
+    error.data?.code === "UNAUTHORIZED" ||
+    error.message?.includes("jwt expired") ||
+    error.message?.includes("invalid token");
 
   if (!isUnauthorized) return;
 
-  // In React Native, we'll handle this through navigation context
-  // This will be set up when we create the auth context
-  console.error("[API Auth Error] User is unauthorized");
+  console.error("[API Auth Error] User is unauthorized - triggering logout");
+
+  // Clear the token and trigger logout via callback
+  if (onUnauthorizedCallback) {
+    onUnauthorizedCallback();
+  }
 };
 
 // Subscribe to query errors
@@ -89,7 +115,10 @@ queryClient.getMutationCache().subscribe((event) => {
   }
 });
 
-// Create tRPC client
+// Request timeout in milliseconds
+const REQUEST_TIMEOUT = 30000; // 30 seconds
+
+// Create tRPC client with timeout
 // @ts-ignore - tRPC types are complex, runtime works correctly
 export const trpcClient = trpc.createClient({
   links: [
@@ -107,6 +136,25 @@ export const trpcClient = trpc.createClient({
           console.log("[API] No auth token found in SecureStore");
         }
         return headers;
+      },
+      fetch: async (url, options) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+        try {
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          });
+          return response;
+        } catch (error: any) {
+          if (error.name === "AbortError") {
+            throw new Error("Request timeout - please check your connection and try again");
+          }
+          throw error;
+        } finally {
+          clearTimeout(timeoutId);
+        }
       },
     }),
   ],

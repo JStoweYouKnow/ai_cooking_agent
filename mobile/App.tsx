@@ -61,44 +61,80 @@ export default function App() {
 
   // Initialize OTA updates, ATT, version check, and track app launch
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     const initializeApp = async () => {
-      // Log version info for debugging
-      const versionInfo = getVersionInfo();
-      console.log("[App] Version info:", versionInfo);
+      try {
+        // Log version info for debugging
+        const versionInfo = getVersionInfo();
+        console.log("[App] Version info:", versionInfo);
 
-      // Check minimum version requirement (can be fetched from server config)
-      // For now, we check against a hardcoded minimum or skip if not configured
-      // In production, fetch this from your API's health/config endpoint
-      const MIN_SUPPORTED_VERSION = process.env.EXPO_PUBLIC_MIN_APP_VERSION || null;
-      if (MIN_SUPPORTED_VERSION) {
-        const versionOk = await checkVersionWithAPI(MIN_SUPPORTED_VERSION);
-        if (!versionOk) {
-          // Version check failed - user will see force update alert
-          // Don't continue initialization
-          return;
+        // Check minimum version requirement (can be fetched from server config)
+        // For now, we check against a hardcoded minimum or skip if not configured
+        // In production, fetch this from your API's health/config endpoint
+        const MIN_SUPPORTED_VERSION = process.env.EXPO_PUBLIC_MIN_APP_VERSION || null;
+        if (MIN_SUPPORTED_VERSION) {
+          try {
+            const versionOk = await checkVersionWithAPI(MIN_SUPPORTED_VERSION);
+            if (!versionOk) {
+              // Version check failed - user will see force update alert
+              // Don't continue initialization
+              return;
+            }
+          } catch (error) {
+            console.error("[App] Error checking version:", error);
+            // Continue initialization even if version check fails
+          }
         }
-      }
 
-      // Request ATT permission (iOS 14.5+) before tracking
-      const trackingAllowed = await initializeTracking();
-      setTrackingEnabled(trackingAllowed);
+        // Check if component unmounted before continuing
+        if (!isMounted || abortController.signal.aborted) return;
 
-      // Track app launch (only if allowed)
-      if (trackingAllowed) {
-        trackEvent("app_launched", {
-          timestamp: new Date().toISOString(),
-          app_version: versionInfo.version,
-          build_number: versionInfo.build,
-        });
+        // Request ATT permission (iOS 14.5+) before tracking
+        let trackingAllowed = false;
+        try {
+          trackingAllowed = await initializeTracking();
+        } catch (error) {
+          console.error("[App] Error initializing tracking:", error);
+          // Continue with tracking disabled if initialization fails
+        }
+
+        // Check if component unmounted before setting state
+        if (!isMounted || abortController.signal.aborted) return;
+
+        setTrackingEnabled(trackingAllowed);
+
+        // Track app launch (only if allowed)
+        if (trackingAllowed) {
+          try {
+            trackEvent("app_launched", {
+              timestamp: new Date().toISOString(),
+              app_version: versionInfo.version,
+              build_number: versionInfo.build,
+            });
+          } catch (error) {
+            console.error("[App] Error tracking app launch:", error);
+            // Don't block initialization if tracking fails
+          }
+        }
+      } catch (error) {
+        console.error("[App] Error in initializeApp:", error);
+        // Log error but don't throw - allow app to continue
       }
     };
 
-    initializeApp();
+    // Handle promise rejection
+    initializeApp().catch((error) => {
+      console.error("[App] Unhandled error in initializeApp:", error);
+    });
 
     // Start OTA update checking
     const cleanupUpdates = initializeUpdates();
 
     return () => {
+      isMounted = false;
+      abortController.abort();
       cleanupUpdates();
     };
   }, []);

@@ -1,5 +1,7 @@
 // Design system matching web app
-export const colors = {
+
+// Light theme colors (default)
+export const lightColors = {
   // Primary palette
   navy: '#1E2A38',
   olive: '#77856A',
@@ -39,6 +41,51 @@ export const colors = {
     shadow: 'rgba(31, 38, 135, 0.37)',
   },
 };
+
+// Dark theme colors
+export const darkColors = {
+  // Primary palette (adjusted for dark mode visibility)
+  navy: '#E8EBF0',
+  olive: '#8B9A7E',
+  tan: '#A89A80',
+  russet: '#C07565',
+  cream: '#1A1A1A',
+
+  // Semantic colors
+  primary: '#8B9A7E',
+  secondary: '#C07565',
+  background: '#121212',
+  surface: '#1E1E1E',
+
+  // Text
+  text: {
+    primary: '#F5F5F5',
+    secondary: '#BBBBBB',
+    tertiary: '#888888',
+    inverse: '#1A1A1A',
+  },
+
+  // Status
+  success: '#66BB6A',
+  warning: '#FFB74D',
+  error: '#EF5350',
+  info: '#42A5F5',
+
+  // UI elements
+  border: '#3A3A3A',
+  divider: '#2A2A2A',
+  shadow: 'rgba(0, 0, 0, 0.3)',
+
+  // Glassmorphism
+  glass: {
+    background: 'rgba(30, 30, 30, 0.8)',
+    border: 'rgba(60, 60, 60, 0.3)',
+    shadow: 'rgba(0, 0, 0, 0.5)',
+  },
+};
+
+// Default export (light colors for backward compatibility)
+export const colors = lightColors;
 
 export const spacing = {
   xs: 4,

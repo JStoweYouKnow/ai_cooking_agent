@@ -211,7 +211,12 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       isDark: systemColorScheme === "dark",
       colors: systemColorScheme === "dark" ? darkColors : lightColors,
       setTheme,
-      toggleTheme: () => {},
+      toggleTheme: () => {
+        // Delegate to real toggleTheme logic even during loading
+        const currentIsDark = systemColorScheme === "dark";
+        const newMode = currentIsDark ? "light" : "dark";
+        setTheme(newMode);
+      },
     }),
     [systemColorScheme, setTheme]
   );

@@ -97,6 +97,10 @@ function parseQuantity(qty: string | null | undefined): number {
     const whole = parseInt(fractionMatch[1], 10);
     const num = parseInt(fractionMatch[2], 10);
     const den = parseInt(fractionMatch[3], 10);
+    if (den === 0) {
+      console.warn("[parseQuantity] Division by zero in fraction:", trimmed);
+      return NaN;
+    }
     return whole + (num / den);
   }
   
@@ -104,6 +108,10 @@ function parseQuantity(qty: string | null | undefined): number {
   if (simpleFractionMatch) {
     const num = parseInt(simpleFractionMatch[1], 10);
     const den = parseInt(simpleFractionMatch[2], 10);
+    if (den === 0) {
+      console.warn("[parseQuantity] Division by zero in fraction:", trimmed);
+      return NaN;
+    }
     return num / den;
   }
   
@@ -156,13 +164,15 @@ function getIngredientCategory(ingredientName: string): string {
  * Round up to the nearest package size
  */
 function roundUpToPackageSize(amount: number, sizes: number[]): number {
-  for (const size of sizes.sort((a, b) => a - b)) {
+  // Create a copy before sorting to avoid mutating the input array
+  const sorted = [...sizes].sort((a, b) => a - b);
+  for (const size of sorted) {
     if (amount <= size) {
       return size;
     }
   }
   // If larger than all sizes, return the largest
-  return Math.max(...sizes);
+  return Math.max(...sorted);
 }
 
 /**
@@ -241,10 +251,13 @@ export function convertToPurchaseQuantity(
   
   // For items sold by count (e.g., "2 eggs", "1 onion")
   if (!unit || unit === 'piece' || unit === 'pieces' || unit === 'item' || unit === 'items') {
+    const q = Math.ceil(qty || 1);
+    const normalizedUnit = unit === 'pieces' || unit === 'items' ? (unit === 'pieces' ? 'piece' : 'item') : (unit || 'piece');
+    const displayUnit = normalizedUnit + (q === 1 ? '' : 's');
     return {
-      quantity: String(Math.ceil(qty || 1)),
-      unit: unit || 'piece',
-      displayText: `${Math.ceil(qty || 1)} ${unit || 'piece'}`,
+      quantity: String(q),
+      unit: normalizedUnit,
+      displayText: `${q} ${displayUnit}`,
     };
   }
   

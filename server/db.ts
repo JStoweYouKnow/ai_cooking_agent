@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, or, ne, like, sql, isNotNull } from "drizzle-orm";
+import { eq, desc, asc, and, or, ne, like, sql, isNotNull, lte, gt, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 // Import all schema exports - using relative path for deployment compatibility
 import type {
@@ -334,12 +334,16 @@ function normalizeRecipe<T extends { isFavorite: unknown; cookingTime: number | 
   return { ...withCookingTime, isFavorite: normalizeIsFavorite(recipe.isFavorite) };
 }
 
+const COLLECTION_TAG_PREFIX = "collection:";
+
 type RecipeListOptions = {
   sortBy?: "recent" | "alphabetical" | "meal";
   mealFilter?: "breakfast" | "lunch" | "dinner" | "dessert";
   orderBy?: "createdAt" | "name" | "category";
   direction?: "asc" | "desc";
   limit?: number;
+  /** Filter by collection name (tags containing collection:name) */
+  collection?: string;
 };
 
 export async function getUserRecipes(
@@ -361,10 +365,14 @@ export async function getUserRecipes(
   }
 
   // Build where condition
-  const baseCondition = or(eq(recipes.userId, userId), eq(recipes.isShared, true));
-  const whereCondition = options?.mealFilter
-    ? and(baseCondition, eq(recipes.category, options.mealFilter))
-    : baseCondition;
+  let whereCondition: any = or(eq(recipes.userId, userId), eq(recipes.isShared, true));
+  if (options?.mealFilter) {
+    whereCondition = and(whereCondition, eq(recipes.category, options.mealFilter));
+  }
+  if (options?.collection && options.collection.trim()) {
+    const collectionTag = COLLECTION_TAG_PREFIX + options.collection.trim();
+    whereCondition = and(whereCondition, sql`${recipes.tags} @> ARRAY[${collectionTag}]::text[]`);
+  }
 
   // Build query with where condition
   let query = db
@@ -447,6 +455,74 @@ export async function updateRecipeFavorite(recipeId: number, isFavorite: boolean
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.update(recipes).set({ isFavorite: !!isFavorite }).where(eq(recipes.id, recipeId));
+}
+
+/** Get distinct collection names from a user's recipes (tags starting with collection:) */
+export async function getRecipeCollections(userId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select({ tags: recipes.tags })
+    .from(recipes)
+    .where(eq(recipes.userId, userId));
+  const names = new Set<string>();
+  for (const row of rows) {
+    const tags = (row.tags || []) as string[];
+    for (const t of tags) {
+      if (typeof t === "string" && t.startsWith(COLLECTION_TAG_PREFIX)) {
+        names.add(t.slice(COLLECTION_TAG_PREFIX.length));
+      }
+    }
+  }
+  return Array.from(names).sort();
+}
+
+/** Recipes created 3+ days ago, not yet cooked, nudge not yet sent (for "haven't cooked yet" push). */
+export async function getRecipesForCookNudge(): Promise<Array<{ id: number; name: string; userId: number }>> {
+  const db = await getDb();
+  if (!db) return [];
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  const fourDaysAgo = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({ id: recipes.id, name: recipes.name, userId: recipes.userId, tags: recipes.tags })
+    .from(recipes)
+    .where(
+      and(
+        lte(recipes.createdAt, threeDaysAgo),
+        gt(recipes.createdAt, fourDaysAgo),
+        isNull(recipes.cookedAt),
+        or(
+          isNull(recipes.tags),
+          sql`NOT (${recipes.tags} @> ARRAY['cook_nudge_sent']::text[])`
+        )
+      )
+    );
+  return rows.map((r) => ({ id: r.id, name: r.name, userId: r.userId }));
+}
+
+/** Mark that cook nudge was sent for a recipe (add tag to avoid duplicate). */
+export async function markCookNudgeSent(recipeId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const recipe = await getRecipeById(recipeId);
+  if (!recipe) return;
+  const tags = ((recipe as any).tags || []) as string[];
+  if (tags.includes("cook_nudge_sent")) return;
+  await db.update(recipes).set({ tags: [...tags, "cook_nudge_sent"] }).where(eq(recipes.id, recipeId));
+}
+
+/** Set a recipe's collection (replaces any existing collection tag). */
+export async function setRecipeCollection(recipeId: number, userId: number, collectionName: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const recipe = await getRecipeById(recipeId);
+  if (!recipe || (recipe as any).userId !== userId) throw new Error("Recipe not found or access denied");
+  const tags = ((recipe as any).tags || []) as string[];
+  const filtered = tags.filter((t: string) => typeof t !== "string" || !t.startsWith(COLLECTION_TAG_PREFIX));
+  if (collectionName && collectionName.trim()) {
+    filtered.push(COLLECTION_TAG_PREFIX + collectionName.trim());
+  }
+  await db.update(recipes).set({ tags: filtered }).where(eq(recipes.id, recipeId));
 }
 
 export async function updateRecipeTags(recipeId: number, tags: string[]) {
@@ -1593,6 +1669,18 @@ export async function getUserIngredients(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.select().from(userIngredients).where(eq(userIngredients.userId, userId));
+}
+
+/** Get pantry ingredient names for a user (for pantry-match in recipe view). */
+export async function getPantryIngredientNames(userId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ name: ingredients.name })
+    .from(userIngredients)
+    .innerJoin(ingredients, eq(userIngredients.ingredientId, ingredients.id))
+    .where(eq(userIngredients.userId, userId));
+  return rows.map((r) => (r.name || "").trim()).filter(Boolean);
 }
 
 export async function getUserIngredientById(userIngredientId: number) {

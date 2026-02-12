@@ -9,15 +9,22 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { trpc } from "../../api/trpc";
 import AppLayout from "../../components/layout/AppLayout";
 import ScreenHeader from "../../components/layout/ScreenHeader";
 import GlassCard from "../../components/GlassCard";
+import RecipeCard from "../../components/RecipeCard";
+import EmptyState from "../../components/EmptyState";
 import { colors, spacing, typography, borderRadius } from "../../styles/theme";
 import { MoreStackScreenProps } from "../../navigation/types";
+import type { Recipe } from "../../types";
+import { useSubscription } from "../../hooks/useSubscription";
+import { shouldShowPaywallForAiChat, incrementUsage, USAGE_PAYWALL } from "../../utils/usagePaywall";
+import { CREATOR_CONFIG } from "../../constants/creator";
+import PaywallPrompt from "../../components/PaywallPrompt";
+import { addBreadcrumb } from "../../utils/analytics";
 
 type Props = MoreStackScreenProps<"AIAssistant">;
 
@@ -25,26 +32,33 @@ type ChatMessage = {
   id: string;
   role: "assistant" | "user";
   content: string;
+  recipe?: Recipe;
 };
 
 const initialAssistantMessage =
   "Hi! I'm Sous, your AI cooking assistant. Ask me anything—meal planning ideas, substitution tips, or creative ways to use what's in your pantry.";
 
 const AIAssistantScreen: React.FC<Props> = ({ navigation }) => {
+  const { isPremium } = useSubscription();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: "assistant-0", role: "assistant", content: initialAssistantMessage },
   ]);
   const [input, setInput] = useState("");
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
-
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const chatMutation = trpc.ai.chat.useMutation({
     onSuccess: (data) => {
+      addBreadcrumb("ai", "AI chat response received", { hasRecipe: !!data?.recipe });
+      setChatError(null);
+      incrementUsage(USAGE_PAYWALL.AI_CHATS.key).catch(() => {});
       setMessages((prev) => [
         ...prev,
         {
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content: data.reply,
+          recipe: data.recipe,
         },
       ]);
       setTimeout(() => {
@@ -52,7 +66,7 @@ const AIAssistantScreen: React.FC<Props> = ({ navigation }) => {
       }, 100);
     },
     onError: (err) => {
-      Alert.alert("AI unavailable", err.message || "Please try again soon.");
+      setChatError(err.message || "Something went wrong. Please try again.");
     },
   });
 
@@ -72,8 +86,14 @@ const AIAssistantScreen: React.FC<Props> = ({ navigation }) => {
     "Suggest a 20-minute lunch using chicken",
   ];
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
+    const shouldShow = await shouldShowPaywallForAiChat(isPremium);
+    if (shouldShow) {
+      setShowPaywall(true);
+      return;
+    }
+    addBreadcrumb("ai", "AI chat message sent", { length: input.trim().length });
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -107,47 +127,92 @@ const AIAssistantScreen: React.FC<Props> = ({ navigation }) => {
           contentContainerStyle={styles.chatContainer}
           renderItem={({ item }) => (
             <View
-              style={[
-                styles.messageBubble,
-                item.role === "assistant" ? styles.assistantBubble : styles.userBubble,
-              ]}
+              style={[styles.messageRow, item.role === "assistant" ? styles.assistantRow : styles.userRow]}
+              accessible
+              accessibilityLabel={item.role === "assistant" ? `Sous: ${item.content}` : `You: ${item.content}`}
             >
-              <Text
+              <View
                 style={[
-                  styles.messageText,
-                  item.role === "assistant" ? styles.assistantText : styles.userText,
+                  styles.messageBubble,
+                  item.role === "assistant" ? styles.assistantBubble : styles.userBubble,
                 ]}
               >
-                {item.content}
-              </Text>
+                <Text
+                  style={[
+                    styles.messageText,
+                    item.role === "assistant" ? styles.assistantText : styles.userText,
+                  ]}
+                >
+                  {item.content}
+                </Text>
+              </View>
+              {item.role === "assistant" && item.recipe ? (
+                <View style={styles.recipeCardContainer}>
+                  <RecipeCard
+                    recipe={item.recipe}
+                    onPress={() =>
+                      (navigation as any).navigate("Recipes", {
+                        screen: "RecipeDetail",
+                        params: { id: item.recipe!.id },
+                      })
+                    }
+                  />
+                </View>
+              ) : null}
             </View>
           )}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
 
-        <GlassCard style={styles.promptCard}>
+        {chatError ? (
+          <EmptyState
+            variant="error"
+            title="AI unavailable"
+            description={chatError}
+            primaryActionLabel="Retry"
+            onPrimaryAction={() => {
+              setChatError(null);
+              chatMutation.mutate({ messages: recentMessagesForLLM });
+            }}
+            style={styles.errorCard}
+          />
+        ) : null}
+
+        <GlassCard style={styles.promptCard} accessible accessibilityLabel="Quick prompt suggestions">
           <Text style={styles.promptTitle}>Try asking:</Text>
           <View style={styles.promptPills}>
             {quickPrompts.map((prompt) => (
-              <TouchableOpacity key={prompt} style={styles.promptPill} onPress={() => handlePrompt(prompt)}>
+              <TouchableOpacity
+                key={prompt}
+                style={styles.promptPill}
+                onPress={() => handlePrompt(prompt)}
+                accessibilityRole="button"
+                accessibilityLabel={`Suggestion: ${prompt}`}
+                accessibilityHint="Double tap to use this prompt"
+              >
                 <Text style={styles.promptText}>{prompt}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </GlassCard>
 
-        <View style={styles.inputRow}>
+        <View style={styles.inputRow} accessibilityLabel="Chat input">
           <TextInput
             style={styles.input}
             placeholder="Ask Sous anything..."
             value={input}
             onChangeText={setInput}
             multiline
+            accessibilityLabel="Message to Sous"
+            accessibilityHint="Type your question or request for the AI cooking assistant"
           />
           <TouchableOpacity
             style={styles.sendButton}
             onPress={handleSend}
             disabled={chatMutation.isPending}
+            accessibilityRole="button"
+            accessibilityLabel={chatMutation.isPending ? "Sending" : "Send message"}
+            accessibilityHint="Sends your message to Sous"
           >
             {chatMutation.isPending ? (
               <ActivityIndicator color={colors.text.inverse} />
@@ -156,6 +221,20 @@ const AIAssistantScreen: React.FC<Props> = ({ navigation }) => {
             )}
           </TouchableOpacity>
         </View>
+
+        {showPaywall ? (
+          <PaywallPrompt
+            variant="modal"
+            feature="AI chats"
+            currentUsage={2}
+            limit={2}
+            message="You've used your free AI chats. Upgrade for unlimited Sous assistance."
+            showClose
+            onClose={() => setShowPaywall(false)}
+            creatorName={CREATOR_CONFIG.name}
+            creatorEndorsement={CREATOR_CONFIG.endorsement}
+          />
+        ) : null}
       </KeyboardAvoidingView>
     </AppLayout>
   );
@@ -173,6 +252,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,
     gap: spacing.sm,
+  },
+  messageRow: {
+    alignItems: "flex-start",
+  },
+  assistantRow: {
+    alignSelf: "flex-start",
+    width: "100%",
+  },
+  userRow: {
+    alignSelf: "flex-end",
+    width: "100%",
+    alignItems: "flex-end",
+  },
+  recipeCardContainer: {
+    marginTop: spacing.sm,
+    width: "100%",
+    maxWidth: 340,
   },
   messageBubble: {
     padding: spacing.sm,
@@ -196,6 +292,10 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: typography.fontSize.md,
     lineHeight: 20,
+  },
+  errorCard: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
   },
   promptCard: {
     marginHorizontal: spacing.md,

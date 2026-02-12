@@ -33,8 +33,8 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { id } = route.params;
   const utils = trpc.useUtils();
 
-  const { data: shoppingList, isLoading: listLoading } = trpc.shoppingLists.getById.useQuery({ id });
-  const { data: items, isLoading: itemsLoading } = trpc.shoppingLists.getItems.useQuery({ id });
+  const { data: shoppingList, isLoading: listLoading, isError: listError, refetch: refetchList } = trpc.shoppingLists.getById.useQuery({ id });
+  const { data: items, isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = trpc.shoppingLists.getItems.useQuery({ id });
   const { data: ingredients } = trpc.ingredients.list.useQuery();
   const { data: recipes } = trpc.recipes.list.useQuery();
 
@@ -47,18 +47,38 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const toggleItem = trpc.shoppingLists.toggleItem.useMutation({
     onSuccess: () => utils.shoppingLists.getItems.invalidate({ id }),
+    onError: (error) => {
+      console.error("[ShoppingListDetail] Toggle item failed:", error);
+      Alert.alert("Error", "Failed to update item. Please try again.");
+    },
   });
   const removeItem = trpc.shoppingLists.removeItem.useMutation({
     onSuccess: () => utils.shoppingLists.getItems.invalidate({ id }),
+    onError: (error) => {
+      console.error("[ShoppingListDetail] Remove item failed:", error);
+      Alert.alert("Error", "Failed to remove item. Please try again.");
+    },
   });
   const addItem = trpc.shoppingLists.addItem.useMutation({
     onSuccess: () => utils.shoppingLists.getItems.invalidate({ id }),
+    onError: (error) => {
+      console.error("[ShoppingListDetail] Add item failed:", error);
+      Alert.alert("Error", "Failed to add item. Please try again.");
+    },
   });
   const addFromRecipe = trpc.shoppingLists.addFromRecipe.useMutation({
     onSuccess: () => utils.shoppingLists.getItems.invalidate({ id }),
+    onError: (error) => {
+      console.error("[ShoppingListDetail] Add from recipe failed:", error);
+      Alert.alert("Error", "Failed to add recipe ingredients. Please try again.");
+    },
   });
   const updateList = trpc.shoppingLists.update.useMutation({
     onSuccess: () => utils.shoppingLists.getById.invalidate({ id }),
+    onError: (error) => {
+      console.error("[ShoppingListDetail] Update list failed:", error);
+      Alert.alert("Error", "Failed to update list. Please try again.");
+    },
   });
 
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -239,6 +259,23 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   if (listLoading || !shoppingList) {
+    if (listError) {
+      return (
+        <View style={styles.screen}>
+          <TouchableOpacity style={styles.backButtonError} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={24} color={colors.text.primary} />
+            <Text style={styles.backButtonErrorText}>Back</Text>
+          </TouchableOpacity>
+          <EmptyState
+            variant="error"
+            title="Couldn't load this list"
+            description="Check your connection and try again."
+            primaryActionLabel="Retry"
+            onPrimaryAction={() => refetchList()}
+          />
+        </View>
+      );
+    }
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color={colors.olive} />
@@ -254,7 +291,12 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.title}>{shoppingList.name}</Text>
             <Text style={styles.subtitle}>{shoppingList.description || "No description"}</Text>
           </View>
-          <TouchableOpacity onPress={openEditModal}>
+          <TouchableOpacity
+            onPress={openEditModal}
+            accessibilityRole="button"
+            accessibilityLabel="Edit shopping list"
+            accessibilityHint="Opens edit form for list name and description"
+          >
             <Ionicons name="create-outline" size={22} color={colors.text.primary} />
           </TouchableOpacity>
         </View>
@@ -286,7 +328,13 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             onPress={() => setRecipesSheetVisible(true)}
             style={styles.actionButton}
           />
-          <TouchableOpacity style={styles.moreButton} onPress={() => setActionsSheetVisible(true)}>
+          <TouchableOpacity
+            style={styles.moreButton}
+            onPress={() => setActionsSheetVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="More actions"
+            accessibilityHint="Share, copy, or export shopping list"
+          >
             <Ionicons name="ellipsis-horizontal" size={22} color={colors.text.primary} />
           </TouchableOpacity>
         </View>
@@ -317,10 +365,13 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         <Text style={styles.categoryCount}>({items.length})</Text>
                       </View>
                       {items.map((item: any) => (
-                        <View style={styles.itemRow} key={item.id}>
+                        <View style={styles.itemRow} key={item.id} accessible={true} accessibilityLabel={`${item.ingredientName || "Ingredient"}${item.purchaseQuantity?.displayText ? `, buy ${item.purchaseQuantity.displayText}` : ""}`}>
                           <TouchableOpacity
                             style={styles.checkbox}
                             onPress={() => handleToggleItem(item.id, item.isChecked)}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: false }}
+                            accessibilityLabel={`Mark ${item.ingredientName || "item"} as complete`}
                           >
                             <Ionicons name="ellipse-outline" size={22} color={colors.olive} />
                           </TouchableOpacity>
@@ -341,7 +392,11 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                               </Text>
                             ) : null}
                           </View>
-                          <TouchableOpacity onPress={() => handleRemoveItem(item.id)}>
+                          <TouchableOpacity
+                            onPress={() => handleRemoveItem(item.id)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${item.ingredientName || "item"} from list`}
+                          >
                             <Ionicons name="trash-outline" size={20} color={colors.russet} />
                           </TouchableOpacity>
                         </View>
@@ -361,10 +416,13 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         <Text style={[styles.categoryCount, styles.completedText]}>({items.length})</Text>
                       </View>
                       {items.map((item: any) => (
-                        <View style={styles.itemRow} key={`completed-${item.id}`}>
+                        <View style={styles.itemRow} key={`completed-${item.id}`} accessible={true} accessibilityLabel={`${item.ingredientName || "Ingredient"}, completed`}>
                           <TouchableOpacity
                             style={styles.checkbox}
                             onPress={() => handleToggleItem(item.id, item.isChecked)}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: true }}
+                            accessibilityLabel={`Unmark ${item.ingredientName || "item"} as complete`}
                           >
                             <Ionicons name="checkmark-circle" size={22} color={colors.olive} />
                           </TouchableOpacity>
@@ -387,7 +445,11 @@ const ShoppingListDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                               </Text>
                             ) : null}
                           </View>
-                          <TouchableOpacity onPress={() => handleRemoveItem(item.id)}>
+                          <TouchableOpacity
+                            onPress={() => handleRemoveItem(item.id)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${item.ingredientName || "item"} from list`}
+                          >
                             <Ionicons name="trash-outline" size={20} color={colors.text.tertiary} />
                           </TouchableOpacity>
                         </View>
@@ -570,6 +632,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  backButtonError: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  backButtonErrorText: {
+    fontSize: typography.fontSize.md,
+    color: colors.text.primary,
   },
   headerRow: {
     flexDirection: "row",

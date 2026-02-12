@@ -18,34 +18,7 @@ import fs from "fs";
 import unzipper from "unzipper";
 import path from "path";
 
-async function sendExpoPushNotification(
-  token: string,
-  payload: { title: string; body: string; data?: Record<string, unknown> }
-) {
-  try {
-    const response = await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        to: token,
-        sound: "default",
-        title: payload.title,
-        body: payload.body,
-        data: payload.data ?? {},
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.warn("[Push] Failed to deliver notification:", text);
-    }
-  } catch (error) {
-    console.error("[Push] Error sending notification:", error);
-  }
-}
+import { sendExpoPush as sendExpoPushNotification } from "./services/push";
 
 // Normalize LLM response content (string | array) to string for JSON.parse etc.
 function llmContentToString(content: string | (unknown)[] | null | undefined): string {
@@ -132,6 +105,7 @@ const recipeRouter = router({
           mealFilter: z.enum(["breakfast", "lunch", "dinner", "dessert"]).optional(),
           orderBy: z.enum(["createdAt", "name", "category"]).optional(),
           direction: z.enum(["asc", "desc"]).optional(),
+          collection: z.string().max(100).optional(),
         })
         .refine(
           (val) =>
@@ -169,6 +143,7 @@ const recipeRouter = router({
       const recipeQueryOptions = {
         ...(input?.mealFilter ? { mealFilter: input.mealFilter } : {}),
         ...(input?.limit ? { limit: input.limit } : {}),
+        ...(input?.collection ? { collection: input.collection } : {}),
         ...(normalizedSort ?? {}),
       };
 
@@ -219,16 +194,46 @@ const recipeRouter = router({
       if (recipe.userId !== user.id && !recipe.isShared) {
         throw new Error("Unauthorized: You can only view your own recipes or shared recipes");
       }
-      // Use image proxy for AI-generated recipes so mobile can load S3 images reliably
-      const aiSource = recipe.source === "ai_chat" || recipe.source === "ai_generated";
-      if (aiSource && recipe.imageUrl) {
-        const base =
-          process.env.NEXT_PUBLIC_APP_URL ||
-          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-          "https://sous.projcomfort.com";
-        return { ...recipe, imageUrl: `${base}/api/recipe-image/${recipe.id}` };
+      // Build ingredient names in same order as client (junction first, then JSONB)
+      const ingredientNames: string[] = [];
+      const junctionIngredients = await db.getRecipeIngredients(input.id);
+      if (junctionIngredients.length > 0) {
+        for (const ing of junctionIngredients) {
+          ingredientNames.push((ing.name || "").trim() || "Ingredient");
+        }
+      } else {
+        const jsonb = (recipe as any).ingredients;
+        if (jsonb && Array.isArray(jsonb)) {
+          for (const ing of jsonb) {
+            const raw = ing?.raw ?? ing?.ingredient ?? ing?.name ?? String(ing);
+            ingredientNames.push(typeof raw === "string" ? raw.trim() : "Ingredient");
+          }
+        }
       }
-      return recipe;
+      let pantryMatch: boolean[] = [];
+      if (ingredientNames.length > 0) {
+        const pantryNames = await db.getPantryIngredientNames(user.id);
+        const normalize = (s: string) =>
+          s
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        pantryMatch = ingredientNames.map((ingName) => {
+          const n = normalize(ingName);
+          if (!n) return false;
+          for (const p of pantryNames) {
+            const pn = normalize(p);
+            if (!pn) continue;
+            if (n === pn || n.includes(pn) || pn.includes(n)) return true;
+          }
+          return false;
+        });
+      }
+      // Use relative proxy path for AI recipes so client resolves against its API base
+      const aiSource = recipe.source === "ai_chat" || recipe.source === "ai_generated";
+      const base = aiSource && recipe.imageUrl ? { ...recipe, imageUrl: `/api/recipe-image/${recipe.id}` } : { ...recipe };
+      return { ...base, pantryMatch };
     }),
 
   create: optionalAuthProcedure
@@ -674,6 +679,39 @@ const recipeRouter = router({
         throw new Error("Unauthorized: You can only modify your own recipes");
       }
       return db.updateRecipeTags(input.id, input.tags);
+    }),
+
+  markAsCooked: optionalAuthProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      const recipe = await db.getRecipeById(input.id);
+      if (!recipe) {
+        throw new Error("Recipe not found");
+      }
+      if (recipe.userId !== user.id) {
+        throw new Error("Unauthorized: You can only mark your own recipes as cooked");
+      }
+      await db.markRecipeAsCooked(input.id);
+      return { success: true };
+    }),
+
+  getCollections: optionalAuthProcedure.query(async ({ ctx }) => {
+    const user = ctx.user || await db.getOrCreateAnonymousUser();
+    return db.getRecipeCollections(user.id);
+  }),
+
+  setCollection: optionalAuthProcedure
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        collection: z.string().max(100).nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user || await db.getOrCreateAnonymousUser();
+      await db.setRecipeCollection(input.id, user.id, input.collection);
+      return { success: true };
     }),
 
   delete: optionalAuthProcedure
@@ -1339,8 +1377,7 @@ Ensure variety throughout the week and that meals are practical and achievable.`
       
       const mealPlan = parseJsonSafe(llmContentToString(response.choices[0]?.message?.content), { days: [] });
       
-      // Save meal plan recipes to database
-      const savedRecipes: number[] = [];
+      // Save meal plan recipes to database and attach id to each meal for client
       for (const day of mealPlan.days) {
         for (const mealType of ["breakfast", "lunch", "dinner", "snack"] as const) {
           const meal = day[mealType];
@@ -1355,15 +1392,12 @@ Ensure variety throughout the week and that meals are practical and achievable.`
               source: "ai_meal_plan",
               isShared: false,
             });
-            savedRecipes.push(recipe.id);
+            (meal as Record<string, unknown>).id = recipe.id;
           }
         }
       }
-      
-      return {
-        ...mealPlan,
-        recipeIds: savedRecipes,
-      };
+
+      return mealPlan;
     }),
 
   // Get recently cooked recipes for stats and streak calculation
@@ -2375,82 +2409,105 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
               typeof recipeRes.choices[0]?.message?.content === "string"
                 ? recipeRes.choices[0].message.content
                 : JSON.stringify(recipeRes.choices[0]?.message?.content ?? {});
-            const parsed = JSON.parse(recipeJson);
-            const instructionsText = (parsed.steps ?? [])
-              .map((s: string, i: number) => `${i + 1}. ${s}`)
-              .join("\n");
-            const savedRecipe = await db.createRecipe({
-              name: parsed.name,
-              description: parsed.description,
-              instructions: instructionsText,
-              servings: parsed.servings ?? 4,
-              cookingTime: parsed.cookingTime ?? null,
-              cuisine: (parsed.tags ?? [])[0] ?? null,
-              category: (parsed.tags ?? [])[1] ?? null,
-              userId: user.id,
-              source: "ai_chat",
-              isShared: false,
-            });
-            if (parsed.ingredients && Array.isArray(parsed.ingredients)) {
-              for (const ing of parsed.ingredients) {
-                try {
-                  const ingredient = await db.getOrCreateIngredient(ing.name);
-                  await db.addRecipeIngredient({
-                    recipeId: savedRecipe.id,
-                    ingredientId: ingredient.id,
-                    quantity: ing.quantity || null,
-                    unit: ing.unit || null,
-                  });
-                } catch {
-                  /* skip failed ingredient */
-                }
-              }
+            let parsed: any = null;
+            try {
+              parsed = JSON.parse(recipeJson);
+            } catch (parseErr: unknown) {
+              console.warn("[ai.chat] Failed to parse generated recipe JSON", {
+                error: parseErr,
+                recipeJson,
+                responseId: recipeRes.id,
+                model: recipeRes.model,
+                choiceCount: recipeRes.choices?.length ?? 0,
+              });
             }
 
-            // Build proxy URL for the image (served via /api/recipe-image/[id])
-            const base =
-              process.env.NEXT_PUBLIC_APP_URL ||
-              (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-              "https://sous.projcomfort.com";
-            const proxyImageUrl = `${base}/api/recipe-image/${savedRecipe.id}`;
-
-            // Fire-and-forget image generation so the chat responds immediately
-            (async () => {
-              try {
-                const imagePrompt = `Professional food photography of "${parsed.name}": ${parsed.description}. Overhead shot, natural lighting, styled on a rustic table, appetizing and vibrant.`;
-                const { generateRecipeImage } = await import("./_core/geminiImage");
-                const imgBuffer = await Promise.race([
-                  generateRecipeImage(imagePrompt),
-                  new Promise<null>((_, reject) =>
-                    setTimeout(() => reject(new Error("Image generation timeout")), 25000)
-                  ),
-                ]);
-                if (imgBuffer) {
-                  const { uploadImageToS3 } = await import("./_core/storage");
-                  const s3Url = await uploadImageToS3(
-                    imgBuffer,
-                    `ai-recipe-${savedRecipe.id}.png`,
-                    "image/png",
-                    2592000
-                  );
-                  await db.updateRecipeImage(savedRecipe.id, s3Url);
-                  console.log(`[ai.chat] Image saved for recipe ${savedRecipe.id}`);
+            if (!parsed || typeof parsed !== "object") {
+              console.warn("[ai.chat] Skipping recipe save due to invalid recipe payload");
+            } else {
+              const instructionsText = (parsed.steps ?? [])
+                .map((s: string, i: number) => `${i + 1}. ${s}`)
+                .join("\n");
+              const savedRecipe = await db.createRecipe({
+                name: parsed.name,
+                description: parsed.description,
+                instructions: instructionsText,
+                servings: parsed.servings ?? 4,
+                cookingTime: parsed.cookingTime ?? null,
+                cuisine: (parsed.tags ?? [])[0] ?? null,
+                category: (parsed.tags ?? [])[1] ?? null,
+                userId: user.id,
+                source: "ai_chat",
+                isShared: false,
+              });
+              if (parsed.ingredients && Array.isArray(parsed.ingredients)) {
+                for (const ing of parsed.ingredients) {
+                  try {
+                    const ingredient = await db.getOrCreateIngredient(ing.name);
+                    await db.addRecipeIngredient({
+                      recipeId: savedRecipe.id,
+                      ingredientId: ingredient.id,
+                      quantity: ing.quantity || null,
+                      unit: ing.unit || null,
+                    });
+                  } catch (err: unknown) {
+                    console.warn("[ai.chat] Skipping failed ingredient while saving recipe", {
+                      error: err,
+                      ingredientName: ing?.name,
+                      recipeId: savedRecipe.id,
+                    });
+                  }
                 }
-              } catch (imgErr: any) {
-                console.warn("[ai.chat] Image generation failed (non-blocking):", imgErr?.message);
               }
-            })();
 
-            // Return recipe immediately with proxy URL and parsed data
-            recipe = {
-              ...savedRecipe,
-              imageUrl: proxyImageUrl,
-              isFavorite: false,
-              tags: parsed.tags ?? [],
-              ingredients: parsed.ingredients ?? [],
-              steps: parsed.steps ?? [],
-            } as any;
-            reply += "\n\nI've saved a recipe for you — tap the card to see the full details.";
+              // Set placeholder immediately so the card has an image while AI generates
+              const PLACEHOLDER =
+                "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800";
+              await db.updateRecipeImage(savedRecipe.id, PLACEHOLDER);
+
+              // Fire-and-forget: replace with AI image when ready
+              (async () => {
+                try {
+                  const imagePrompt = `Professional food photography of "${parsed.name}": ${parsed.description}. Overhead shot, natural lighting, styled on a rustic table, appetizing and vibrant.`;
+                  const { generateRecipeImage } = await import("./_core/geminiImage");
+                  const imgBuffer = await Promise.race([
+                    generateRecipeImage(imagePrompt),
+                    new Promise<null>((_, reject) =>
+                      setTimeout(() => reject(new Error("Image generation timeout")), 25000)
+                    ),
+                  ]);
+                  if (imgBuffer) {
+                    try {
+                      const { uploadImageToS3 } = await import("./_core/storage");
+                      const s3Url = await uploadImageToS3(
+                        imgBuffer,
+                        `ai-recipe-${savedRecipe.id}.png`,
+                        "image/png",
+                        2592000
+                      );
+                      await db.updateRecipeImage(savedRecipe.id, s3Url);
+                      console.log("[ai.chat] Image saved for recipe", savedRecipe.id);
+                    } catch {
+                      /* keep placeholder */
+                    }
+                  }
+                } catch (imgErr: any) {
+                  console.warn("[ai.chat] Image generation failed (non-blocking):", imgErr?.message);
+                }
+              })();
+
+              // Use relative path so client resolves against its API base
+              const proxyImageUrl = `/api/recipe-image/${savedRecipe.id}`;
+              recipe = {
+                ...savedRecipe,
+                imageUrl: proxyImageUrl,
+                isFavorite: false,
+                tags: parsed.tags ?? [],
+                ingredients: parsed.ingredients ?? [],
+                steps: parsed.steps ?? [],
+              } as any;
+              reply += "\n\nI've saved a recipe for you — tap the card to see the full details.";
+            }
           } catch (recipeErr: any) {
             console.warn("[ai.chat] Recipe generation failed:", recipeErr?.message);
           }

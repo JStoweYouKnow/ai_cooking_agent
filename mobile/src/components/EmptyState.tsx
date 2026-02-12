@@ -13,7 +13,7 @@ interface EmptyStateProps {
   onPrimaryAction?: () => void;
   secondaryActionLabel?: string;
   onSecondaryAction?: () => void;
-  variant?: 'default' | 'minimal' | 'compact';
+  variant?: 'default' | 'minimal' | 'compact' | 'error';
   style?: ViewStyle;
 }
 
@@ -51,6 +51,8 @@ const EmptyState: React.FC<EmptyStateProps> = ({
   style,
 }) => {
   const combinedLabel = description ? `${title}. ${description}` : title;
+  const isError = variant === 'error';
+  const iconName = isError ? (icon ?? 'alert-circle-outline') : icon;
 
   return (
     <View
@@ -58,6 +60,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
         styles.container,
         variant === 'minimal' && styles.containerMinimal,
         variant === 'compact' && styles.containerCompact,
+        isError && styles.containerError,
         style
       ]}
       accessible
@@ -66,9 +69,9 @@ const EmptyState: React.FC<EmptyStateProps> = ({
       {/* Illustration or Icon */}
       {illustration ? (
         <Image source={illustration} style={styles.illustration} resizeMode="contain" />
-      ) : icon ? (
-        <View style={styles.iconContainer}>
-          <Ionicons name={icon} size={64} color={colors.text.tertiary} />
+      ) : iconName ? (
+        <View style={[styles.iconContainer, isError && styles.iconContainerError]}>
+          <Ionicons name={iconName} size={64} color={isError ? colors.error : colors.text.tertiary} />
         </View>
       ) : null}
 
@@ -91,9 +94,9 @@ const EmptyState: React.FC<EmptyStateProps> = ({
             <GradientButton
               title={primaryActionLabel}
               onPress={onPrimaryAction}
-              style={styles.primaryButton}
+              style={[styles.primaryButton, isError && styles.primaryButtonError]}
               accessibilityLabel={primaryActionLabel}
-              accessibilityHint="Performs the primary action for this state"
+              accessibilityHint={isError ? "Retries the failed action" : "Performs the primary action for this state"}
             />
           )}
           {secondaryActionLabel && onSecondaryAction && (
@@ -135,6 +138,15 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginHorizontal: spacing.md,
     marginVertical: spacing.sm,
+  },
+  containerError: {
+    borderColor: colors.error,
+  },
+  iconContainerError: {
+    backgroundColor: colors.error + '18',
+  },
+  primaryButtonError: {
+    // optional: use error tint
   },
   illustration: {
     width: 160,

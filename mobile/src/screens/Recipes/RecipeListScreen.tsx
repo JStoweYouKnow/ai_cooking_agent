@@ -8,7 +8,6 @@ import {
   Pressable,
   TextInput,
   Alert,
-  Image,
   Linking,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -18,12 +17,22 @@ import { trpc } from "../../api/trpc";
 import GlassCard from "../../components/GlassCard";
 import SearchBar from "../../components/SearchBar";
 import GradientButton from "../../components/GradientButton";
-import Badge from "../../components/Badge";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
 import EmptyState from "../../components/EmptyState";
 import BottomSheet from "../../components/BottomSheet";
 import RecipeGrid from "../../components/RecipeGrid";
+import SearchResultsGrid from "../../components/SearchResultsGrid";
+import PaywallPrompt from "../../components/PaywallPrompt";
 import { colors, spacing, typography, borderRadius } from "../../styles/theme";
+import { useSubscription } from "../../hooks/useSubscription";
+import {
+  PREMIUM_FEATURES,
+  formatUsageMessage,
+  getRemainingUsage,
+} from "../../utils/premiumFeatures";
+import { recordUrlImportAndCheckPaywall } from "../../utils/usagePaywall";
+import { CREATOR_CONFIG } from "../../constants/creator";
+import { addBreadcrumb } from "../../utils/analytics";
 
 type Props = RecipeStackScreenProps<"RecipeList">;
 type SourceOption = "TheMealDB" | "Epicurious" | "Delish" | "NYTCooking";
@@ -41,6 +50,7 @@ const SOURCE_OPTIONS: SourceOption[] = ["TheMealDB", "Epicurious", "Delish", "NY
 
 const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
   const utils = trpc.useUtils();
+  const { isPremium, checkPremiumFeature, freeTierLimits } = useSubscription();
   const [searchIngredients, setSearchIngredients] = useState<string[]>([]);
   const [currentIngredient, setCurrentIngredient] = useState("");
   const [selectedSources, setSelectedSources] = useState<SourceOption[]>(["TheMealDB"]);
@@ -54,7 +64,9 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
   const [savingRecipeId, setSavingRecipeId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"recent" | "alphabetical" | "meal">("recent");
   const [mealFilter, setMealFilter] = useState<"breakfast" | "lunch" | "dinner" | "dessert" | null>(null);
+  const [collectionFilter, setCollectionFilter] = useState<string | null>(null);
   const [sortSheetVisible, setSortSheetVisible] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   // Ensure we stay on RecipeList when the screen is focused
   // This prevents auto-navigation to RecipeDetail
@@ -68,12 +80,27 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
     }, [])
   );
 
-  const { data: savedRecipes, isLoading: savedRecipesLoading } = trpc.recipes.list.useQuery({
+  const { data: collections } = trpc.recipes.getCollections.useQuery();
+  const { data: savedRecipes, isLoading: savedRecipesLoading, isError: savedRecipesError, refetch: refetchSavedRecipes } = trpc.recipes.list.useQuery({
     sortBy,
     mealFilter: mealFilter || undefined,
+    collection: collectionFilter || undefined,
   });
   const { data: userIngredients } = trpc.ingredients.getUserIngredients.useQuery();
   const { data: allIngredients } = trpc.ingredients.list.useQuery();
+
+  // Premium feature checks
+  const savedRecipesCount = savedRecipes?.length || 0;
+  const canSaveRecipe = checkPremiumFeature(
+    PREMIUM_FEATURES.UNLIMITED_RECIPES,
+    savedRecipesCount,
+    freeTierLimits.RECIPES_SAVED
+  );
+  const canImportFromUrl = checkPremiumFeature(
+    PREMIUM_FEATURES.UNLIMITED_IMPORTS,
+    undefined,
+    undefined
+  );
 
   const searchMutation = trpc.recipes.searchByIngredients.useMutation();
   const parseFromUrlMutation = trpc.recipes.parseFromUrl.useMutation({
@@ -177,50 +204,167 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleSaveRecipe = async (recipe: ExternalRecipe) => {
     if (savingRecipeId) return;
+
+    // Check premium status before saving
+    if (!canSaveRecipe) {
+      setShowPaywall(true);
+      return;
+    }
+
     setSavingRecipeId(recipe.id);
     try {
       if (recipe.source === "TheMealDB" && recipe.externalId) {
         await importFromTheMealDBMutation.mutateAsync({ mealId: recipe.externalId });
         Alert.alert("Success", "Recipe saved to your collection.");
       } else if (recipe.url) {
+        // Check if URL import requires premium
+        if (!canImportFromUrl) {
+          Alert.alert(
+            "Premium Feature",
+            "Importing recipes from URLs is a Premium feature. Upgrade to unlock unlimited imports.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Upgrade",
+                onPress: () => navigation.navigate("More" as never, { screen: "Subscription" } as never),
+              },
+            ]
+          );
+          setSavingRecipeId(null);
+          return;
+        }
+        console.log("[RecipeList] Saving recipe from URL:", recipe.url);
         await parseFromUrlMutation.mutateAsync({ url: recipe.url, autoSave: true });
+        console.log("[RecipeList] Recipe saved successfully");
         Alert.alert("Imported", "Recipe imported and saved.");
       } else {
         Alert.alert("Not Supported", "This source can't be imported automatically yet.");
       }
     } catch (error: any) {
-      Alert.alert("Error", error?.message || "Failed to save recipe.");
+      console.error("[RecipeList] Save recipe failed:", {
+        message: error?.message,
+        data: error?.data,
+        recipeUrl: recipe.url,
+      });
+      
+      let errorMessage = error?.message || "Failed to save recipe.";
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes("Network request failed") || errorMessage.includes("timeout")) {
+        errorMessage = "Unable to connect to the server. Please check your internet connection.";
+      } else if (errorMessage.includes("Failed to parse recipe from URL")) {
+        // Server now provides detailed error messages
+        errorMessage = errorMessage;
+      }
+      
+      Alert.alert("Error", errorMessage);
     } finally {
       setSavingRecipeId(null);
     }
   };
 
-  const validateUrl = (url: string) => {
+  const validateUrl = (url: string): { valid: boolean; error?: string } => {
+    const trimmedUrl = url.trim();
+
+    // Check URL length (prevent abuse)
+    if (trimmedUrl.length > 2048) {
+      return { valid: false, error: "URL is too long" };
+    }
+
     try {
-      new URL(url.trim());
-      return true;
+      const parsed = new URL(trimmedUrl);
+
+      // Only allow http and https protocols
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return { valid: false, error: "Only HTTP and HTTPS URLs are supported" };
+      }
+
+      return { valid: true };
     } catch {
-      return false;
+      return { valid: false, error: "Enter a valid URL" };
     }
   };
 
   const handleImportFromUrl = async () => {
+    // Check premium status for URL imports
+    if (!canImportFromUrl) {
+      Alert.alert(
+        "Premium Feature",
+        "Importing recipes from URLs is a Premium feature. Upgrade to unlock this feature.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Upgrade",
+            onPress: () => {
+              setUrlSheetVisible(false);
+              navigation.navigate("More" as never, { screen: "Subscription" } as never);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     if (!importUrl.trim()) {
       setUrlError("Please enter a recipe URL");
       return;
     }
-    if (!validateUrl(importUrl)) {
-      setUrlError("Enter a valid URL");
+    const validation = validateUrl(importUrl);
+    if (!validation.valid) {
+      setUrlError(validation.error || "Enter a valid URL");
       return;
     }
     setUrlError("");
     try {
+      console.log("[RecipeList] Importing recipe from URL:", importUrl.trim());
       await parseFromUrlMutation.mutateAsync({ url: importUrl.trim(), autoSave: true });
+      addBreadcrumb("import", "Recipe imported from URL", { urlLength: importUrl.trim().length });
+      console.log("[RecipeList] Recipe imported successfully");
       Alert.alert("Imported", "Recipe imported successfully.");
       setImportUrl("");
       setUrlSheetVisible(false);
+      const { showPaywall: shouldShow } = await recordUrlImportAndCheckPaywall(isPremium);
+      if (shouldShow) setShowPaywall(true);
     } catch (error: any) {
-      Alert.alert("Import Failed", error?.message || "Unable to import this recipe.");
+      console.error("[RecipeList] Import failed - Full error object:", error);
+      console.error("[RecipeList] Import failed - Error message:", error?.message);
+      console.error("[RecipeList] Import failed - Error data:", error?.data);
+      console.error("[RecipeList] Import failed - Error cause:", error?.cause);
+      console.error("[RecipeList] Import failed - Error shape:", {
+        message: error?.message,
+        data: error?.data,
+        httpStatus: error?.data?.httpStatus,
+        code: error?.data?.code,
+        path: error?.data?.path,
+        cause: error?.cause,
+      });
+      
+      // Extract error message - try multiple sources
+      let errorMessage = error?.message || "Unable to import this recipe.";
+      
+      // If it's a TRPC error, the message should be in error.message
+      // But sometimes the detailed message might be in error.data or error.cause
+      if (error?.data?.message) {
+        errorMessage = error.data.message;
+      } else if (error?.cause?.message) {
+        errorMessage = error.cause.message;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes("Network request failed") || errorMessage.includes("timeout")) {
+        errorMessage = "Unable to connect to the server. Please check your internet connection.";
+      } else if (errorMessage === "Failed to parse recipe from URL") {
+        // If we still have the generic message, try to get more details
+        if (error?.data?.httpStatus === 500) {
+          errorMessage = "Server error while parsing recipe. The URL may be invalid or the website may be blocking access.";
+        } else {
+          errorMessage = "Failed to parse recipe from URL. Please check that the URL is a valid recipe page.";
+        }
+      }
+      
+      Alert.alert("Import Failed", errorMessage);
     }
   };
 
@@ -233,44 +377,20 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const renderIngredientChips = () => (
-    <View style={styles.chipsContainer}>
+    <View style={styles.chipsContainer} accessible={true} accessibilityLabel="Selected ingredients">
       {searchIngredients.map((ingredient) => (
         <View key={ingredient} style={styles.chip}>
           <Text style={styles.chipText}>{ingredient}</Text>
-          <TouchableOpacity onPress={() => handleRemoveIngredient(ingredient)}>
+          <TouchableOpacity
+            onPress={() => handleRemoveIngredient(ingredient)}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${ingredient}`}
+            accessibilityHint="Double tap to remove this ingredient from search"
+          >
             <Text style={styles.removeChip}>×</Text>
           </TouchableOpacity>
         </View>
       ))}
-    </View>
-  );
-
-  const renderResultCard = (recipe: ExternalRecipe) => (
-    <View key={recipe.id} style={styles.resultCard}>
-      {recipe.imageUrl ? (
-        <Image source={{ uri: recipe.imageUrl }} style={styles.resultImage} />
-      ) : (
-        <View style={styles.resultPlaceholder}>
-          <Ionicons name="restaurant" size={32} color={colors.olive} />
-        </View>
-      )}
-      <View style={styles.resultMeta}>
-        <Text style={styles.resultTitle} numberOfLines={2}>
-          {recipe.title}
-        </Text>
-        <Badge label={recipe.source} variant="cuisine" />
-      </View>
-      {recipe.url && (
-        <TouchableOpacity onPress={() => Linking.openURL(recipe.url!)}>
-          <Text style={styles.resultLink}>Open source</Text>
-        </TouchableOpacity>
-      )}
-      <GradientButton
-        title={savingRecipeId === recipe.id ? "Saving..." : "Save to Collection"}
-        onPress={() => handleSaveRecipe(recipe)}
-        disabled={savingRecipeId === recipe.id}
-        style={styles.saveButton}
-      />
     </View>
   );
 
@@ -281,6 +401,38 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.subtitle}>
           Combine pantry ingredients, explore premium sources, or import recipes by URL.
         </Text>
+
+        {/* Premium Usage Indicator */}
+        {!isPremium && (
+          <GlassCard style={styles.usageCard}>
+            <View style={styles.usageRow}>
+              <Ionicons name="information-circle" size={20} color={colors.olive} />
+              <Text style={styles.usageText}>
+                {formatUsageMessage(savedRecipesCount, freeTierLimits.RECIPES_SAVED, "recipes")}
+              </Text>
+            </View>
+            {savedRecipesCount >= freeTierLimits.RECIPES_SAVED && (
+              <GradientButton
+                title="Upgrade to Premium"
+                onPress={() => navigation.navigate("More" as never, { screen: "Subscription" } as never)}
+                variant="olive"
+                style={styles.upgradeButtonSmall}
+              />
+            )}
+          </GlassCard>
+        )}
+
+        {/* Premium Badge for URL Import */}
+        {!canImportFromUrl && (
+          <GlassCard style={styles.premiumBadgeCard}>
+            <View style={styles.premiumBadgeRow}>
+              <Ionicons name="lock-closed" size={16} color={colors.olive} />
+              <Text style={styles.premiumBadgeText}>
+                Import from URL is a Premium feature
+              </Text>
+            </View>
+          </GlassCard>
+        )}
 
         <GlassCard style={[styles.card, styles.aiCard]}>
           <Text style={styles.sectionTitle}>Need inspiration?</Text>
@@ -328,15 +480,25 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
 
         <GlassCard style={styles.card}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActions}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickActions}
+            style={styles.quickActionsScrollView}
+          >
             <Pressable
               style={({ pressed }) => [styles.quickActionItem, pressed && styles.quickActionItemPressed]}
               onPress={() => setUrlSheetVisible(true)}
               accessibilityRole="button"
               accessibilityLabel="Import recipe from URL"
             >
-              <Ionicons name="link" size={22} color={colors.olive} />
-              <Text style={styles.quickActionText}>Import from URL</Text>
+              <View style={styles.quickActionContent}>
+                <Ionicons name="link" size={22} color={colors.olive} />
+                <Text style={styles.quickActionText}>Import from URL</Text>
+                {!canImportFromUrl && (
+                  <Ionicons name="lock-closed" size={14} color={colors.olive} style={styles.lockIcon} />
+                )}
+              </View>
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.quickActionItem, pressed && styles.quickActionItemPressed]}
@@ -347,12 +509,21 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
               <Ionicons name="create" size={22} color={colors.russet} />
               <Text style={styles.quickActionText}>Create Recipe</Text>
             </Pressable>
-          </View>
+            <Pressable
+              style={({ pressed }) => [styles.quickActionItem, pressed && styles.quickActionItemPressed]}
+              onPress={() => navigation.navigate("PantryGenerator")}
+              accessibilityRole="button"
+              accessibilityLabel="Cook with what you have"
+            >
+              <Ionicons name="camera" size={22} color={colors.olive} />
+              <Text style={styles.quickActionText}>Cook with Pantry</Text>
+            </Pressable>
+          </ScrollView>
         </GlassCard>
 
         <View style={styles.sourcesWrapper}>
           <Text style={styles.sectionTitle}>Sources</Text>
-          <View style={styles.sourcesRow}>
+          <View style={styles.sourcesRow} accessible={true} accessibilityLabel="Recipe sources">
             {SOURCE_OPTIONS.map((source) => (
               <TouchableOpacity
                 key={source}
@@ -361,6 +532,10 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
                   selectedSources.includes(source) && styles.sourceChipSelected,
                 ]}
                 onPress={() => handleToggleSource(source)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selectedSources.includes(source) }}
+                accessibilityLabel={`${source} recipe source`}
+                accessibilityHint={selectedSources.includes(source) ? "Double tap to deselect" : "Double tap to select"}
               >
                 <Text
                   style={[
@@ -401,9 +576,12 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.resultsMeta}>
                 Showing {displayedResults.length} of {searchResults.length} recipes
               </Text>
-              <View style={styles.resultsGrid}>
-                {displayedResults.map((recipe) => renderResultCard(recipe))}
-              </View>
+              <SearchResultsGrid
+                results={displayedResults}
+                onSaveRecipe={handleSaveRecipe}
+                savingRecipeId={savingRecipeId}
+                scrollEnabled={false}
+              />
               {visibleCount < searchResults.length && (
                 <GradientButton title="Load more results" onPress={handleLoadMoreResults} style={styles.loadMore} />
               )}
@@ -413,23 +591,45 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
 
         <View style={styles.savedSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Your Recipes</Text>
+            <View>
+              <Text style={styles.sectionTitle}>Your Recipes</Text>
+              {!isPremium && savedRecipesCount > 0 && (
+                <Text style={styles.usageSubtext}>
+                  {savedRecipesCount} / {freeTierLimits.RECIPES_SAVED} saved
+                </Text>
+              )}
+            </View>
             <TouchableOpacity
               onPress={() => setSortSheetVisible(true)}
               style={styles.sortButton}
+              accessibilityRole="button"
+              accessibilityLabel="Sort and filter recipes"
+              accessibilityHint="Opens sort and filter options"
             >
               <Ionicons name="options-outline" size={20} color={colors.olive} />
               <Text style={styles.sortButtonText}>Sort</Text>
             </TouchableOpacity>
           </View>
-          {mealFilter && (
-            <View style={styles.filterChip}>
-              <Text style={styles.filterChipText}>
-                Filter: {mealFilter.charAt(0).toUpperCase() + mealFilter.slice(1)}
-              </Text>
-              <TouchableOpacity onPress={() => setMealFilter(null)}>
-                <Ionicons name="close-circle" size={18} color={colors.text.secondary} />
-              </TouchableOpacity>
+          {(mealFilter || collectionFilter) && (
+            <View style={styles.filterChipRow}>
+              {mealFilter && (
+                <View style={styles.filterChip}>
+                  <Text style={styles.filterChipText}>
+                    {mealFilter.charAt(0).toUpperCase() + mealFilter.slice(1)}
+                  </Text>
+                  <TouchableOpacity onPress={() => setMealFilter(null)}>
+                    <Ionicons name="close-circle" size={18} color={colors.text.secondary} />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {collectionFilter && (
+                <View style={styles.filterChip}>
+                  <Text style={styles.filterChipText}>Collection: {collectionFilter}</Text>
+                  <TouchableOpacity onPress={() => setCollectionFilter(null)}>
+                    <Ionicons name="close-circle" size={18} color={colors.text.secondary} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
           {savedRecipesLoading ? (
@@ -438,6 +638,14 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
                 <LoadingSkeleton key={`saved-${idx}`} width="100%" height={120} borderRadiusOverride={borderRadius.lg} />
               ))}
             </View>
+          ) : savedRecipesError ? (
+            <EmptyState
+              variant="error"
+              title="Couldn't load recipes"
+              description="Check your connection and try again."
+              primaryActionLabel="Retry"
+              onPrimaryAction={() => refetchSavedRecipes()}
+            />
           ) : savedRecipes && savedRecipes.length > 0 ? (
             <RecipeGrid
               recipes={savedRecipes}
@@ -552,11 +760,63 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        <View style={styles.sortSection}>
+          <Text style={styles.sortSectionTitle}>Collection</Text>
+          <View style={styles.mealFilterRow}>
+            <TouchableOpacity
+              style={[
+                styles.mealFilterChip,
+                !collectionFilter && styles.mealFilterChipSelected,
+              ]}
+              onPress={() => setCollectionFilter(null)}
+            >
+              <Text
+                style={[
+                  styles.mealFilterChipText,
+                  !collectionFilter && styles.mealFilterChipTextSelected,
+                ]}
+              >
+                All
+              </Text>
+            </TouchableOpacity>
+            {(collections || []).map((name) => (
+              <TouchableOpacity
+                key={name}
+                style={[
+                  styles.mealFilterChip,
+                  collectionFilter === name && styles.mealFilterChipSelected,
+                ]}
+                onPress={() => setCollectionFilter(collectionFilter === name ? null : name)}
+              >
+                <Text
+                  style={[
+                    styles.mealFilterChipText,
+                    collectionFilter === name && styles.mealFilterChipTextSelected,
+                  ]}
+                >
+                  {name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         <GradientButton title="Apply" onPress={() => setSortSheetVisible(false)} />
       </BottomSheet>
 
       <BottomSheet visible={urlSheetVisible} onClose={() => setUrlSheetVisible(false)} snapHeight={0.65}>
         <Text style={styles.sheetTitle}>Import Recipe from URL</Text>
+        {!canImportFromUrl && (
+          <PaywallPrompt
+            feature="URL Import"
+            message="Importing recipes from URLs is a Premium feature. Upgrade to unlock unlimited imports."
+            variant="inline"
+            onUpgrade={() => {
+              setUrlSheetVisible(false);
+              navigation.navigate("More" as never, { screen: "Subscription" } as never);
+            }}
+          />
+        )}
         <TextInput
           value={importUrl}
           onChangeText={(text) => {
@@ -564,17 +824,36 @@ const RecipeListScreen: React.FC<Props> = ({ navigation }) => {
             if (urlError) setUrlError("");
           }}
           placeholder="https://example.com/recipe"
-          style={[styles.urlInput, urlError && styles.urlInputError]}
+          style={[styles.urlInput, urlError && styles.urlInputError, !canImportFromUrl && styles.urlInputDisabled]}
           autoCapitalize="none"
           keyboardType="url"
+          editable={canImportFromUrl}
         />
         {urlError ? <Text style={styles.errorText}>{urlError}</Text> : null}
         <GradientButton
           title={parseFromUrlMutation.isPending ? "Importing..." : "Import Recipe"}
           onPress={handleImportFromUrl}
-          disabled={parseFromUrlMutation.isPending}
+          disabled={parseFromUrlMutation.isPending || !canImportFromUrl}
         />
       </BottomSheet>
+
+      {/* Paywall Modal */}
+      {showPaywall && (
+        <PaywallPrompt
+          feature="Recipe Saves"
+          currentUsage={savedRecipesCount}
+          limit={freeTierLimits.RECIPES_SAVED}
+          variant="modal"
+          showClose={true}
+          onClose={() => setShowPaywall(false)}
+          onUpgrade={() => {
+            setShowPaywall(false);
+            navigation.navigate("More" as never, { screen: "Subscription" } as never);
+          }}
+          creatorName={CREATOR_CONFIG.name}
+          creatorEndorsement={CREATOR_CONFIG.endorsement}
+        />
+      )}
     </View>
   );
 };
@@ -647,15 +926,21 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: typography.fontSize.lg,
   },
+  quickActionsScrollView: {
+    marginTop: spacing.md,
+  },
   quickActions: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: spacing.md,
+    gap: spacing.md,
+    paddingRight: spacing.md,
   },
   quickActionItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    minWidth: 120,
   },
   quickActionItemPressed: {
     transform: [{ scale: 0.97 }],
@@ -703,61 +988,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.text.secondary,
     marginBottom: spacing.sm,
-  },
-  resultsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
-  resultCard: {
-    width: "48%",
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.sm,
-    ...{
-      shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
-      elevation: 3,
-    },
-  },
-  resultImage: {
-    width: "100%",
-    height: 150,
-    borderRadius: borderRadius.md,
-    marginBottom: spacing.sm,
-  },
-  resultPlaceholder: {
-    width: "100%",
-    height: 150,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.glass.background,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  resultMeta: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  resultTitle: {
-    flex: 1,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.semibold,
-    marginRight: spacing.xs,
-    color: colors.text.primary,
-  },
-  resultLink: {
-    fontSize: typography.fontSize.sm,
-    color: colors.olive,
-    marginBottom: spacing.sm,
-  },
-  saveButton: {
-    marginTop: spacing.xs,
   },
   skeletonGrid: {
     flexDirection: "row",
@@ -815,6 +1045,12 @@ const styles = StyleSheet.create({
     color: colors.olive,
     fontWeight: typography.fontWeight.medium,
   },
+  filterChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   filterChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -824,7 +1060,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.olive + "20",
     borderRadius: borderRadius.full,
     alignSelf: "flex-start",
-    marginBottom: spacing.md,
   },
   filterChipText: {
     fontSize: typography.fontSize.sm,
@@ -883,6 +1118,51 @@ const styles = StyleSheet.create({
   },
   mealFilterChipTextSelected: {
     color: colors.text.inverse,
+  },
+  usageCard: {
+    marginBottom: spacing.md,
+  },
+  usageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  usageText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    flex: 1,
+  },
+  upgradeButtonSmall: {
+    marginTop: spacing.sm,
+  },
+  premiumBadgeCard: {
+    marginBottom: spacing.md,
+    padding: spacing.sm,
+  },
+  premiumBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  premiumBadgeText: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.secondary,
+  },
+  usageSubtext: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.secondary,
+    marginTop: spacing.xs / 2,
+  },
+  quickActionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  lockIcon: {
+    marginLeft: spacing.xs / 2,
+  },
+  urlInputDisabled: {
+    opacity: 0.5,
   },
 });
 

@@ -89,7 +89,13 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onSkip }) =
     <View style={styles.container}>
       <LinearGradient colors={slide.gradient} style={styles.gradient}>
         {/* Skip button */}
-        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={handleSkip}
+          accessibilityRole="button"
+          accessibilityLabel="Skip onboarding"
+          accessibilityHint="Skip the tutorial and go to the app"
+        >
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
 
@@ -97,12 +103,14 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onSkip }) =
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
+          accessible
+          accessibilityLabel={`${slide.title}. ${slide.description}`}
         >
           <View style={styles.iconContainer}>
             <Ionicons name={slide.icon} size={80} color={colors.text.inverse} />
           </View>
 
-          <Text style={styles.title}>{slide.title}</Text>
+          <Text style={styles.title} accessibilityRole="header">{slide.title}</Text>
           <Text style={styles.description}>{slide.description}</Text>
 
           {/* Creator endorsement on first slide */}
@@ -137,6 +145,9 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onSkip }) =
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => setCurrentSlide(currentSlide - 1)}
+              accessibilityRole="button"
+              accessibilityLabel="Previous slide"
+              accessibilityHint="Go back to previous onboarding slide"
             >
               <Ionicons name="chevron-back" size={24} color={colors.text.inverse} />
               <Text style={styles.backText}>Back</Text>
@@ -151,6 +162,8 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onSkip }) =
             style={styles.nextButton}
             textStyle={styles.nextButtonText}
             disabled={false}
+            accessibilityLabel={isLastSlide ? "Get started" : "Next slide"}
+            accessibilityHint={isLastSlide ? "Finish onboarding and open the app" : "Continue to next slide"}
           />
         </View>
       </LinearGradient>
@@ -178,7 +191,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: spacing.xl,

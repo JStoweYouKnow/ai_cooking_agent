@@ -1,7 +1,9 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import RecipeCard from "./RecipeCard";
 import type { Recipe } from "../types";
+import { trpc } from "../api/trpc";
+import { resolveImageUrl, cacheImageAfterLoad } from "../utils/imageUrl";
 
 interface RecipeGridProps {
   recipes: Recipe[];
@@ -47,6 +49,20 @@ const RecipeGrid: React.FC<RecipeGridProps> = ({
 
   const memoizedHeader = useMemo(() => ListHeaderComponent || null, [ListHeaderComponent]);
 
+  const utils = trpc.useUtils();
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 40 }).current;
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: Array<{ item: Recipe }> }) => {
+      for (const { item } of viewableItems) {
+        if (!item?.id) continue;
+        utils.recipes.getById.prefetch({ id: item.id }).catch(() => {});
+        const imageUrl = resolveImageUrl(item.imageUrl);
+        if (imageUrl) cacheImageAfterLoad(imageUrl);
+      }
+    },
+    [utils]
+  );
+
   const getItemLayout = useCallback(
     (_: any, index: number) => {
       if (numColumns === 1) {
@@ -78,6 +94,8 @@ const RecipeGrid: React.FC<RecipeGridProps> = ({
       columnWrapperStyle={numColumns > 1 ? styles.column : undefined}
       contentContainerStyle={styles.contentContainer}
       renderItem={renderItem}
+      onViewableItemsChanged={onViewableItemsChanged}
+      viewabilityConfig={viewabilityConfig}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
       ListHeaderComponent={memoizedHeader}

@@ -25,7 +25,7 @@ const ShoppingListsListScreen: React.FC<Props> = ({ navigation }) => {
   // @ts-ignore - tRPC types are complex, runtime works correctly
   const utils = trpc.useUtils();
   // @ts-ignore - tRPC types are complex, runtime works correctly
-  const { data: shoppingLists, isLoading } = trpc.shoppingLists.list.useQuery();
+  const { data: shoppingLists, isLoading, isError: listsError, refetch: refetchLists } = trpc.shoppingLists.list.useQuery();
   // @ts-ignore - tRPC types are complex, runtime works correctly
   const deleteList = trpc.shoppingLists.delete.useMutation({
     onSuccess: () => utils.shoppingLists.list.invalidate(),
@@ -100,6 +100,14 @@ const ShoppingListsListScreen: React.FC<Props> = ({ navigation }) => {
 
         {isLoading ? (
           renderSkeletons()
+        ) : listsError ? (
+          <EmptyState
+            variant="error"
+            title="Couldn't load lists"
+            description="Check your connection and try again."
+            primaryActionLabel="Retry"
+            onPrimaryAction={() => refetchLists()}
+          />
         ) : filteredLists.length > 0 ? (
           <FlatList
             data={filteredLists}

@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { TouchableOpacity, Text, View, StyleSheet, ActivityIndicator, ViewStyle, TextStyle, Animated, StyleProp } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, borderRadius, typography, shadows, animations, gradients } from "../styles/theme";
+import { lightImpact } from "../utils/haptics";
 
 interface GradientButtonProps {
   title: string;
@@ -37,6 +38,7 @@ const GradientButton: React.FC<GradientButtonProps> = ({
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
+    lightImpact();
     Animated.spring(scaleAnim, {
       toValue: 0.96,
       useNativeDriver: true,

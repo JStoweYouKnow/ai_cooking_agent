@@ -1,9 +1,9 @@
 import React, { memo, useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import type { Recipe } from "../types";
 import Card from "./Card";
+import { RecipeCardImage } from "./CachedImage";
 import { resolveImageUrl } from "../utils/imageUrl";
 import { normalizeIsFavorite } from "../utils/favorites";
 
@@ -22,16 +22,7 @@ const RecipeCardComponent: React.FC<RecipeCardProps> = ({ recipe, onPress, onTog
     [recipe.isFavorite]
   );
 
-  // Resolve image URL (handles relative URLs by resolving against API base URL)
-  const imageUri = useMemo(() => {
-    const resolved = resolveImageUrl(recipe.imageUrl);
-    if (!resolved) {
-      console.log("[RecipeCard] No imageUrl for recipe:", recipe.name, recipe.id);
-      return null;
-    }
-    console.log("[RecipeCard] Resolved imageUrl for recipe:", recipe.name, "Original:", recipe.imageUrl, "Resolved:", resolved);
-    return resolved;
-  }, [recipe.imageUrl, recipe.name, recipe.id]);
+  const imageUri = useMemo(() => resolveImageUrl(recipe.imageUrl), [recipe.imageUrl]);
 
   return (
     <TouchableOpacity
@@ -44,17 +35,11 @@ const RecipeCardComponent: React.FC<RecipeCardProps> = ({ recipe, onPress, onTog
       <Card>
         <View style={styles.container}>
           {imageUri && !imageError ? (
-            <Image
-              source={{ uri: imageUri }}
+            <RecipeCardImage
+              uri={imageUri}
               style={styles.image}
-              contentFit="cover"
-              transition={200}
-              onLoad={() => {
-                setImageLoading(false);
-                console.log("[RecipeCard] Image loaded successfully:", imageUri);
-              }}
-              onError={(error) => {
-                console.error("[RecipeCard] Image load error:", error, "URL:", imageUri);
+              onLoad={() => setImageLoading(false)}
+              onError={() => {
                 setImageError(true);
                 setImageLoading(false);
               }}
@@ -91,6 +76,14 @@ const RecipeCardComponent: React.FC<RecipeCardProps> = ({ recipe, onPress, onTog
               {recipe.cuisine ? (
                 <View style={styles.tag}>
                   <Text style={styles.tagText}>{recipe.cuisine}</Text>
+                </View>
+              ) : null}
+              {(recipe as { cookedCount?: number }).cookedCount != null && (recipe as { cookedCount?: number }).cookedCount > 0 ? (
+                <View style={styles.socialProof}>
+                  <Ionicons name="people-outline" size={14} color="#666" />
+                  <Text style={styles.socialProofText}>
+                    Cooked {(recipe as { cookedCount?: number }).cookedCount} time{((recipe as { cookedCount?: number }).cookedCount ?? 0) !== 1 ? "s" : ""}
+                  </Text>
                 </View>
               ) : null}
               {recipe.cookingTime != null && recipe.cookingTime > 0 ? (
@@ -165,6 +158,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
+  },
+  socialProof: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  socialProofText: {
+    fontSize: 12,
+    color: "#666",
   },
   timeContainer: {
     flexDirection: "row",

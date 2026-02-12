@@ -43,4 +43,6 @@ export const ENV = {
   stripePriceLifetime: process.env.STRIPE_PRICE_LIFETIME ?? "price_1SYtXF9rKYrAFwcoshbIFfKA",
   // RevenueCat (iOS In-App Purchases)
   revenuecatWebhookSecret: process.env.REVENUECAT_WEBHOOK_SECRET ?? "",
+  /** Optional secret for cron endpoints (e.g. cook-nudge). If set, requests must send Authorization: Bearer <CRON_SECRET>. */
+  cronSecret: process.env.CRON_SECRET ?? "",
 };

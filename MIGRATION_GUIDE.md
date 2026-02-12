@@ -1,129 +1,189 @@
-# Database Migration Guide
+# RevenueCat Database Migration Guide
 
-This guide explains how to run database migrations for the AI Cooking Agent application.
+This guide will help you run the RevenueCat database migration to add the necessary fields for iOS in-app purchases.
 
-## 🏠 Local Development
+## Prerequisites
 
-### Option 1: Using Drizzle Kit Push (Recommended for Development)
+1. **Database Connection**: Ensure your `DATABASE_URL` environment variable is set
+2. **PostgreSQL Database**: This migration is for PostgreSQL databases
+3. **Backup**: ⚠️ **Always backup your database before running migrations**
 
-This automatically syncs your schema to the database:
+## Migration Overview
+
+The migration (`drizzle/0010_add_revenuecat_fields.sql`) will:
+- Add 8 new RevenueCat-specific columns to the `subscriptions` table
+- Make `stripeCustomerId` nullable (for RevenueCat-only subscriptions)
+- Create 3 indexes for better query performance
+
+## Method 1: Run Specific RevenueCat Migration (Recommended)
+
+Use the dedicated script to run just the RevenueCat migration:
 
 ```bash
-pnpm db:push
+node scripts/run-revenuecat-migration.js
 ```
 
-**Note:** This is a **development-only** command. It doesn't create migration files and directly modifies the database schema.
+This script will:
+- ✅ Connect to your database
+- ✅ Run the migration statements
+- ✅ Verify the migration was successful
+- ✅ Show you the new columns and indexes
 
-### Option 2: Generate and Run Migrations (Recommended for Production)
+## Method 2: Run All Migrations
 
-1. **Generate migration files** from schema changes:
-   ```bash
-   pnpm db:generate
-   ```
+If you want to run all pending migrations:
 
-2. **Run migrations manually**:
-   ```bash
-   pnpm db:migrate
-   ```
-
-   Or use the script directly:
-   ```bash
-   node scripts/run-migrations.js
-   ```
-
-## 🚀 Production (Vercel/Cloud)
-
-### Method 1: Manual SQL Execution (Recommended)
-
-Connect to your production database and run the migration SQL files in order:
-
-1. **Get your database connection details** from Vercel environment variables or your database provider
-
-2. **Connect to MySQL**:
-   ```bash
-   mysql -h YOUR_HOST -u YOUR_USER -p YOUR_DATABASE
-   ```
-
-3. **Run each migration file** in order:
-   ```sql
-   -- Run migration 0005
-   SOURCE drizzle/0005_add_user_preferences.sql;
-   
-   -- Run migration 0006
-   SOURCE drizzle/0006_add_user_goals.sql;
-   
-   -- Run migration 0007
-   SOURCE drizzle/0007_add_calories_and_budget.sql;
-   ```
-
-   Or copy-paste the SQL directly into your MySQL client.
-
-### Method 2: Using Migration Script
-
-If you have Node.js access to your production environment:
-
-1. **Set DATABASE_URL** environment variable
-2. **Run the migration script**:
-   ```bash
-   node scripts/run-migrations.js
-   ```
-
-### Method 3: Vercel Post-Deploy Hook
-
-You can add a post-deploy script in `vercel.json`:
-
-```json
-{
-  "buildCommand": "pnpm build",
-  "devCommand": "pnpm dev",
-  "installCommand": "pnpm install",
-  "framework": "nextjs",
-  "crons": []
-}
+```bash
+pnpm db:migrate
 ```
 
-Then create a Vercel serverless function that runs migrations on deploy (advanced).
+or
 
-## 📋 Current Migrations
+```bash
+node scripts/run-migrations.js
+```
 
-The following migrations need to be applied:
+This will run all SQL files in the `drizzle/` directory in order.
 
-1. **0005_add_user_preferences.sql** - Adds `dietaryPreferences` and `allergies` columns to `users` table
-2. **0006_add_user_goals.sql** - Adds `goals` column to `users` table  
-3. **0007_add_calories_and_budget.sql** - Adds `caloriesPerServing` to `recipes` and `calorieBudget` to `users`
+## Method 3: Manual SQL Execution
 
-## ✅ Verify Migrations
+If you prefer to run the SQL manually:
 
-After running migrations, verify they were applied:
+1. **Connect to your database** using your preferred PostgreSQL client (psql, pgAdmin, etc.)
+
+2. **Run the migration SQL**:
+   ```bash
+   psql $DATABASE_URL -f drizzle/0010_add_revenuecat_fields.sql
+   ```
+
+   Or copy the contents of `drizzle/0010_add_revenuecat_fields.sql` and execute it directly.
+
+## Verification
+
+After running the migration, verify it was successful:
+
+### Check Columns
 
 ```sql
--- Check if columns exist
-DESCRIBE users;
-DESCRIBE recipes;
-
--- Should show:
--- users: dietaryPreferences, allergies, goals, calorieBudget
--- recipes: caloriesPerServing
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns 
+WHERE table_name = 'subscriptions' 
+AND column_name LIKE 'revenuecat%'
+ORDER BY column_name;
 ```
 
-## 🔍 Troubleshooting
+You should see these columns:
+- `revenuecatAppUserId`
+- `revenuecatOriginalAppUserId`
+- `revenuecatProductId`
+- `revenuecatOriginalTransactionId`
+- `revenuecatPurchaseDate`
+- `revenuecatExpirationDate`
+- `revenuecatEnvironment`
+- `subscriptionPlatform`
 
-### Error: "Unknown column 'dietaryPreferences'"
+### Check Indexes
 
-This means migrations haven't been run yet. Follow the steps above to apply them.
+```sql
+SELECT indexname 
+FROM pg_indexes 
+WHERE tablename = 'subscriptions' 
+AND indexname LIKE '%revenuecat%';
+```
 
-### Error: "Table already exists" or "Duplicate column name"
+You should see these indexes:
+- `subscriptions_revenuecatAppUserId_idx`
+- `subscriptions_subscriptionPlatform_idx`
+- `subscriptions_revenuecatOriginalTransactionId_idx`
 
-This is OK - it means the migration was already applied. The migration script will skip these automatically.
+### Check Nullable Constraint
 
-### Error: "Access denied"
+```sql
+SELECT column_name, is_nullable
+FROM information_schema.columns 
+WHERE table_name = 'subscriptions' 
+AND column_name = 'stripeCustomerId';
+```
 
-Make sure your database user has `ALTER TABLE` permissions.
+The `stripeCustomerId` column should now be nullable (`is_nullable = 'YES'`).
 
-## 📝 Notes
+## Troubleshooting
 
-- Migrations are **idempotent** - safe to run multiple times
-- Always **backup your database** before running migrations in production
-- Test migrations in a **staging environment** first
-- The app will work without migrations (with graceful fallbacks), but features requiring new columns won't function
+### Error: "column already exists"
 
+If you see errors about columns already existing, that's OK! The migration uses `IF NOT EXISTS` clauses, so it's safe to run multiple times. The script will skip existing columns.
+
+### Error: "relation does not exist"
+
+Make sure you're connected to the correct database and that the `subscriptions` table exists. If it doesn't, you may need to run earlier migrations first.
+
+### Error: "permission denied"
+
+Ensure your database user has the necessary permissions:
+- `ALTER TABLE` permission on the `subscriptions` table
+- `CREATE INDEX` permission
+
+### SSL Connection Issues
+
+If you're using SSL, you may need to set:
+```bash
+export DB_SSL_REJECT_UNAUTHORIZED=false  # For development only
+# or
+export DB_SSL_CA="your-certificate-here"  # For production
+```
+
+## Rollback (If Needed)
+
+If you need to rollback the migration, run:
+
+```sql
+-- Drop indexes
+DROP INDEX IF EXISTS subscriptions_revenuecatAppUserId_idx;
+DROP INDEX IF EXISTS subscriptions_subscriptionPlatform_idx;
+DROP INDEX IF EXISTS subscriptions_revenuecatOriginalTransactionId_idx;
+
+-- Drop columns
+ALTER TABLE subscriptions DROP COLUMN IF EXISTS "revenuecatAppUserId";
+ALTER TABLE subscriptions DROP COLUMN IF EXISTS "revenuecatOriginalAppUserId";
+ALTER TABLE subscriptions DROP COLUMN IF EXISTS "revenuecatProductId";
+ALTER TABLE subscriptions DROP COLUMN IF EXISTS "revenuecatOriginalTransactionId";
+ALTER TABLE subscriptions DROP COLUMN IF EXISTS "revenuecatPurchaseDate";
+ALTER TABLE subscriptions DROP COLUMN IF EXISTS "revenuecatExpirationDate";
+ALTER TABLE subscriptions DROP COLUMN IF EXISTS "revenuecatEnvironment";
+ALTER TABLE subscriptions DROP COLUMN IF EXISTS "subscriptionPlatform";
+
+-- Restore NOT NULL constraint (if you had data)
+-- ALTER TABLE subscriptions ALTER COLUMN "stripeCustomerId" SET NOT NULL;
+```
+
+⚠️ **Warning**: Only rollback if absolutely necessary. This will remove all RevenueCat subscription data.
+
+## Production Deployment
+
+For production deployments:
+
+1. **Backup your database first**
+   ```bash
+   pg_dump $DATABASE_URL > backup-$(date +%Y%m%d-%H%M%S).sql
+   ```
+
+2. **Run the migration during a maintenance window** (if possible)
+
+3. **Verify the migration** using the verification queries above
+
+4. **Monitor your application** for any issues after deployment
+
+## Next Steps
+
+After running the migration:
+
+1. ✅ Verify the migration was successful
+2. ✅ Set `REVENUECAT_WEBHOOK_SECRET` in your production environment
+3. ✅ Configure the webhook URL in RevenueCat dashboard
+4. ✅ Test the integration with a sandbox purchase
+
+## SupportIf you encounter any issues:
+1. Check the error message carefully
+2. Verify your `DATABASE_URL` is correct
+3. Ensure you have the necessary database permissions
+4. Check the database logs for more details

@@ -1,0 +1,21 @@
+# Single navigation cycle - tap through all tabs
+- tapOn:
+    text: "Recipes"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "Shopping"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "Ingredients"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "More"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "Dashboard"
+    optional: true
+- waitForAnimationToEnd

@@ -86,6 +86,29 @@ function convertMySQLToPostgreSQL(sql) {
     }
   );
   
+  // Convert MySQL MODIFY COLUMN to PostgreSQL ALTER COLUMN
+  converted = converted.replace(
+    /ALTER\s+TABLE\s+`([^`]+)`\s+MODIFY\s+COLUMN\s+`([^`]+)`\s+(.+)/gi,
+    (match, table, column, def) => {
+      const defClean = def.replace(/`([^`]+)`/g, '"$1"').trim();
+      // PostgreSQL: ALTER COLUMN ... TYPE ..., ALTER COLUMN ... SET NOT NULL
+      const parts = [];
+      if (defClean.includes('NOT NULL')) {
+        parts.push(`ALTER TABLE "${table}" ALTER COLUMN "${column}" SET NOT NULL`);
+      }
+      const typeMatch = defClean.match(/^(\w+(?:\([^)]+\))?)/i);
+      if (typeMatch) {
+        const pgType = typeMatch[1].toUpperCase()
+          .replace(/\bint\b/gi, 'INTEGER')
+          .replace(/\bvarchar\b/gi, 'VARCHAR')
+          .replace(/\btext\b/gi, 'TEXT')
+          .replace(/\btimestamp\b/gi, 'TIMESTAMP');
+        parts.unshift(`ALTER TABLE "${table}" ALTER COLUMN "${column}" TYPE ${pgType}`);
+      }
+      return parts.join(';\n');
+    }
+  );
+  
   // Replace backticks with double quotes (PostgreSQL uses double quotes for identifiers)
   converted = converted.replace(/`([^`]+)`/g, '"$1"');
   
@@ -176,11 +199,20 @@ async function runMigrations() {
       const filePath = join(migrationsDir, file);
       const sql = readFileSync(filePath, 'utf-8');
 
-      // Split by statement-breakpoint to get individual statements
-      const statements = sql
+      // Split by statement-breakpoint (Drizzle) or semicolon (manual PostgreSQL migrations)
+      let statements = sql
         .split('--> statement-breakpoint')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+        .map(s => s.replace(/^\s*--[^\n]*\n?/gm, '').trim()) // strip comment lines
+        .filter(s => s.length > 0);
+
+      // If no statement-breakpoint (e.g. 0011, 0012), split by semicolon instead
+      if (statements.length === 1 && statements[0].includes(';') && !statements[0].includes('-->')) {
+        statements = statements[0]
+          .split(';')
+          .map(s => s.trim())
+          .filter(s => s.length > 0 && !s.startsWith('--'))
+          .map(s => s + ';'); // restore semicolon for execution
+      }
 
       if (statements.length === 0) {
         console.log(`⏭️  Skipping ${file} (no statements found)`);

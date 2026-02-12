@@ -49,6 +49,8 @@ export interface Recipe {
   steps: string[] | null;
   createdAt: Date;
   updatedAt: Date;
+  cookedAt?: Date | null;
+  cookedCount?: number | null;
 }
 
 export interface Ingredient {

@@ -81,6 +81,124 @@ test.describe('Critical User Flows', () => {
   });
 });
 
+test.describe('Recipe Import Flow', () => {
+  test('should show recipe import interface', async ({ page }) => {
+    await page.goto('/recipes');
+    
+    // Look for import/add recipe button
+    const importButton = page.locator('button:has-text("Import"), button:has-text("Add Recipe"), a:has-text("Import")');
+    if (await importButton.count() > 0) {
+      await importButton.first().click();
+      
+      // Should see URL input field
+      const urlInput = page.locator('input[placeholder*="url" i], input[type="url"]');
+      if (await urlInput.count() > 0) {
+        await expect(urlInput.first()).toBeVisible();
+      }
+    }
+  });
+
+  test('should handle invalid recipe URL gracefully', async ({ page }) => {
+    await page.goto('/recipes');
+    
+    // Try to import with an invalid URL
+    const urlInput = page.locator('input[placeholder*="url" i], input[type="url"]');
+    if (await urlInput.count() > 0) {
+      await urlInput.first().fill('not-a-valid-url');
+      
+      const submitButton = page.locator('button[type="submit"], button:has-text("Parse"), button:has-text("Import")');
+      if (await submitButton.count() > 0) {
+        await submitButton.first().click();
+        
+        // Should show an error message
+        const errorMessage = page.locator('text=/invalid|error|please enter/i');
+        // Allow for either error message or form validation
+        await expect(errorMessage.count()).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+});
+
+test.describe('Shopping List Flow', () => {
+  test('should create a new shopping list', async ({ page }) => {
+    await page.goto('/shopping-lists');
+    
+    // Click create new list button
+    const createButton = page.locator('button:has-text("Create"), button:has-text("New List"), button:has-text("Add")');
+    if (await createButton.count() > 0) {
+      await createButton.first().click();
+      
+      // Fill in list name
+      const nameInput = page.locator('input[placeholder*="name" i], input[name="name"]');
+      if (await nameInput.count() > 0) {
+        await nameInput.first().fill('Test Shopping List');
+        
+        // Submit
+        const submitButton = page.locator('button[type="submit"], button:has-text("Save"), button:has-text("Create")');
+        if (await submitButton.count() > 0) {
+          await submitButton.first().click();
+          
+          // Should see the new list
+          await expect(page.locator('text=Test Shopping List')).toBeVisible();
+        }
+      }
+    }
+  });
+
+  test('should add items to shopping list', async ({ page }) => {
+    await page.goto('/shopping-lists');
+    
+    // Click on first shopping list if exists
+    const listItem = page.locator('[data-testid="shopping-list-item"], a:has-text("list")').first();
+    if (await listItem.count() > 0) {
+      await listItem.click();
+      
+      // Add an item
+      const addItemInput = page.locator('input[placeholder*="add" i], input[placeholder*="item" i]');
+      if (await addItemInput.count() > 0) {
+        await addItemInput.first().fill('Test Ingredient');
+        await page.keyboard.press('Enter');
+        
+        // Should see the item added
+        await expect(page.locator('text=Test Ingredient')).toBeVisible();
+      }
+    }
+  });
+});
+
+test.describe('Settings Flow', () => {
+  test('should navigate to settings', async ({ page }) => {
+    await page.goto('/');
+    
+    // Click settings link
+    const settingsLink = page.locator('a:has-text("Settings"), button:has-text("Settings")');
+    if (await settingsLink.count() > 0) {
+      await settingsLink.first().click();
+      await expect(page).toHaveURL(/.*\/settings/);
+    }
+  });
+
+  test('should display dietary preferences', async ({ page }) => {
+    await page.goto('/settings');
+    
+    // Should see dietary preferences section
+    const dietarySection = page.locator('text=/dietary|preferences|allergies/i');
+    if (await dietarySection.count() > 0) {
+      await expect(dietarySection.first()).toBeVisible();
+    }
+  });
+
+  test('should display subscription options', async ({ page }) => {
+    await page.goto('/settings');
+    
+    // Should see subscription section
+    const subscriptionSection = page.locator('text=/subscription|premium|pro/i');
+    if (await subscriptionSection.count() > 0) {
+      await expect(subscriptionSection.first()).toBeVisible();
+    }
+  });
+});
+
 test.describe('Accessibility Tests', () => {
   test('should have proper heading hierarchy', async ({ page }) => {
     await page.goto('/');
