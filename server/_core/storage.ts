@@ -114,6 +114,14 @@ async function getS3Client(): Promise<S3Client> {
   });
 }
 
+export type S3BucketType = "ingredients" | "recipes";
+
+function getBucketAndPrefix(type: S3BucketType): { bucket: string; keyPrefix: string } {
+  const bucket = type === "recipes" ? ENV.s3BucketRecipeImages : ENV.s3BucketIngredients;
+  const keyPrefix = type === "recipes" ? "recipes/" : "ingredients/";
+  return { bucket, keyPrefix };
+}
+
 /**
  * Upload image to S3 and return presigned URL
  * The presigned URL allows temporary access to the image even if the bucket is private
@@ -123,18 +131,17 @@ export async function uploadImageToS3(
   fileName: string,
   contentType: string = "image/jpeg",
   /** Presigned URL expiry in seconds. Default 1hr. Use 2592000 (30 days) for recipe images. */
-  expiresIn: number = 3600
+  expiresIn: number = 3600,
+  /** Which bucket to use: "ingredients" (sous-ingredients) or "recipes" (sous-recipe-images). Default: ingredients */
+  bucketType: S3BucketType = "ingredients"
 ): Promise<string> {
-  // Check S3 configuration
-  if (!ENV.s3Bucket) {
+  const { bucket, keyPrefix } = getBucketAndPrefix(bucketType);
+
+  if (!bucket) {
     throw new Error(
-      "S3_BUCKET environment variable is not set. " +
-      "To enable image uploads, please configure AWS S3 by setting the following environment variables:\n" +
-      "- S3_BUCKET: Your S3 bucket name\n" +
-      "- AWS_REGION: AWS region (e.g., us-east-1)\n" +
-      "- AWS_ACCESS_KEY_ID: Your AWS access key (or AWS_ROLE_ARN for STS)\n" +
-      "- AWS_SECRET_ACCESS_KEY: Your AWS secret key\n" +
-      "- AWS_ROLE_ARN: (Optional) IAM role ARN to assume for temporary credentials"
+      `S3 bucket for ${bucketType} is not configured. ` +
+      "Set S3_BUCKET_INGREDIENTS and/or S3_BUCKET_RECIPE_IMAGES (or S3_BUCKET for both). " +
+      "Also set AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY."
     );
   }
 
@@ -147,7 +154,7 @@ export async function uploadImageToS3(
     console.warn("AWS credentials not configured. S3 upload may fail if bucket requires authentication.");
   }
 
-  const key = `ingredients/${Date.now()}-${fileName}`;
+  const key = `${keyPrefix}${Date.now()}-${fileName}`;
 
   // Parse base64 data - handle both data URLs and raw base64 strings
   let buffer: Buffer;
@@ -166,7 +173,7 @@ export async function uploadImageToS3(
   }
 
   const command = new PutObjectCommand({
-    Bucket: ENV.s3Bucket,
+    Bucket: bucket,
     Key: key,
     Body: buffer,
     ContentType: contentType,
@@ -186,10 +193,10 @@ export async function uploadImageToS3(
       throw new Error("AWS credentials are invalid or not configured. Please check AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or AWS_ROLE_ARN for STS.");
     }
     if (error.name === "NoSuchBucket") {
-      throw new Error(`S3 bucket "${ENV.s3Bucket}" does not exist or is not accessible.`);
+      throw new Error(`S3 bucket "${bucket}" does not exist or is not accessible.`);
     }
     if (error.name === "AccessDenied") {
-      throw new Error(`Access denied to S3 bucket "${ENV.s3Bucket}". Check bucket permissions and IAM policies.`);
+      throw new Error(`Access denied to S3 bucket "${bucket}". Check bucket permissions and IAM policies.`);
     }
     // Handle region mismatch errors
     if (error.message?.includes("must be addressed using the specified endpoint") || error.code === "PermanentRedirect") {
@@ -201,10 +208,10 @@ export async function uploadImageToS3(
       }
       
       throw new Error(
-        `S3 bucket region mismatch. The bucket "${ENV.s3Bucket}" is in a different region than configured (${ENV.awsRegion}).` +
+        `S3 bucket region mismatch. The bucket "${bucket}" is in a different region than configured (${ENV.awsRegion}).` +
         `${regionHint || ""} ` +
         `Please set AWS_REGION environment variable to the correct region. ` +
-        `You can find the bucket region in AWS Console: S3 → Buckets → "${ENV.s3Bucket}" → Properties → AWS Region. ` +
+        `You can find the bucket region in AWS Console: S3 → Buckets → "${bucket}" → Properties → AWS Region. ` +
         `Error: ${error.message || error.name}`
       );
     }
@@ -214,7 +221,7 @@ export async function uploadImageToS3(
   // Generate a presigned GET URL so the LLM can access the image
   // Presigned URLs work even if the bucket is private
   const getCommand = new GetObjectCommand({
-    Bucket: ENV.s3Bucket,
+    Bucket: bucket,
     Key: key,
   });
   
@@ -227,34 +234,31 @@ export async function uploadImageToS3(
 }
 
 /**
- * Generate presigned URL for direct client upload
+ * Generate presigned URL for direct client upload (ingredients bucket only)
  */
 export async function getPresignedUploadUrl(
   fileName: string,
   contentType: string = "image/jpeg"
 ): Promise<{ uploadUrl: string; publicUrl: string }> {
-  if (!ENV.s3Bucket) {
-    throw new Error("S3_BUCKET environment variable is not set");
+  const { bucket } = getBucketAndPrefix("ingredients");
+  if (!bucket) {
+    throw new Error("S3_BUCKET_INGREDIENTS or S3_BUCKET environment variable is not set");
   }
 
   const key = `ingredients/${Date.now()}-${fileName}`;
 
   const command = new PutObjectCommand({
-    Bucket: ENV.s3Bucket,
+    Bucket: bucket,
     Key: key,
     ContentType: contentType,
-    // ACL removed - modern S3 buckets often have ACLs disabled
-    // Public access should be controlled via bucket policy instead
   });
 
   const client = await getS3Client();
   const uploadUrl = await getSignedUrl(client, command, { expiresIn: 3600 });
-  
-  // Construct public URL with proper region format
-  // For us-east-1, the URL format is slightly different (no region in URL)
+
   const publicUrl = ENV.awsRegion === "us-east-1"
-    ? `https://${ENV.s3Bucket}.s3.amazonaws.com/${key}`
-    : `https://${ENV.s3Bucket}.s3.${ENV.awsRegion}.amazonaws.com/${key}`;
+    ? `https://${bucket}.s3.amazonaws.com/${key}`
+    : `https://${bucket}.s3.${ENV.awsRegion}.amazonaws.com/${key}`;
 
   return { uploadUrl, publicUrl };
 }

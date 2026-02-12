@@ -2483,7 +2483,8 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
                         imgBuffer,
                         `ai-recipe-${savedRecipe.id}.png`,
                         "image/png",
-                        2592000
+                        2592000,
+                        "recipes"
                       );
                       await db.updateRecipeImage(savedRecipe.id, s3Url);
                       console.log("[ai.chat] Image saved for recipe", savedRecipe.id);
@@ -2637,7 +2638,8 @@ Respond with actionable guidance and, when appropriate, bullet lists or short nu
                 imgBuffer,
                 `ai-recipe-${savedRecipe.id}.png`,
                 "image/png",
-                2592000
+                2592000,
+                "recipes"
               );
               await db.updateRecipeImage(savedRecipe.id, s3Url);
               console.log(`[ai.generateRecipe] Image saved for recipe ${savedRecipe.id}`);

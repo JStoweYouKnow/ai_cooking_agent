@@ -122,8 +122,8 @@ export const systemRouter = router({
         }
       }
 
-      // S3 access check (if S3_BUCKET is configured)
-      if (process.env.S3_BUCKET) {
+      // S3 access check (if any S3 bucket is configured)
+      if (process.env.S3_BUCKET || process.env.S3_BUCKET_INGREDIENTS || process.env.S3_BUCKET_RECIPE_IMAGES) {
         try {
           const s3Start = Date.now();
           const s3Check = await verifyS3Access();

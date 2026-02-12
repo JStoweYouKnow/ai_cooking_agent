@@ -20,7 +20,12 @@ export const ENV = {
   awsRegion: process.env.AWS_REGION ?? "us-east-2",
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
+  /** @deprecated Use s3BucketIngredients or s3BucketRecipeImages */
   s3Bucket: process.env.S3_BUCKET ?? "",
+  /** Bucket for ingredient photos (recognize from image, pantry uploads). Falls back to S3_BUCKET. */
+  s3BucketIngredients: process.env.S3_BUCKET_INGREDIENTS ?? process.env.S3_BUCKET ?? "",
+  /** Bucket for AI-generated recipe images. Falls back to S3_BUCKET. */
+  s3BucketRecipeImages: process.env.S3_BUCKET_RECIPE_IMAGES ?? process.env.S3_BUCKET ?? "",
   // AWS STS for temporary credentials (optional, for IAM role assumption)
   awsRoleArn: process.env.AWS_ROLE_ARN ?? "",
   awsRoleSessionName: process.env.AWS_ROLE_SESSION_NAME ?? "cooking-app-session",
